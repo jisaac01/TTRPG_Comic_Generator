@@ -79,17 +79,17 @@ Goal: Segment the story into distinct visual panels while maintaining continuity
 
 Logic:
 
-- [ ] Input: Story text + Entity data.
-- [ ] LLM Task: "Generate a 6-panel script. For each panel, define the Setting, the Visual Action (referencing character traits), and the Dialogue overlay."
-- [ ] Continuity Check: The prompt must instruct the LLM to track held items (e.g., if a character picks up a sword in Panel 1, it must be visible in Panel 2).
+- [x] Input: Story text + Entity data.
+- [x] LLM Task: "Generate a 6-panel script. For each panel, define the Setting, the Visual Action (referencing character traits), and the Dialogue overlay."
+- [x] Continuity Check: The prompt must instruct the LLM to track held items (e.g., if a character picks up a sword in Panel 1, it must be visible in Panel 2).
 
 Checkpoint:
 
-- [ ] Save to `checkpoints/03_script.json`.
+- [x] Save to `checkpoints/03_script.json`.
 
 Test Case:
 
-- [ ] `tests/test_scriptwriter.py` — Verify the output contains the correct number of panels and no null visual fields.
+- [x] `tests/test_scriptwriter.py` — Verify the output contains the correct number of panels and no null visual fields.
 
 ## 5. Phase 4: Prompt Engineering & Style Merging
 

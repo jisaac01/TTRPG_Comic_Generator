@@ -27,6 +27,8 @@ Optional flags:
 ```
 --checkpoint-dir PATH   default: checkpoints
 --analysis-model NAME   default: qwen2.5:7b
+--script-model NAME     default: qwen2.5:7b
+--panel-count N         default: 6
 ```
 
 ## Running individual phases
@@ -43,6 +45,12 @@ python src/analyzer.py [--input checkpoints/01_raw_text.json] [--output checkpoi
 ```
 Output: `checkpoints/02_entities.json` — characters, locations, and scene-level beats with attributed quotes.
 
+**Phase 3 — Script**
+```bash
+python src/scriptwriter.py [--raw-input checkpoints/01_raw_text.json] [--entities-input checkpoints/02_entities.json] [--output checkpoints/03_script.json] [--model qwen2.5:7b] [--panel-count 6]
+```
+Output: `checkpoints/03_script.json` — continuity-aware panel script with setting, visual action, dialogue overlays, and held-item transitions.
+
 ## Running tests
 
 ```bash
@@ -55,5 +63,6 @@ pytest
 |---|---|
 | `01_raw_text.json` | Sanitized story text, title, author |
 | `02_entities.json` | Characters, locations, story beats |
+| `03_script.json` | Panelized comic script with continuity fields |
 
 Delete a checkpoint file to force that phase to re-run.
