@@ -280,6 +280,7 @@ class ComicPipeline:
 
         if existing_episode is None:
             # First run: scrape to get the title so we can slug the episode folder.
+            print("[1/4] Scraping...")
             with tempfile.TemporaryDirectory() as tmpdir:
                 tmp_raw_path = Path(tmpdir) / "01_raw_text.json"
                 raw = await scrape_scrybequill(
@@ -287,11 +288,13 @@ class ComicPipeline:
                     checkpoint_path=tmp_raw_path,
                     recap_version=self.recap_version,
                 )
+            print(f"      ...done  (title: {raw.title!r}, recap: {self.recap_version})")
 
             episode_dir = _resolve_episode_dir(
                 self.campaigns_root, self.campaign, self.url, raw.title
             )
             version_dir, version_name = _create_version_dir(episode_dir, self.rerun_from)
+            print(f"      episode: {episode_dir.name}/{version_name}")
 
             raw_path = version_dir / "01_raw_text.json"
             raw_path.write_text(
@@ -303,6 +306,7 @@ class ComicPipeline:
         else:
             episode_dir = _episode_dir(self.campaigns_root, self.campaign, existing_episode)
             version_dir, version_name = _create_version_dir(episode_dir, self.rerun_from)
+            print(f"      episode: {episode_dir.name}/{version_name}")
             raw_path = version_dir / "01_raw_text.json"
 
             if raw_path.exists():
@@ -315,18 +319,23 @@ class ComicPipeline:
                         encoding="utf-8",
                     )
                 if content_changed:
+                    print(f"[1/4] Recap variant changed to {self.recap_version!r} — invalidating downstream checkpoints")
                     entities_path = version_dir / "02_entities.json"
                     script_path = version_dir / "03_script.json"
                     prompts_path = version_dir / "04_page_prompt.txt"
                     entities_path.unlink(missing_ok=True)
                     script_path.unlink(missing_ok=True)
                     prompts_path.unlink(missing_ok=True)
+                else:
+                    print(f"[1/4] Scraping...skipped (checkpoint exists, recap: {self.recap_version})")
             else:
+                print("[1/4] Scraping...")
                 raw = await scrape_scrybequill(
                     url=self.url,
                     checkpoint_path=raw_path,
                     recap_version=self.recap_version,
                 )
+                print(f"      ...done  (title: {raw.title!r}, recap: {self.recap_version})")
 
         entities_path = version_dir / "02_entities.json"
         script_path = version_dir / "03_script.json"
@@ -334,19 +343,24 @@ class ComicPipeline:
         template_path = self._resolve_art_template(version_dir, episode_dir)
 
         if entities_path.exists():
+            print("[2/4] Analyzing...skipped (checkpoint exists)")
             entities = WorldStateCheckpoint.model_validate_json(
                 entities_path.read_text(encoding="utf-8")
             )
         else:
+            print(f"[2/4] Analyzing...  (model: {self.analysis_model})")
             entities = analyze_story(
                 raw_checkpoint_path=raw_path,
                 output_path=entities_path,
                 model=self.analysis_model,
             )
+            print("      ...done")
 
         if script_path.exists():
+            print("[3/4] Writing script...skipped (checkpoint exists)")
             script = ScriptCheckpoint.model_validate_json(script_path.read_text(encoding="utf-8"))
         else:
+            print(f"[3/4] Writing script...  (model: {self.script_model}, panels: {self.panel_count})")
             script = write_script(
                 raw_checkpoint_path=raw_path,
                 entities_checkpoint_path=entities_path,
@@ -354,16 +368,20 @@ class ComicPipeline:
                 model=self.script_model,
                 panel_count=self.panel_count,
             )
+            print("      ...done")
 
         if prompts_path.exists():
+            print("[4/4] Generating page prompt...skipped (checkpoint exists)")
             page_prompt = prompts_path.read_text(encoding="utf-8")
         else:
+            print(f"[4/4] Generating page prompt...  (template: {template_path})")
             page_prompt = generate_page_prompt(
                 script_checkpoint_path=script_path,
                 entities_checkpoint_path=entities_path,
                 art_style_template_path=template_path,
                 output_path=prompts_path,
             )
+            print("      ...done")
 
         return {
             "raw_text": raw.model_dump(),
