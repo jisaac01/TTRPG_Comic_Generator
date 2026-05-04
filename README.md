@@ -23,8 +23,13 @@ Each campaign has its own folder under `campaigns/`. Create a reusable art direc
 
 ```bash
 mkdir -p campaigns/dreadmarsh
-cat > campaigns/dreadmarsh/art_direction_template.txt << 'EOF'
-Base Style: Brutalist, hand-inked graphic novel aesthetic. High contrast, Gothic shadows, heavy ink washes, grainy texture. No colors, black and white only.
+cat > campaigns/dreadmarsh/art_direction_template.json << 'EOF'
+{
+  "base_style": "Brutalist, hand-inked graphic novel aesthetic. High contrast, Gothic shadows, heavy ink washes, grainy texture.",
+  "color_palette": "Black and white only. No color.",
+  "layout_and_composition": "One single comic page image containing all panels in order, with clear gutters and consistent character design across panels.",
+  "lettering_and_dialog": "Lettering should feel hand-drawn, legible, and integrated with the page composition."
+}
 EOF
 ```
 
@@ -32,8 +37,13 @@ Different campaigns can have completely different art styles:
 
 ```bash
 mkdir -p campaigns/belowdown
-cat > campaigns/belowdown/art_direction_template.txt << 'EOF'
-Base Style: Watercolor fantasy illustration. Soft washes, warm tones, hand-lettered feeling. Full color.
+cat > campaigns/belowdown/art_direction_template.json << 'EOF'
+{
+  "base_style": "Watercolor fantasy illustration. Soft washes, warm tones, hand-lettered feeling.",
+  "color_palette": "Full color with warm, natural hues.",
+  "layout_and_composition": "One single comic page image containing all panels in order, with breathing room and soft panel borders.",
+  "lettering_and_dialog": "Gentle hand-lettered dialogue with storybook clarity."
+}
 EOF
 ```
 
@@ -81,7 +91,7 @@ python src/pipeline.py belowdown https://scrybequill.com/share/...
 campaigns/
   index.json                        # global lookup: campaign+URL → episode folder
   dreadmarsh/
-    art_direction_template.txt      # campaign-level art style
+    art_direction_template.json     # campaign-level art direction
     dreadmarsh-crossing/            # episode folder (slug from story title, identity from URL)
       episode_meta.json             # url, title, created_at
       v001/
@@ -92,7 +102,7 @@ campaigns/
       v002/                         # second run; prior phases cloned, new phase re-run
         ...
   belowdown/
-    art_direction_template.txt
+    art_direction_template.json
     ...
 ```
 
@@ -132,7 +142,7 @@ python src/scriptwriter.py \
 python src/prompter.py \
   --script-input campaigns/dreadmarsh/<episode>/v001/03_script.json \
   --entities-input campaigns/dreadmarsh/<episode>/v001/02_entities.json \
-  --art-style-template campaigns/dreadmarsh/art_direction_template.txt \
+  --art-style-template campaigns/dreadmarsh/art_direction_template.json \
   --output campaigns/dreadmarsh/<episode>/v001/04_page_prompt.txt
 ```
 

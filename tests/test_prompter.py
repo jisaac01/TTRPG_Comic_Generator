@@ -70,15 +70,20 @@ def _write_inputs(tmp_path: Path) -> tuple[Path, Path, Path]:
         "scripted_at": "2026-05-04T00:00:00+00:00",
     }
 
-    template = "Brutalist black-and-white ink style with heavy shadows."
+    template = {
+        "base_style": "Brutalist ink style with heavy shadows.",
+        "color_palette": "Acidic neon pinks, greens, and oranges.",
+        "layout_and_composition": "Single comic page with two stacked panels and rough gutters.",
+        "lettering_and_dialog": "Jagged handwritten captions with frantic energy.",
+    }
 
     entities_path = tmp_path / "02_entities.json"
     script_path = tmp_path / "03_script.json"
-    template_path = tmp_path / "art_direction_template.txt"
+    template_path = tmp_path / "art_direction_template.json"
 
     entities_path.write_text(json.dumps(entities), encoding="utf-8")
     script_path.write_text(json.dumps(script), encoding="utf-8")
-    template_path.write_text(template, encoding="utf-8")
+    template_path.write_text(json.dumps(template), encoding="utf-8")
 
     return entities_path, script_path, template_path
 
@@ -97,8 +102,13 @@ def test_generate_image_prompts_writes_checkpoint(tmp_path):
     assert output_path.exists()
     assert "Panel 1:" in prompt_text
     assert "Panel 2:" in prompt_text
+    assert "Base Style: Brutalist ink style with heavy shadows." in prompt_text
+    assert "Color Palette: Acidic neon pinks, greens, and oranges." in prompt_text
+    assert "Layout & Composition: Single comic page with two stacked panels and rough gutters." in prompt_text
+    assert "Lettering & Dialog: Jagged handwritten captions with frantic energy." in prompt_text
     assert "- Setting: Marsh edge at dusk" in prompt_text
     assert "Character details (apply to every panel):" in prompt_text
+    assert "Rendering constraints:" not in prompt_text
     saved = output_path.read_text(encoding="utf-8")
     assert saved == prompt_text
 
@@ -110,6 +120,6 @@ def test_generate_image_prompts_fails_when_template_missing(tmp_path):
         prompter.generate_page_prompt(
             script_checkpoint_path=script_path,
             entities_checkpoint_path=entities_path,
-            art_style_template_path=tmp_path / "missing_template.txt",
+            art_style_template_path=tmp_path / "missing_template.json",
             output_path=tmp_path / "04_page_prompt.txt",
         )

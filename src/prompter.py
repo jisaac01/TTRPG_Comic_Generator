@@ -1,17 +1,40 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 from analyzer import WorldStateCheckpoint
 from scriptwriter import ScriptCheckpoint
 
 
-DEFAULT_ART_STYLE_TEMPLATE = (
-    "Base Style: Brutalist, hand-inked graphic novel aesthetic. "
-    "High contrast, Gothic shadows, heavy ink washes, grainy texture. "
-    "No colors, black and white only."
+ART_DIRECTION_TEMPLATE_FILENAME = "art_direction_template.json"
+ART_DIRECTION_TEMPLATE_FIELDS = (
+    ("base_style", "Base Style"),
+    ("color_palette", "Color Palette"),
+    ("layout_and_composition", "Layout & Composition"),
+    ("lettering_and_dialog", "Lettering & Dialog"),
 )
+
+DEFAULT_ART_DIRECTION_TEMPLATE = {
+    "base_style": (
+        "Brutalist, hand-inked graphic novel aesthetic. High contrast, Gothic "
+        "shadows, heavy ink washes, grainy texture."
+    ),
+    "color_palette": "Black and white only. No color.",
+    "layout_and_composition": (
+        "One single comic page image containing all panels in order, with clear "
+        "gutters and consistent character design across panels."
+    ),
+    "lettering_and_dialog": (
+        "Lettering should feel hand-drawn, legible, and integrated with the page "
+        "composition."
+    ),
+}
+
+
+def _default_art_direction_template_json() -> str:
+    return json.dumps(DEFAULT_ART_DIRECTION_TEMPLATE, indent=2)
 
 
 def _format_character_details(world: WorldStateCheckpoint) -> str:
@@ -22,21 +45,56 @@ def _format_character_details(world: WorldStateCheckpoint) -> str:
     return " | ".join(details)
 
 
-def _load_art_template(art_style_template_path: Path) -> str:
+def _load_art_template(art_style_template_path: Path) -> dict[str, str]:
     if not art_style_template_path.exists():
         raise FileNotFoundError(
             "Art direction template file not found at "
             f"{art_style_template_path}. "
             "Create this file before running Phase 4. "
-            f"Suggested starter content: {DEFAULT_ART_STYLE_TEMPLATE}"
+            f"Suggested starter content: {_default_art_direction_template_json()}"
         )
 
-    template = art_style_template_path.read_text(encoding="utf-8").strip()
-    if not template:
+    template_text = art_style_template_path.read_text(encoding="utf-8").strip()
+    if not template_text:
         raise ValueError(
             f"Art direction template file is empty at {art_style_template_path}."
         )
-    return template
+
+    try:
+        template = json.loads(template_text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            f"Art direction template file is not valid JSON at {art_style_template_path}."
+        ) from exc
+
+    if not isinstance(template, dict):
+        raise ValueError(
+            f"Art direction template file must contain a JSON object at {art_style_template_path}."
+        )
+
+    normalized_template: dict[str, str] = {}
+    missing_fields: list[str] = []
+    for field_name, field_label in ART_DIRECTION_TEMPLATE_FIELDS:
+        value = template.get(field_name)
+        if not isinstance(value, str) or not value.strip():
+            missing_fields.append(f"{field_name} ({field_label})")
+            continue
+        normalized_template[field_name] = value.strip()
+
+    if missing_fields:
+        raise ValueError(
+            "Art direction template file is missing required non-empty string fields "
+            f"at {art_style_template_path}: {', '.join(missing_fields)}"
+        )
+
+    return normalized_template
+
+
+def _format_art_direction(template: dict[str, str]) -> str:
+    return "\n".join(
+        f"{field_label}: {template[field_name]}"
+        for field_name, field_label in ART_DIRECTION_TEMPLATE_FIELDS
+    )
 
 
 def _format_panel_block(script: ScriptCheckpoint) -> str:
@@ -64,7 +122,9 @@ def _format_panel_block(script: ScriptCheckpoint) -> str:
 def generate_page_prompt(
     script_checkpoint_path: Path = Path("campaigns/<campaign>/<episode>/v001/03_script.json"),
     entities_checkpoint_path: Path = Path("campaigns/<campaign>/<episode>/v001/02_entities.json"),
-    art_style_template_path: Path = Path("campaigns/<campaign>/art_direction_template.txt"),
+    art_style_template_path: Path = Path(
+        f"campaigns/<campaign>/{ART_DIRECTION_TEMPLATE_FILENAME}"
+    ),
     output_path: Path = Path("campaigns/<campaign>/<episode>/v001/04_page_prompt.txt"),
 ) -> str:
     script = ScriptCheckpoint.model_validate_json(
@@ -74,15 +134,13 @@ def generate_page_prompt(
         entities_checkpoint_path.read_text(encoding="utf-8")
     )
 
-    art_style_template = _load_art_template(art_style_template_path)
+    art_direction_template = _load_art_template(art_style_template_path)
     character_details = _format_character_details(world)
     panel_block = _format_panel_block(script)
 
     prompt_text = (
-        f"{art_style_template}\n\n"
+        f"{_format_art_direction(art_direction_template)}\n\n"
         "Output goal: one single comic page image containing all panels below in order.\n"
-        "Layout: keep every panel visible in one page composition, clear gutters, consistent character design across panels.\n"
-        "Rendering constraints: black-and-white only, no color.\n"
         "Character details (apply to every panel): "
         f"{character_details}\n\n"
         f"Panel count: {script.panel_count}\n"
@@ -98,7 +156,7 @@ def generate_page_prompt(
 
 def _run_cli() -> None:
     parser = argparse.ArgumentParser(
-        description="Generate image prompts from script panels and a reusable art template."
+        description="Generate image prompts from script panels and a reusable art direction JSON template."
     )
     parser.add_argument(
         "--script-input",
@@ -113,7 +171,10 @@ def _run_cli() -> None:
     parser.add_argument(
         "--art-style-template",
         required=True,
-        help="Path to the reusable art direction template file (e.g. campaigns/<campaign>/art_direction_template.txt)",
+        help=(
+            "Path to the reusable art direction template JSON file "
+            f"(e.g. campaigns/<campaign>/{ART_DIRECTION_TEMPLATE_FILENAME})"
+        ),
     )
     parser.add_argument(
         "--output",

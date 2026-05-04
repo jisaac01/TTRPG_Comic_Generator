@@ -511,10 +511,14 @@ async def test_two_campaigns_are_isolated(tmp_path):
 
 @pytest.mark.asyncio
 async def test_campaign_level_art_template_is_used_by_default(tmp_path):
-    """Campaign-level art_direction_template.txt is passed to Phase 4 when present."""
-    template_path = tmp_path / "dreadmarsh" / "art_direction_template.txt"
+    """Campaign-level art_direction_template.json is passed to Phase 4 when present."""
+    template_path = tmp_path / "dreadmarsh" / "art_direction_template.json"
     template_path.parent.mkdir(parents=True, exist_ok=True)
-    template_path.write_text("Brutalist ink style.", encoding="utf-8")
+    template_path.write_text(
+        '{"base_style": "Brutalist ink style.", "color_palette": "Black and white only.", '
+        '"layout_and_composition": "Single page.", "lettering_and_dialog": "Hand-lettered captions."}',
+        encoding="utf-8",
+    )
 
     pipeline = ComicPipeline(
         url="https://example.test/story",
@@ -537,8 +541,8 @@ async def test_campaign_level_art_template_is_used_by_default(tmp_path):
 
 @pytest.mark.asyncio
 async def test_campaign_art_template_is_created_on_first_run(tmp_path):
-    """First run auto-creates campaign-level art_direction_template.txt when missing."""
-    template_path = tmp_path / "dreadmarsh" / "art_direction_template.txt"
+    """First run auto-creates campaign-level art_direction_template.json when missing."""
+    template_path = tmp_path / "dreadmarsh" / "art_direction_template.json"
 
     pipeline = ComicPipeline(
         url="https://example.test/story",
@@ -565,12 +569,20 @@ async def test_campaign_art_template_is_created_on_first_run(tmp_path):
 @pytest.mark.asyncio
 async def test_explicit_art_template_overrides_campaign_default(tmp_path):
     """Explicit art_style_template constructor arg takes precedence over campaign default."""
-    campaign_template = tmp_path / "dreadmarsh" / "art_direction_template.txt"
+    campaign_template = tmp_path / "dreadmarsh" / "art_direction_template.json"
     campaign_template.parent.mkdir(parents=True, exist_ok=True)
-    campaign_template.write_text("Campaign default.", encoding="utf-8")
+    campaign_template.write_text(
+        '{"base_style": "Campaign default.", "color_palette": "Black and white only.", '
+        '"layout_and_composition": "Single page.", "lettering_and_dialog": "Hand-lettered captions."}',
+        encoding="utf-8",
+    )
 
-    explicit_template = tmp_path / "custom_style.txt"
-    explicit_template.write_text("Custom override.", encoding="utf-8")
+    explicit_template = tmp_path / "custom_style.json"
+    explicit_template.write_text(
+        '{"base_style": "Custom override.", "color_palette": "Electric colors.", '
+        '"layout_and_composition": "Single page.", "lettering_and_dialog": "Sharp captions."}',
+        encoding="utf-8",
+    )
 
     pipeline = ComicPipeline(
         url="https://example.test/story",
