@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
-from analyzer import WorldStateCheckpoint
+from entities import WorldStateCheckpoint
 from scriptwriter import ScriptCheckpoint
 
 

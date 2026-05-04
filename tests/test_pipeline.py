@@ -10,7 +10,7 @@ import pytest
 
 sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
-import analyzer
+import entities
 import scraper
 import scriptwriter
 from pipeline import (
@@ -41,26 +41,26 @@ _RAW_CHECKPOINT = scraper.RawTextCheckpoint(
     scraped_at="2026-05-04T00:00:00+00:00",
 )
 
-_WORLD_CHECKPOINT = analyzer.WorldStateCheckpoint(
+_WORLD_CHECKPOINT = entities.WorldStateCheckpoint(
     url="https://example.test/story",
     title="Dreadmarsh Crossing",
     author="GM",
     model="qwen2.5:7b",
     characters=[
-        analyzer.Character(
+        entities.Character(
             name="Del",
             description="A druid in mossy robes",
             demeanor="Calm and observant",
         )
     ],
     locations=[
-        analyzer.Location(
+        entities.Location(
             name="Dreadmarsh",
             appearance="Foggy marsh with twisted roots",
         )
     ],
     beats=[
-        analyzer.StoryBeat(
+        entities.StoryBeat(
             index=1,
             text="Del crosses the marsh.",
             quotes=[],
@@ -291,7 +291,7 @@ async def test_first_run_creates_campaign_episode_version(tmp_path):
 
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT) as mock_scrape,
-        patch("pipeline.analyze_story", return_value=_WORLD_CHECKPOINT) as mock_analyze,
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT) as mock_entities,
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT) as mock_script,
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
     ):
@@ -300,7 +300,7 @@ async def test_first_run_creates_campaign_episode_version(tmp_path):
     mock_scrape.assert_awaited_once()
     _, kwargs = mock_scrape.await_args
     assert kwargs["recap_version"] == "standard"
-    mock_analyze.assert_called_once()
+    mock_entities.assert_called_once()
     mock_script.assert_called_once()
     mock_prompts.assert_called_once()
 
@@ -329,7 +329,7 @@ async def test_first_run_result_contains_model_dump_dicts(tmp_path):
 
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
-        patch("pipeline.analyze_story", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT),
     ):
@@ -355,7 +355,7 @@ async def test_first_run_forwards_explicit_recap_version_to_scraper(tmp_path):
 
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT) as mock_scrape,
-        patch("pipeline.analyze_story", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT),
     ):
@@ -384,14 +384,14 @@ async def test_run_skips_all_phases_when_all_checkpoints_exist(tmp_path):
 
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock) as mock_scrape,
-        patch("pipeline.analyze_story") as mock_analyze,
+        patch("pipeline.build_entities_from_raw") as mock_entities,
         patch("pipeline.write_script") as mock_script,
         patch("pipeline.generate_page_prompt") as mock_prompts,
     ):
         result = await pipeline.run()
 
     mock_scrape.assert_not_awaited()
-    mock_analyze.assert_not_called()
+    mock_entities.assert_not_called()
     mock_script.assert_not_called()
     mock_prompts.assert_not_called()
     assert result["version"] == "v002"
@@ -411,14 +411,14 @@ async def test_cached_raw_recap_switch_updates_content_and_reruns_downstream(tmp
 
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock) as mock_scrape,
-        patch("pipeline.analyze_story", return_value=_WORLD_CHECKPOINT) as mock_analyze,
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT) as mock_entities,
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT) as mock_script,
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
     ):
         result = await pipeline.run()
 
     mock_scrape.assert_not_awaited()
-    mock_analyze.assert_called_once()
+    mock_entities.assert_called_once()
     mock_script.assert_called_once()
     mock_prompts.assert_called_once()
 
@@ -429,8 +429,8 @@ async def test_cached_raw_recap_switch_updates_content_and_reruns_downstream(tmp
 
 
 @pytest.mark.asyncio
-async def test_rerun_from_analyze_skips_scraper_reruns_rest(tmp_path):
-    """rerun_from=analyze: scraper skipped, analyze/script/prompt all run."""
+async def test_rerun_from_entities_skips_scraper_reruns_rest(tmp_path):
+    """rerun_from=entities: scraper skipped, entities/script/prompt all run."""
     _make_episode(tmp_path, "dreadmarsh", "https://example.test/story", "Dreadmarsh Crossing")
 
     pipeline = ComicPipeline(
@@ -438,19 +438,19 @@ async def test_rerun_from_analyze_skips_scraper_reruns_rest(tmp_path):
         campaign="dreadmarsh",
         campaigns_root=tmp_path,
         panel_count=2,
-        rerun_from="analyze",
+        rerun_from="entities",
     )
 
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock) as mock_scrape,
-        patch("pipeline.analyze_story", return_value=_WORLD_CHECKPOINT) as mock_analyze,
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT) as mock_entities,
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT) as mock_script,
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
     ):
         result = await pipeline.run()
 
     mock_scrape.assert_not_awaited()
-    mock_analyze.assert_called_once()
+    mock_entities.assert_called_once()
     mock_script.assert_called_once()
     mock_prompts.assert_called_once()
     assert result["version"] == "v002"
@@ -471,14 +471,14 @@ async def test_rerun_from_prompt_only_reruns_prompt(tmp_path):
 
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock) as mock_scrape,
-        patch("pipeline.analyze_story") as mock_analyze,
+        patch("pipeline.build_entities_from_raw") as mock_entities,
         patch("pipeline.write_script") as mock_script,
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
     ):
         result = await pipeline.run()
 
     mock_scrape.assert_not_awaited()
-    mock_analyze.assert_not_called()
+    mock_entities.assert_not_called()
     mock_script.assert_not_called()
     mock_prompts.assert_called_once()
     assert result["version"] == "v002"
@@ -516,7 +516,7 @@ async def test_same_url_different_title_maps_to_existing_episode(tmp_path):
 
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=changed_title_raw),
-        patch("pipeline.analyze_story", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT),
     ):
@@ -549,7 +549,7 @@ async def test_two_campaigns_are_isolated(tmp_path):
         )
         with (
             patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=raw),
-            patch("pipeline.analyze_story", return_value=_WORLD_CHECKPOINT),
+            patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
             patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
             patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT),
         ):
@@ -591,7 +591,7 @@ async def test_campaign_level_art_template_is_used_by_default(tmp_path):
 
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
-        patch("pipeline.analyze_story", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
     ):
@@ -615,7 +615,7 @@ async def test_campaign_art_template_is_created_on_first_run(tmp_path):
 
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
-        patch("pipeline.analyze_story", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
     ):
@@ -656,7 +656,7 @@ async def test_explicit_art_template_overrides_campaign_default(tmp_path):
 
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
-        patch("pipeline.analyze_story", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
     ):
@@ -672,25 +672,24 @@ async def test_explicit_art_template_overrides_campaign_default(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_analysis_model_forwarded(tmp_path):
+async def test_entities_phase_uses_scraper_direct_label(tmp_path):
     pipeline = ComicPipeline(
         url="https://example.test/story",
         campaign="dreadmarsh",
         campaigns_root=tmp_path,
-        analysis_model="llama3:8b",
         panel_count=2,
     )
 
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
-        patch("pipeline.analyze_story", return_value=_WORLD_CHECKPOINT) as mock_analyze,
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT) as mock_entities,
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT),
     ):
         await pipeline.run()
 
-    _, kwargs = mock_analyze.call_args
-    assert kwargs.get("model") == "llama3:8b"
+    _, kwargs = mock_entities.call_args
+    assert kwargs.get("model_label") == "scraper-direct"
 
 
 @pytest.mark.asyncio
@@ -705,7 +704,7 @@ async def test_script_model_and_panel_count_forwarded(tmp_path):
 
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
-        patch("pipeline.analyze_story", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT) as mock_script,
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT),
     ):

@@ -10,7 +10,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
-from analyzer import WorldStateCheckpoint, analyze_story
+from entities import (
+    WorldStateCheckpoint,
+    build_entities_from_raw,
+)
 from prompter import (
     ART_DIRECTION_TEMPLATE_FILENAME,
     DEFAULT_ART_DIRECTION_TEMPLATE,
@@ -27,7 +30,7 @@ CAMPAIGNS_ROOT = Path("campaigns")
 INDEX_FILENAME = "index.json"
 EPISODE_META_FILENAME = "episode_meta.json"
 
-RerunFrom = Literal["scrape", "analyze", "script", "prompt"]
+RerunFrom = Literal["scrape", "entities", "script", "prompt"]
 
 # ---------------------------------------------------------------------------
 # Slug helpers
@@ -161,6 +164,10 @@ def _create_version_dir(
     version_dir = episode_dir / version_name
     version_dir.mkdir(parents=True, exist_ok=True)
 
+    # Backward compatibility for older callers that still pass "analyze".
+    if rerun_from == "analyze":
+        rerun_from = "entities"
+
     existing = sorted(
         p for p in episode_dir.iterdir() if p.is_dir() and re.fullmatch(r"v\d{3}", p.name)
         and p.name != version_name
@@ -175,7 +182,7 @@ def _create_version_dir(
         # Delete forward from the requested rerun point.
         _PHASE_FILES: dict[RerunFrom, list[str]] = {
             "scrape": ["01_raw_text.json", "02_entities.json", "03_script.json", "04_page_prompt.txt"],
-            "analyze": ["02_entities.json", "03_script.json", "04_page_prompt.txt"],
+            "entities": ["02_entities.json", "03_script.json", "04_page_prompt.txt"],
             "script": ["03_script.json", "04_page_prompt.txt"],
             "prompt": ["04_page_prompt.txt"],
         }
@@ -204,6 +211,8 @@ class ComicPipeline:
         rerun_from: RerunFrom | None = None,
         recap_version: str = "standard",
     ):
+        if rerun_from == "analyze":
+            rerun_from = "entities"
         self.url = url
         self.campaign = campaign
         self.campaigns_root = campaigns_root
@@ -319,7 +328,7 @@ class ComicPipeline:
                         encoding="utf-8",
                     )
                 if content_changed:
-                    print(f"[1/4] Recap variant changed to {self.recap_version!r} — invalidating downstream checkpoints")
+                    print(f"[1/4] Recap variant changed to {self.recap_version!r} - invalidating downstream checkpoints")
                     entities_path = version_dir / "02_entities.json"
                     script_path = version_dir / "03_script.json"
                     prompts_path = version_dir / "04_page_prompt.txt"
@@ -343,16 +352,16 @@ class ComicPipeline:
         template_path = self._resolve_art_template(version_dir, episode_dir)
 
         if entities_path.exists():
-            print("[2/4] Analyzing...skipped (checkpoint exists)")
+            print("[2/4] Building entities...skipped (checkpoint exists)")
             entities = WorldStateCheckpoint.model_validate_json(
                 entities_path.read_text(encoding="utf-8")
             )
         else:
-            print(f"[2/4] Analyzing...  (model: {self.analysis_model})")
-            entities = analyze_story(
+            print("[2/4] Building entities from scraped notes...")
+            entities = build_entities_from_raw(
                 raw_checkpoint_path=raw_path,
                 output_path=entities_path,
-                model=self.analysis_model,
+                model_label="scraper-direct",
             )
             print("      ...done")
 
@@ -423,11 +432,6 @@ async def _run_cli() -> None:
         help="Root directory for all campaign data (default: campaigns/)",
     )
     parser.add_argument(
-        "--analysis-model",
-        default="qwen2.5:7b",
-        help="Ollama model name used for Phase 2 analysis",
-    )
-    parser.add_argument(
         "--script-model",
         default="qwen2.5:7b",
         help="Ollama model name used for Phase 3 scripting",
@@ -448,12 +452,12 @@ async def _run_cli() -> None:
     )
     parser.add_argument(
         "--rerun-from",
-        choices=["scrape", "analyze", "script", "prompt"],
+        choices=["scrape", "entities", "script", "prompt", "analyze"],
         default=None,
         help=(
             "Invalidate checkpoints from this phase onward and rerun. "
             "Prior phases are cloned from the last version. "
-            "Options: scrape, analyze, script, prompt"
+            "Options: scrape, entities, script, prompt (analyze accepted as legacy alias)"
         ),
     )
     parser.add_argument(
@@ -467,15 +471,18 @@ async def _run_cli() -> None:
     )
 
     args = parser.parse_args()
+    rerun_from_arg = args.rerun_from
+    if rerun_from_arg == "analyze":
+        rerun_from_arg = "entities"
+
     pipeline = ComicPipeline(
         url=args.url,
         campaign=args.campaign,
         campaigns_root=Path(args.campaigns_root),
-        analysis_model=args.analysis_model,
         script_model=args.script_model,
         panel_count=args.panel_count,
         art_style_template=Path(args.art_style_template) if args.art_style_template else None,
-        rerun_from=args.rerun_from,
+        rerun_from=rerun_from_arg,
         recap_version=args.recap_version,
     )
     result = await pipeline.run()

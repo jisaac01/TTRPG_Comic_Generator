@@ -9,7 +9,7 @@ from typing import Callable
 
 from pydantic import BaseModel, Field
 
-from analyzer import Character, Location, Quote, StoryBeat
+from entities import Character, Location, Quote, StoryBeat
 from scraper import RawTextCheckpoint
 
 
