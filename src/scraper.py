@@ -14,6 +14,26 @@ from pydantic import BaseModel, Field
 DEFAULT_STORY_SELECTOR = "div.mt-3 div.text-left.text-sm"
 
 RecapVersion = Literal["short", "standard", "alternate", "long"]
+
+# ---------------------------------------------------------------------------
+# Structured-section models
+# ---------------------------------------------------------------------------
+
+
+class ScrapedQuote(BaseModel):
+    """A memorable quote with optional attribution."""
+
+    text: str
+    attribution: str | None = None
+
+
+class ScrapedEntity(BaseModel):
+    """A named entity (NPC, item, location, etc.) with optional description."""
+
+    name: str
+    description: str | None = None
+
+
 RECAP_VERSION_ALIASES: dict[str, RecapVersion] = {
     "short": "short",
     "standard": "standard",
@@ -41,6 +61,15 @@ class RawTextCheckpoint(BaseModel):
     selected_recap: str | None = None
     source_selector: str
     scraped_at: str
+    # Structured sections extracted directly from the page
+    quotes: list[ScrapedQuote] = Field(default_factory=list)
+    outline: list[str] = Field(default_factory=list)
+    npcs: list[ScrapedEntity] = Field(default_factory=list)
+    items: list[ScrapedEntity] = Field(default_factory=list)
+    locations: list[ScrapedEntity] = Field(default_factory=list)
+    factions: list[ScrapedEntity] = Field(default_factory=list)
+    quests: list[ScrapedEntity] = Field(default_factory=list)
+    player_characters: list[ScrapedEntity] = Field(default_factory=list)
 
 
 def normalize_recap_version(value: str) -> RecapVersion:
@@ -154,6 +183,213 @@ def extract_recap_variants(body_text: str) -> dict[str, str]:
         if value:
             variants[key] = value
     return variants
+
+
+# ---------------------------------------------------------------------------
+# Structured-section extractors (Quotes, Outline, Notes categories)
+# ---------------------------------------------------------------------------
+
+# Text lines that carry no meaningful content (e.g. generic image alt text from
+# Playwright's inner_text, or empty lines after stripping, or known page-chrome
+# strings such as navigation links and footer text).
+_JUNK_LINE_VALUES: frozenset[str] = frozenset(
+    {
+        "image",
+        "[image]",
+        "image:",
+        # ScrybeQuill footer / navigation chrome
+        "terms",
+        "privacy",
+        "contact",
+        "unhide tutorials",
+        "log in",
+        "sign up",
+        "+ new recap",
+    }
+)
+
+# Known category headings inside the Notes section (lower-cased for matching).
+# Also includes the page-level "Additional Links" heading so scanning stops
+# before the footer even if it isn't separated by a blank line.
+_NOTES_CATEGORY_STOP_SET: frozenset[str] = frozenset(
+    [
+        "npcs",
+        "npc",
+        "non-player characters",
+        "items",
+        "locations",
+        "factions",
+        "quests",
+        "player characters",
+        "pcs",
+        "additional links",
+    ]
+)
+
+# Mapping of output field names to the heading variants the page may use.
+_NOTES_CATEGORIES: dict[str, list[str]] = {
+    "npcs": ["NPCs", "NPC", "Non-Player Characters"],
+    "items": ["Items"],
+    "locations": ["Locations"],
+    "factions": ["Factions"],
+    "quests": ["Quests"],
+    "player_characters": ["Player Characters", "PCs"],
+}
+
+
+def _clean_body_lines(text: str) -> list[str]:
+    """Return non-empty, non-junk lines from raw body text."""
+    result: list[str] = []
+    for line in re.sub(r"\r\n?", "\n", text).split("\n"):
+        stripped = " ".join(line.split())
+        if not stripped:
+            continue
+        if stripped.lower() in _JUNK_LINE_VALUES:
+            continue
+        # Skip copyright / legal notices (e.g. "© 2025 Scrybe Quill Inc.")
+        if stripped.startswith("©"):
+            continue
+        result.append(stripped)
+    return result
+
+
+def _is_description_line(text: str) -> bool:
+    """Heuristic: return True when *text* looks like a description rather than a name.
+
+    Descriptions are sentence-like — they tend to be longer, contain mid-sentence
+    periods (``'. '``), or end with a period after a substantial word count.
+    """
+    if len(text) > 60:
+        return True
+    if re.search(r"\.\s+[A-Z]", text):
+        return True
+    if text.endswith(".") and len(text.split()) > 6:
+        return True
+    return False
+
+
+def _parse_entities_from_lines(lines: list[str]) -> list[ScrapedEntity]:
+    """Convert a flat list of lines into :class:`ScrapedEntity` objects.
+
+    The ScrybeQuill Notes section interleaves optional description text with
+    entity names: a description (if present) always precedes its entity's name.
+    This function uses :func:`_is_description_line` to make that distinction.
+    """
+    entities: list[ScrapedEntity] = []
+    pending_desc: str | None = None
+
+    for line in lines:
+        if _is_description_line(line):
+            if pending_desc is not None:
+                # Back-to-back descriptions — treat the previous one as a bare name.
+                entities.append(ScrapedEntity(name=pending_desc))
+            pending_desc = line
+        else:
+            entities.append(ScrapedEntity(name=line, description=pending_desc))
+            pending_desc = None
+
+    if pending_desc is not None:
+        entities.append(ScrapedEntity(name=pending_desc))
+
+    return entities
+
+
+def _extract_notes_category_lines(notes_text: str, category_names: list[str]) -> list[str]:
+    """Within *notes_text* (the raw Notes section body), find lines for *category_names*."""
+    cat_set = {c.strip().lower() for c in category_names}
+    lines = re.sub(r"\r\n?", "\n", notes_text).split("\n")
+
+    start_idx: int | None = None
+    for idx, line in enumerate(lines):
+        if " ".join(line.split()).lower() in cat_set:
+            start_idx = idx + 1
+            break
+
+    if start_idx is None:
+        return []
+
+    content_lines: list[str] = []
+    for line in lines[start_idx:]:
+        stripped = " ".join(line.split())
+        normalized = stripped.lower()
+        if normalized in _NOTES_CATEGORY_STOP_SET and normalized not in cat_set:
+            break
+        if not stripped:
+            continue
+        if normalized in _JUNK_LINE_VALUES:
+            continue
+        if stripped.startswith("©"):
+            continue
+        content_lines.append(stripped)
+
+    return content_lines
+
+
+def extract_quotes_from_body(body_text: str) -> list[ScrapedQuote]:
+    """Parse the ``Quotes`` section of rendered body text into :class:`ScrapedQuote` objects."""
+    content = _extract_section_by_heading(body_text, ["Quotes"])
+    if not content:
+        return []
+
+    lines = _clean_body_lines(content)
+    quotes: list[ScrapedQuote] = []
+
+    i = 0
+    while i < len(lines):
+        if re.match(r"^Quote\s+\d+$", lines[i], re.IGNORECASE):
+            i += 1
+            quote_text: str | None = None
+            attribution_parts: list[str] = []
+
+            while i < len(lines) and not re.match(r"^Quote\s+\d+$", lines[i], re.IGNORECASE):
+                cur = lines[i]
+                if quote_text is None:
+                    # Strip surrounding typographic or ASCII double-quotes.
+                    quote_text = cur.strip('"').strip("\u201c\u201d").strip()
+                else:
+                    attribution_parts.append(cur)
+                i += 1
+
+            if quote_text:
+                quotes.append(
+                    ScrapedQuote(
+                        text=quote_text,
+                        attribution=" ".join(attribution_parts) or None,
+                    )
+                )
+        else:
+            i += 1
+
+    return quotes
+
+
+def extract_outline_from_body(body_text: str) -> list[str]:
+    """Parse the ``Outline`` section of rendered body text into a list of items."""
+    content = _extract_section_by_heading(body_text, ["Outline"])
+    if not content:
+        return []
+    return _clean_body_lines(content)
+
+
+def extract_notes_categories(
+    body_text: str,
+) -> dict[str, list[ScrapedEntity]]:
+    """Parse all Notes sub-categories from rendered body text.
+
+    Returns a mapping of field name → entity list for categories that are
+    present on the page (e.g. ``"npcs"``, ``"items"``, ``"locations"`` …).
+    """
+    notes_content = _extract_section_by_heading(body_text, ["Notes"])
+    if not notes_content:
+        return {}
+
+    result: dict[str, list[ScrapedEntity]] = {}
+    for field_name, headings in _NOTES_CATEGORIES.items():
+        lines = _extract_notes_category_lines(notes_content, headings)
+        if lines:
+            result[field_name] = _parse_entities_from_lines(lines)
+
+    return result
 
 
 async def _safe_text_content(page, selector: str) -> str | None:
@@ -305,6 +541,15 @@ async def scrape_scrybequill(
 
         await browser.close()
 
+    # Extract structured sections from the already-captured body text.
+    scraped_quotes: list[ScrapedQuote] = []
+    scraped_outline: list[str] = []
+    scraped_notes: dict[str, list[ScrapedEntity]] = {}
+    if body_text:
+        scraped_quotes = extract_quotes_from_body(body_text)
+        scraped_outline = extract_outline_from_body(body_text)
+        scraped_notes = extract_notes_categories(body_text)
+
     checkpoint = RawTextCheckpoint(
         url=url,
         title=title,
@@ -314,6 +559,14 @@ async def scrape_scrybequill(
         selected_recap=selected_recap,
         source_selector=resolved_source_selector,
         scraped_at=datetime.now(timezone.utc).isoformat(),
+        quotes=scraped_quotes,
+        outline=scraped_outline,
+        npcs=scraped_notes.get("npcs", []),
+        items=scraped_notes.get("items", []),
+        locations=scraped_notes.get("locations", []),
+        factions=scraped_notes.get("factions", []),
+        quests=scraped_notes.get("quests", []),
+        player_characters=scraped_notes.get("player_characters", []),
     )
     save_checkpoint(checkpoint, checkpoint_path)
     return checkpoint
