@@ -236,6 +236,17 @@ _NOTES_CATEGORIES: dict[str, list[str]] = {
     "player_characters": ["Player Characters", "PCs"],
 }
 
+_NOTES_MARKDOWN_HEADING_MAP: dict[str, str] = {
+    "npcs": "npcs",
+    "npc": "npcs",
+    "items": "items",
+    "locations": "locations",
+    "factions": "factions",
+    "quests": "quests",
+    "player characters": "player_characters",
+    "pcs": "player_characters",
+}
+
 
 def _clean_body_lines(text: str) -> list[str]:
     """Return non-empty, non-junk lines from raw body text."""
@@ -392,6 +403,188 @@ def extract_notes_categories(
     return result
 
 
+def _clean_markdown_inline(text: str) -> str:
+    """Normalize simple inline markdown wrappers used in exported notes."""
+    cleaned = " ".join(text.split()).strip()
+    cleaned = re.sub(r"^\*+", "", cleaned)
+    cleaned = re.sub(r"\*+$", "", cleaned)
+    cleaned = re.sub(r"^_+", "", cleaned)
+    cleaned = re.sub(r"_+$", "", cleaned)
+    return cleaned.strip()
+
+
+def extract_notes_categories_from_markdown(
+    markdown_text: str,
+) -> dict[str, list[ScrapedEntity]]:
+    """Parse ScrybeQuill exported Notes markdown into categorized entities."""
+    lines = re.sub(r"\r\n?", "\n", markdown_text).split("\n")
+
+    result: dict[str, list[ScrapedEntity]] = {}
+    current_field: str | None = None
+    pending_name: str | None = None
+    pending_desc_lines: list[str] = []
+
+    def flush_pending() -> None:
+        nonlocal pending_name, pending_desc_lines
+        if pending_name is None or current_field is None:
+            pending_name = None
+            pending_desc_lines = []
+            return
+
+        description = " ".join(part for part in pending_desc_lines if part).strip() or None
+        result.setdefault(current_field, []).append(
+            ScrapedEntity(name=pending_name, description=description)
+        )
+        pending_name = None
+        pending_desc_lines = []
+
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line:
+            continue
+
+        # Heading formats include both markdown headers and bold labels.
+        heading_match = re.match(r"^(?:#{1,6}\s*)?\*\*?\s*([^*#][^*]*)\*\*?\s*:?$", line)
+        if heading_match is None:
+            heading_match = re.match(r"^#{1,6}\s*(.+?)\s*:?$", line)
+
+        if heading_match is not None:
+            heading_key = " ".join(heading_match.group(1).split()).strip().lower().rstrip(":")
+            mapped = _NOTES_MARKDOWN_HEADING_MAP.get(heading_key)
+            if mapped is not None:
+                flush_pending()
+                current_field = mapped
+                continue
+
+        if current_field is None:
+            continue
+
+        bullet_match = re.match(r"^-\s+\*\*(.+?)\*\*(?::\s*(.*))?$", line)
+        if bullet_match is not None:
+            flush_pending()
+            pending_name = _clean_markdown_inline(bullet_match.group(1))
+            pending_desc_lines = []
+            first_desc = bullet_match.group(2)
+            if first_desc:
+                first_desc = _clean_markdown_inline(first_desc)
+                if first_desc:
+                    pending_desc_lines.append(first_desc)
+            continue
+
+        if pending_name is not None:
+            continuation = _clean_markdown_inline(line)
+            if continuation:
+                pending_desc_lines.append(continuation)
+
+    flush_pending()
+    return result
+
+
+async def _extract_notes_markdown_from_export(page) -> str | None:
+    """Attempt to retrieve Notes markdown by triggering the Notes export menu."""
+    try:
+        await page.wait_for_selector("#hs-notes-export-dropdown", timeout=5000)
+    except Exception:
+        return None
+
+    # Hook clipboard writes inside the page so we can capture text without relying
+    # on clipboard-read permissions in headless environments.
+    try:
+        await page.evaluate(
+            """
+            () => {
+              window.__sqCopiedPayloads = [];
+              const clipboard = navigator.clipboard;
+              if (!clipboard) {
+                return;
+              }
+
+              if (!window.__sqClipboardPatched) {
+                const originalWriteText = clipboard.writeText ? clipboard.writeText.bind(clipboard) : null;
+                clipboard.writeText = async (text) => {
+                  try {
+                    window.__sqCopiedPayloads.push(typeof text === 'string' ? text : String(text));
+                  } catch (_) {
+                    // no-op
+                  }
+                  if (originalWriteText) {
+                    try {
+                      return await originalWriteText(text);
+                    } catch (_) {
+                      return undefined;
+                    }
+                  }
+                  return undefined;
+                };
+                window.__sqClipboardPatched = true;
+              }
+            }
+            """
+        )
+    except Exception:
+        return None
+
+    try:
+        await page.click("#hs-notes-export-dropdown", timeout=2500)
+    except Exception:
+        return None
+
+    try:
+        await page.wait_for_timeout(250)
+    except Exception:
+        pass
+
+    try:
+        clicked = await page.evaluate(
+            """
+            () => {
+              const candidates = Array.from(
+                document.querySelectorAll('button,[role="menuitem"],a,li,div,span')
+              );
+              const target = candidates.find((el) => {
+                const text = (el.textContent || '').trim().toLowerCase();
+                return text === 'copy markdown' && el.offsetParent !== null;
+              });
+              if (!target) {
+                return false;
+              }
+              target.click();
+              return true;
+            }
+            """
+        )
+    except Exception:
+        return None
+
+    if not clicked:
+        return None
+
+    try:
+        await page.wait_for_timeout(350)
+    except Exception:
+        pass
+
+    try:
+        copied_payload = await page.evaluate(
+            """
+            () => {
+              if (!Array.isArray(window.__sqCopiedPayloads) || window.__sqCopiedPayloads.length === 0) {
+                return null;
+              }
+              return window.__sqCopiedPayloads[window.__sqCopiedPayloads.length - 1];
+            }
+            """
+        )
+    except Exception:
+        return None
+
+    if not copied_payload or not isinstance(copied_payload, str):
+        return None
+
+    text = copied_payload.strip()
+    return text or None
+
+
 async def _safe_text_content(page, selector: str) -> str | None:
     try:
         value = await page.locator(selector).first.text_content(timeout=3000)
@@ -538,6 +731,7 @@ async def scrape_scrybequill(
 
         title = await _safe_text_content(page, title_selector)
         author = await _safe_text_content(page, author_selector)
+        notes_markdown = await _extract_notes_markdown_from_export(page)
 
         await browser.close()
 
@@ -545,10 +739,18 @@ async def scrape_scrybequill(
     scraped_quotes: list[ScrapedQuote] = []
     scraped_outline: list[str] = []
     scraped_notes: dict[str, list[ScrapedEntity]] = {}
+    markdown_notes: dict[str, list[ScrapedEntity]] = {}
     if body_text:
         scraped_quotes = extract_quotes_from_body(body_text)
         scraped_outline = extract_outline_from_body(body_text)
         scraped_notes = extract_notes_categories(body_text)
+    if notes_markdown:
+        markdown_notes = extract_notes_categories_from_markdown(notes_markdown)
+        # Prefer notes-export markdown when available; it's currently the most
+        # complete source of per-entity descriptions.
+        for key, value in markdown_notes.items():
+            if value:
+                scraped_notes[key] = value
 
     checkpoint = RawTextCheckpoint(
         url=url,

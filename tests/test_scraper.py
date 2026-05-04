@@ -339,6 +339,34 @@ def test_extract_notes_categories_returns_empty_when_notes_missing():
     assert scraper.extract_notes_categories(body_text) == {}
 
 
+def test_extract_notes_categories_from_markdown_parses_descriptions():
+    markdown_text = """
+    ## NPCs:
+    - **Merelda, the Dreadmarsh Witch**: *A powerful witch dwelling in the Dreadmarsh.*
+    - **Petey**: *Del's carnivorous plant companion.*
+
+    ## ITEMS:
+    - **Harp of the Abyss**: *A demonic harp and spell focus.*
+
+    **PLAYER CHARACTERS**
+    - **Del**: *A druid with reptile-aligned primal gifts.*
+    - **Orion**: *A shy bard bound to a dangerous artifact.*
+    """
+
+    cats = scraper.extract_notes_categories_from_markdown(markdown_text)
+
+    assert cats["npcs"][0].name == "Merelda, the Dreadmarsh Witch"
+    assert cats["npcs"][0].description == "A powerful witch dwelling in the Dreadmarsh."
+    assert cats["npcs"][1].name == "Petey"
+    assert cats["npcs"][1].description == "Del's carnivorous plant companion."
+
+    assert cats["items"][0].name == "Harp of the Abyss"
+    assert cats["items"][0].description == "A demonic harp and spell focus."
+
+    assert cats["player_characters"][0].name == "Del"
+    assert cats["player_characters"][1].name == "Orion"
+
+
 def test_junk_image_lines_are_filtered_from_entities():
     """'Image' lines from Playwright inner_text should not appear as entity names."""
     body_text = """
