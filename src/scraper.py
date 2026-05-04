@@ -10,6 +10,8 @@ from pathlib import Path
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError, async_playwright
 from pydantic import BaseModel, Field
 
+DEFAULT_STORY_SELECTOR = "div.mt-3 div.text-left.text-sm"
+
 
 class RawTextCheckpoint(BaseModel):
     """Validated checkpoint payload for scraped story content."""
@@ -89,7 +91,7 @@ def save_checkpoint(checkpoint: RawTextCheckpoint, checkpoint_path: Path) -> Non
 async def scrape_scrybequill(
     url: str,
     checkpoint_path: Path = Path("checkpoints/01_raw_text.json"),
-    story_selector: str = ".story-content",
+    story_selector: str = DEFAULT_STORY_SELECTOR,
     title_selector: str = "h1",
     author_selector: str = ".author",
     timeout_ms: int = 45000,
@@ -142,7 +144,7 @@ async def _run_cli() -> None:
     )
     parser.add_argument(
         "--selector",
-        default=".story-content",
+        default=DEFAULT_STORY_SELECTOR,
         help="CSS selector that contains story content",
     )
 

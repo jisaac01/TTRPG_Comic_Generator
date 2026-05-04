@@ -118,7 +118,7 @@ def test_extract_text_recap_from_rendered_text():
 async def test_scrape_scrybequill_writes_checkpoint_and_cleans_html(monkeypatch, tmp_path):
     page = _FakePage(
         html_by_selector={
-            ".story-content": """
+            scraper.DEFAULT_STORY_SELECTOR: """
                 <article>
                     <h2>Ignored heading inside body</h2>
                     <p>First line.</p>
