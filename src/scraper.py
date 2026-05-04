@@ -6,11 +6,28 @@ import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Literal
 
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError, async_playwright
 from pydantic import BaseModel, Field
 
 DEFAULT_STORY_SELECTOR = "div.mt-3 div.text-left.text-sm"
+
+RecapVersion = Literal["short", "standard", "alternate", "long"]
+RECAP_VERSION_ALIASES: dict[str, RecapVersion] = {
+    "short": "short",
+    "standard": "standard",
+    "alternate": "alternate",
+    "alt": "alternate",
+    "long": "long",
+}
+
+RECAP_LABELS: dict[RecapVersion, str] = {
+    "short": "Short Recap",
+    "standard": "Standard Recap",
+    "alternate": "Alternate Recap",
+    "long": "Long Recap",
+}
 
 
 class RawTextCheckpoint(BaseModel):
@@ -20,8 +37,18 @@ class RawTextCheckpoint(BaseModel):
     title: str | None = None
     author: str | None = None
     content: str = Field(min_length=1)
+    recap_variants: dict[str, str] = Field(default_factory=dict)
+    selected_recap: str | None = None
     source_selector: str
     scraped_at: str
+
+
+def normalize_recap_version(value: str) -> RecapVersion:
+    key = value.strip().lower()
+    if key not in RECAP_VERSION_ALIASES:
+        allowed = ", ".join(sorted(RECAP_VERSION_ALIASES))
+        raise ValueError(f"Unsupported recap version: {value}. Expected one of: {allowed}")
+    return RECAP_VERSION_ALIASES[key]
 
 
 def clean_html(raw_html: str) -> str:
@@ -67,6 +94,68 @@ def extract_text_recap(body_text: str) -> str | None:
     return recap or None
 
 
+def _extract_section_by_heading(body_text: str, headings: list[str]) -> str | None:
+    """Extract section lines after a heading until the next known section heading."""
+
+    heading_set = {heading.strip().lower() for heading in headings}
+    stop_headings = {
+        "short recap",
+        "standard recap",
+        "alternate recap",
+        "alt recap",
+        "long recap",
+        "text recap",
+        "audio recap",
+        "video recap",
+        "quotes",
+        "outline",
+        "notes",
+        "additional links",
+    }
+
+    normalized = re.sub(r"\r\n?", "\n", body_text)
+    lines = normalized.split("\n")
+
+    start_idx: int | None = None
+    for idx, line in enumerate(lines):
+        if line.strip().lower() in heading_set:
+            start_idx = idx + 1
+            break
+
+    if start_idx is None:
+        return None
+
+    content_lines: list[str] = []
+    for line in lines[start_idx:]:
+        stripped = line.strip()
+        if stripped.lower() in stop_headings:
+            break
+        normalized_line = " ".join(stripped.split())
+        if normalized_line:
+            content_lines.append(normalized_line)
+
+    if not content_lines:
+        return None
+    return "\n".join(content_lines)
+
+
+def extract_recap_variants(body_text: str) -> dict[str, str]:
+    """Extract recap variants from rendered body text headings when present."""
+
+    variants: dict[str, str] = {}
+    heading_map: dict[RecapVersion, list[str]] = {
+        "short": ["Short Recap"],
+        "standard": ["Standard Recap", "Text Recap"],
+        "alternate": ["Alternate Recap", "Alt Recap"],
+        "long": ["Long Recap"],
+    }
+    for key, headings in heading_map.items():
+        value = _extract_section_by_heading(body_text, headings)
+        if value:
+            variants[key] = value
+    return variants
+
+
 async def _safe_text_content(page, selector: str) -> str | None:
     try:
         value = await page.locator(selector).first.text_content(timeout=3000)
@@ -78,6 +167,38 @@ async def _safe_text_content(page, selector: str) -> str | None:
 
     normalized = " ".join(value.split())
     return normalized or None
+
+
+async def _extract_story_from_selector(page, story_selector: str) -> str | None:
+    try:
+        story_html = await page.inner_html(story_selector)
+    except Exception:
+        return None
+
+    cleaned = clean_html(story_html)
+    return cleaned or None
+
+
+async def _try_click_recap_control(page, label: str) -> bool:
+    selectors = [
+        f"button:has-text('{label}')",
+        f"[role='tab']:has-text('{label}')",
+        f"[aria-label='{label}']",
+        f"text={label}",
+    ]
+
+    for selector in selectors:
+        try:
+            await page.click(selector, timeout=1500)
+            try:
+                await page.wait_for_timeout(250)
+            except Exception:
+                pass
+            return True
+        except Exception:
+            continue
+
+    return False
 
 
 def save_checkpoint(checkpoint: RawTextCheckpoint, checkpoint_path: Path) -> None:
@@ -92,10 +213,13 @@ async def scrape_scrybequill(
     url: str,
     checkpoint_path: Path = Path("campaigns/<campaign>/<episode>/v001/01_raw_text.json"),
     story_selector: str = DEFAULT_STORY_SELECTOR,
+    recap_version: str = "standard",
     title_selector: str = "h1",
     author_selector: str = ".author",
     timeout_ms: int = 45000,
 ) -> RawTextCheckpoint:
+    selected_recap = normalize_recap_version(recap_version)
+
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=True)
         page = await browser.new_page()
@@ -104,18 +228,77 @@ async def scrape_scrybequill(
         # Some SPAs keep long-lived requests (analytics/websockets), making
         # networkidle unreliable. Wait for the content node instead.
         resolved_source_selector = story_selector
+        source_by_variant: dict[str, str] = {}
+        recap_variants: dict[str, str] = {}
+        body_text: str | None = None
         try:
             await page.wait_for_selector(story_selector, timeout=timeout_ms)
-            story_html = await page.inner_html(story_selector)
-            cleaned_content = clean_html(story_html)
+            story_content = await _extract_story_from_selector(page, story_selector)
+            if story_content:
+                recap_variants[selected_recap] = story_content
+                source_by_variant[selected_recap] = story_selector
         except PlaywrightTimeoutError:
-            # Fallback for selector drift: parse the rendered body text by headings.
+            pass
+
+        try:
             body_text = await page.inner_text("body")
-            recap_text = extract_text_recap(body_text)
-            if recap_text is None:
-                raise
-            cleaned_content = recap_text
-            resolved_source_selector = "body::Text Recap"
+        except Exception:
+            body_text = None
+
+        if body_text:
+            parsed = extract_recap_variants(body_text)
+            for key, value in parsed.items():
+                recap_variants.setdefault(key, value)
+                source_by_variant.setdefault(key, "body::heading")
+
+        # If variants are behind tabs/buttons, click through recap controls to capture each.
+        for key, label in RECAP_LABELS.items():
+            if key in recap_variants:
+                continue
+
+            clicked = await _try_click_recap_control(page, label)
+            if not clicked:
+                continue
+
+            story_content = await _extract_story_from_selector(page, story_selector)
+            if story_content:
+                recap_variants[key] = story_content
+                source_by_variant[key] = story_selector
+                continue
+
+            try:
+                body_after_click = await page.inner_text("body")
+            except Exception:
+                body_after_click = None
+            if body_after_click:
+                parsed_after_click = extract_recap_variants(body_after_click)
+                if key in parsed_after_click:
+                    recap_variants[key] = parsed_after_click[key]
+                    source_by_variant[key] = "body::heading"
+
+        cleaned_content = recap_variants.get(selected_recap)
+        if cleaned_content is None:
+            if body_text:
+                recap_text = extract_text_recap(body_text)
+                if recap_text is not None:
+                    cleaned_content = recap_text
+                    recap_variants.setdefault("standard", recap_text)
+                    source_by_variant.setdefault("standard", "body::Text Recap")
+
+        if cleaned_content is None and recap_variants:
+            fallback_order = ["standard", "short", "alternate", "long"]
+            for key in fallback_order:
+                if key in recap_variants:
+                    cleaned_content = recap_variants[key]
+                    selected_recap = key
+                    break
+
+        if cleaned_content is None:
+            raise PlaywrightTimeoutError(
+                f"Unable to extract recap content for selector '{story_selector}'"
+            )
+
+        resolved_source_selector = source_by_variant.get(selected_recap, resolved_source_selector)
 
         title = await _safe_text_content(page, title_selector)
         author = await _safe_text_content(page, author_selector)
@@ -127,6 +310,8 @@ async def scrape_scrybequill(
         title=title,
         author=author,
         content=cleaned_content,
+        recap_variants=recap_variants,
+        selected_recap=selected_recap,
         source_selector=resolved_source_selector,
         scraped_at=datetime.now(timezone.utc).isoformat(),
     )
@@ -147,6 +332,12 @@ async def _run_cli() -> None:
         default=DEFAULT_STORY_SELECTOR,
         help="CSS selector that contains story content",
     )
+    parser.add_argument(
+        "--recap-version",
+        choices=["short", "standard", "alternate", "alt", "long"],
+        default="standard",
+        help="Recap variant to select for the content field",
+    )
 
     args = parser.parse_args()
 
@@ -157,6 +348,7 @@ async def _run_cli() -> None:
         url=args.url,
         checkpoint_path=Path(args.checkpoint),
         story_selector=args.selector,
+        recap_version=args.recap_version,
     )
     print(f"Saved {len(checkpoint.content)} characters to {args.checkpoint}")
 

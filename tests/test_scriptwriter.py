@@ -136,6 +136,29 @@ def test_write_script_raises_when_panel_count_mismatch(tmp_path):
         )
 
 
+def test_write_script_retries_and_succeeds_on_later_attempt(tmp_path):
+    raw_path, entities_path = _write_input_checkpoints(tmp_path)
+    attempts = {"count": 0}
+
+    def fake_generator(_content, _world, _model, _panel_count):
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            return scriptwriter.ScriptPayload(panels=_valid_payload().panels[:2])
+        return _valid_payload()
+
+    checkpoint = scriptwriter.write_script(
+        raw_checkpoint_path=raw_path,
+        entities_checkpoint_path=entities_path,
+        output_path=tmp_path / "03_script.json",
+        panel_count=3,
+        max_generation_attempts=3,
+        generator=fake_generator,
+    )
+
+    assert attempts["count"] == 2
+    assert len(checkpoint.panels) == 3
+
+
 def test_write_script_raises_on_continuity_break(tmp_path):
     raw_path, entities_path = _write_input_checkpoints(tmp_path)
 
@@ -145,6 +168,64 @@ def test_write_script_raises_on_continuity_break(tmp_path):
         return broken
 
     with pytest.raises(ValueError, match="Continuity break"):
+        scriptwriter.write_script(
+            raw_checkpoint_path=raw_path,
+            entities_checkpoint_path=entities_path,
+            output_path=tmp_path / "03_script.json",
+            panel_count=3,
+            generator=fake_generator,
+        )
+
+
+def test_write_script_allows_added_items_between_panels(tmp_path):
+    raw_path, entities_path = _write_input_checkpoints(tmp_path)
+
+    def fake_generator(_content, _world, _model, _panel_count):
+        payload = _valid_payload()
+        payload.panels[1].held_items_before["Del"] = ["torch", "amulet"]
+        return payload
+
+    checkpoint = scriptwriter.write_script(
+        raw_checkpoint_path=raw_path,
+        entities_checkpoint_path=entities_path,
+        output_path=tmp_path / "03_script.json",
+        panel_count=3,
+        generator=fake_generator,
+    )
+
+    assert checkpoint.panels[1].held_items_before["Del"] == ["torch", "amulet"]
+
+
+def test_write_script_allows_missing_character_when_inventory_empty(tmp_path):
+    raw_path, entities_path = _write_input_checkpoints(tmp_path)
+
+    def fake_generator(_content, _world, _model, _panel_count):
+        payload = _valid_payload()
+        payload.panels[0].held_items_after["Vendetta"] = []
+        payload.panels[1].held_items_before.pop("Vendetta", None)
+        return payload
+
+    checkpoint = scriptwriter.write_script(
+        raw_checkpoint_path=raw_path,
+        entities_checkpoint_path=entities_path,
+        output_path=tmp_path / "03_script.json",
+        panel_count=3,
+        generator=fake_generator,
+    )
+
+    assert checkpoint.panel_count == 3
+
+
+def test_write_script_raises_when_missing_character_with_items(tmp_path):
+    raw_path, entities_path = _write_input_checkpoints(tmp_path)
+
+    def fake_generator(_content, _world, _model, _panel_count):
+        payload = _valid_payload()
+        payload.panels[0].held_items_after["Del"] = ["torch"]
+        payload.panels[1].held_items_before.pop("Del", None)
+        return payload
+
+    with pytest.raises(ValueError, match="missing held_items_before for Del"):
         scriptwriter.write_script(
             raw_checkpoint_path=raw_path,
             entities_checkpoint_path=entities_path,

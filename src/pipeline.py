@@ -16,7 +16,7 @@ from prompter import (
     DEFAULT_ART_DIRECTION_TEMPLATE,
     generate_page_prompt,
 )
-from scraper import RawTextCheckpoint, scrape_scrybequill
+from scraper import RawTextCheckpoint, normalize_recap_version, scrape_scrybequill
 from scriptwriter import ScriptCheckpoint, write_script
 
 # ---------------------------------------------------------------------------
@@ -202,6 +202,7 @@ class ComicPipeline:
         panel_count: int = 6,
         art_style_template: Path | None = None,
         rerun_from: RerunFrom | None = None,
+        recap_version: str = "standard",
     ):
         self.url = url
         self.campaign = campaign
@@ -211,6 +212,28 @@ class ComicPipeline:
         self.panel_count = panel_count
         self.art_style_template = art_style_template
         self.rerun_from = rerun_from
+        self.recap_version = normalize_recap_version(recap_version)
+
+    def _apply_recap_selection(self, raw: RawTextCheckpoint) -> tuple[RawTextCheckpoint, bool, bool]:
+        """Select content from recap variants and report selection/content changes."""
+        selected = self.recap_version
+        variants = raw.recap_variants or {}
+        chosen = variants.get(selected)
+        if not chosen:
+            return raw, False, False
+
+        content_changed = raw.content != chosen
+        selection_changed = raw.selected_recap != selected
+        if not content_changed and not selection_changed:
+            return raw, False, False
+
+        updated = raw.model_copy(
+            update={
+                "content": chosen,
+                "selected_recap": selected,
+            }
+        )
+        return updated, content_changed, True
 
     def _resolve_art_template(self, version_dir: Path, episode_dir: Path) -> Path:
         """Resolve art style template: explicit > campaign-level > inline default."""
@@ -259,7 +282,11 @@ class ComicPipeline:
             # First run: scrape to get the title so we can slug the episode folder.
             with tempfile.TemporaryDirectory() as tmpdir:
                 tmp_raw_path = Path(tmpdir) / "01_raw_text.json"
-                raw = await scrape_scrybequill(url=self.url, checkpoint_path=tmp_raw_path)
+                raw = await scrape_scrybequill(
+                    url=self.url,
+                    checkpoint_path=tmp_raw_path,
+                    recap_version=self.recap_version,
+                )
 
             episode_dir = _resolve_episode_dir(
                 self.campaigns_root, self.campaign, self.url, raw.title
@@ -280,8 +307,26 @@ class ComicPipeline:
 
             if raw_path.exists():
                 raw = RawTextCheckpoint.model_validate_json(raw_path.read_text(encoding="utf-8"))
+                selected_raw, content_changed, selection_updated = self._apply_recap_selection(raw)
+                if selection_updated:
+                    raw = selected_raw
+                    raw_path.write_text(
+                        json.dumps(raw.model_dump(), indent=2, ensure_ascii=False),
+                        encoding="utf-8",
+                    )
+                if content_changed:
+                    entities_path = version_dir / "02_entities.json"
+                    script_path = version_dir / "03_script.json"
+                    prompts_path = version_dir / "04_page_prompt.txt"
+                    entities_path.unlink(missing_ok=True)
+                    script_path.unlink(missing_ok=True)
+                    prompts_path.unlink(missing_ok=True)
             else:
-                raw = await scrape_scrybequill(url=self.url, checkpoint_path=raw_path)
+                raw = await scrape_scrybequill(
+                    url=self.url,
+                    checkpoint_path=raw_path,
+                    recap_version=self.recap_version,
+                )
 
         entities_path = version_dir / "02_entities.json"
         script_path = version_dir / "03_script.json"
@@ -393,6 +438,15 @@ async def _run_cli() -> None:
             "Options: scrape, analyze, script, prompt"
         ),
     )
+    parser.add_argument(
+        "--recap-version",
+        choices=["short", "standard", "alternate", "alt", "long"],
+        default="standard",
+        help=(
+            "Recap variant to use as raw content (captured on initial scrape and reused later). "
+            "Options: short, standard, alternate/alt, long"
+        ),
+    )
 
     args = parser.parse_args()
     pipeline = ComicPipeline(
@@ -404,6 +458,7 @@ async def _run_cli() -> None:
         panel_count=args.panel_count,
         art_style_template=Path(args.art_style_template) if args.art_style_template else None,
         rerun_from=args.rerun_from,
+        recap_version=args.recap_version,
     )
     result = await pipeline.run()
     print(

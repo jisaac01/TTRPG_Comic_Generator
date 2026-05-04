@@ -132,15 +132,20 @@ def _validate_item_continuity(panels: list[Panel]) -> None:
         for character, after_items in current.held_items_after.items():
             next_before = nxt.held_items_before.get(character)
             if next_before is None:
+                if not after_items:
+                    continue
                 raise ValueError(
                     f"Continuity break between panel {current.index} and {nxt.index}: "
                     f"missing held_items_before for {character}."
                 )
 
-            if sorted(after_items) != sorted(next_before):
+            # Characters can gain new items between panels, but they should not
+            # silently lose items they were still holding in the prior panel.
+            missing_items = sorted(set(after_items) - set(next_before))
+            if missing_items:
                 raise ValueError(
                     f"Continuity break between panel {current.index} and {nxt.index} for {character}: "
-                    f"after={after_items}, next_before={next_before}."
+                    f"missing_in_next_before={missing_items}, after={after_items}, next_before={next_before}."
                 )
 
 
@@ -150,23 +155,37 @@ def write_script(
     output_path: Path = Path("campaigns/<campaign>/<episode>/v001/03_script.json"),
     model: str = "qwen2.5:7b",
     panel_count: int = 6,
+    max_generation_attempts: int = 3,
     generator: ScriptGenerator | None = None,
 ) -> ScriptCheckpoint:
     if panel_count < 1:
         raise ValueError("panel_count must be >= 1")
+    if max_generation_attempts < 1:
+        raise ValueError("max_generation_attempts must be >= 1")
 
     raw = RawTextCheckpoint.model_validate_json(raw_checkpoint_path.read_text(encoding="utf-8"))
     world = WorldStateInput.model_validate_json(entities_checkpoint_path.read_text(encoding="utf-8"))
 
     generate_fn = generator or _generate_with_instructor_ollama
-    payload = generate_fn(raw.content, world, model, panel_count)
+    panels: list[Panel] | None = None
+    for attempt in range(1, max_generation_attempts + 1):
+        payload = generate_fn(raw.content, world, model, panel_count)
+        candidate_panels = _normalize_panels(payload.panels)
+        try:
+            if len(candidate_panels) != panel_count:
+                raise ValueError(
+                    f"Expected exactly {panel_count} panels, received {len(candidate_panels)}."
+                )
+            _validate_item_continuity(candidate_panels)
+        except ValueError:
+            if attempt == max_generation_attempts:
+                raise
+            continue
+        panels = candidate_panels
+        break
 
-    panels = _normalize_panels(payload.panels)
-    if len(panels) != panel_count:
-        raise ValueError(
-            f"Expected exactly {panel_count} panels, received {len(panels)}."
-        )
-    _validate_item_continuity(panels)
+    if panels is None:
+        raise RuntimeError("Script generation failed unexpectedly without validation errors.")
 
     checkpoint = ScriptCheckpoint(
         url=raw.url,
@@ -214,6 +233,12 @@ def _run_cli() -> None:
         type=int,
         help="Number of comic panels to generate",
     )
+    parser.add_argument(
+        "--max-generation-attempts",
+        default=3,
+        type=int,
+        help="Number of generation attempts before failing validation",
+    )
 
     args = parser.parse_args()
     checkpoint = write_script(
@@ -222,6 +247,7 @@ def _run_cli() -> None:
         output_path=Path(args.output),
         model=args.model,
         panel_count=args.panel_count,
+        max_generation_attempts=args.max_generation_attempts,
     )
     print(f"Saved {len(checkpoint.panels)} panels to {args.output}")
 

@@ -64,6 +64,9 @@ python src/pipeline.py dreadmarsh https://scrybequill.com/share/...
 # Re-run same episode — creates v002/ with all checkpoints cloned from v001 (no phases run)
 python src/pipeline.py dreadmarsh https://scrybequill.com/share/...
 
+# Select a different recap variant from cached scrape data
+python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --recap-version short
+
 # Update art style only — creates v003/, clones v002/, re-runs Phase 4 only
 python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --rerun-from prompt
 
@@ -83,6 +86,7 @@ python src/pipeline.py belowdown https://scrybequill.com/share/...
 --panel-count N              default: 6
 --art-style-template PATH    Override campaign-level template for this run only
 --rerun-from PHASE           scrape | analyze | script | prompt
+--recap-version VERSION      short | standard | alternate/alt | long
 ```
 
 ## Directory layout
@@ -119,7 +123,7 @@ The individual phase scripts accept explicit paths and are useful for debugging 
 
 **Phase 1 — Scrape**
 ```bash
-python src/scraper.py <URL> --checkpoint campaigns/dreadmarsh/<episode>/v001/01_raw_text.json
+python src/scraper.py <URL> --checkpoint campaigns/dreadmarsh/<episode>/v001/01_raw_text.json --recap-version standard
 ```
 
 **Phase 2 — Analyze**

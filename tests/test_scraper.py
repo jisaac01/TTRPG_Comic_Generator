@@ -36,6 +36,12 @@ class _FakePage:
         if selector not in self._html_by_selector:
             raise ValueError(f"Unknown selector: {selector}")
 
+    async def click(self, selector, timeout=None):
+        return None
+
+    async def wait_for_timeout(self, timeout):
+        return None
+
     async def inner_html(self, selector):
         return self._html_by_selector[selector]
 
@@ -114,6 +120,43 @@ def test_extract_text_recap_from_rendered_text():
     assert recap == "First paragraph of recap.\nSecond paragraph of recap."
 
 
+def test_extract_recap_variants_from_rendered_text():
+    body_text = """
+    Session Title
+
+    Short Recap
+    Short version line.
+
+    Standard Recap
+    Standard line one.
+    Standard line two.
+
+    Alternate Recap
+    Alternate version line.
+
+    Long Recap
+    Long version line.
+
+    Audio Recap
+    Placeholder.
+    """
+
+    variants = scraper.extract_recap_variants(body_text)
+
+    assert variants["short"] == "Short version line."
+    assert variants["standard"] == "Standard line one.\nStandard line two."
+    assert variants["alternate"] == "Alternate version line."
+    assert variants["long"] == "Long version line."
+
+
+def test_normalize_recap_version_aliases():
+    assert scraper.normalize_recap_version("short") == "short"
+    assert scraper.normalize_recap_version("standard") == "standard"
+    assert scraper.normalize_recap_version("alternate") == "alternate"
+    assert scraper.normalize_recap_version("alt") == "alternate"
+    assert scraper.normalize_recap_version("long") == "long"
+
+
 @pytest.mark.asyncio
 async def test_scrape_scrybequill_writes_checkpoint_and_cleans_html(monkeypatch, tmp_path):
     page = _FakePage(
@@ -153,3 +196,5 @@ async def test_scrape_scrybequill_writes_checkpoint_and_cleans_html(monkeypatch,
     assert payload["title"] == "Test Story"
     assert payload["author"] == "GM Quinn"
     assert "window.inject" not in payload["content"]
+    assert payload["selected_recap"] == "standard"
+    assert payload["recap_variants"]["standard"]

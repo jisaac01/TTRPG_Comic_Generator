@@ -30,6 +30,13 @@ _RAW_CHECKPOINT = scraper.RawTextCheckpoint(
     title="Dreadmarsh Crossing",
     author="GM",
     content="Del the Druid crossed the marsh.",
+    recap_variants={
+        "standard": "Del the Druid crossed the marsh.",
+        "short": "Del crossed the marsh.",
+        "alternate": "Del and crew crossed the marsh.",
+        "long": "Del the Druid crossed the marsh and charted every bog path.",
+    },
+    selected_recap="standard",
     source_selector="div.story-content",
     scraped_at="2026-05-04T00:00:00+00:00",
 )
@@ -291,6 +298,8 @@ async def test_first_run_creates_campaign_episode_version(tmp_path):
         result = await pipeline.run()
 
     mock_scrape.assert_awaited_once()
+    _, kwargs = mock_scrape.await_args
+    assert kwargs["recap_version"] == "standard"
     mock_analyze.assert_called_once()
     mock_script.assert_called_once()
     mock_prompts.assert_called_once()
@@ -334,6 +343,28 @@ async def test_first_run_result_contains_model_dump_dicts(tmp_path):
     assert result["entities"]["model"] == "qwen2.5:7b"
 
 
+@pytest.mark.asyncio
+async def test_first_run_forwards_explicit_recap_version_to_scraper(tmp_path):
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=2,
+        recap_version="alt",
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT) as mock_scrape,
+        patch("pipeline.analyze_story", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
+        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT),
+    ):
+        await pipeline.run()
+
+    _, kwargs = mock_scrape.await_args
+    assert kwargs["recap_version"] == "alternate"
+
+
 # ---------------------------------------------------------------------------
 # Integration: stage skipping within a version
 # ---------------------------------------------------------------------------
@@ -364,6 +395,37 @@ async def test_run_skips_all_phases_when_all_checkpoints_exist(tmp_path):
     mock_script.assert_not_called()
     mock_prompts.assert_not_called()
     assert result["version"] == "v002"
+
+
+@pytest.mark.asyncio
+async def test_cached_raw_recap_switch_updates_content_and_reruns_downstream(tmp_path):
+    _make_episode(tmp_path, "dreadmarsh", "https://example.test/story", "Dreadmarsh Crossing")
+
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=2,
+        recap_version="short",
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock) as mock_scrape,
+        patch("pipeline.analyze_story", return_value=_WORLD_CHECKPOINT) as mock_analyze,
+        patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT) as mock_script,
+        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
+    ):
+        result = await pipeline.run()
+
+    mock_scrape.assert_not_awaited()
+    mock_analyze.assert_called_once()
+    mock_script.assert_called_once()
+    mock_prompts.assert_called_once()
+
+    raw_path = Path(result["version_dir"]) / "01_raw_text.json"
+    raw_payload = json.loads(raw_path.read_text(encoding="utf-8"))
+    assert raw_payload["selected_recap"] == "short"
+    assert raw_payload["content"] == _RAW_CHECKPOINT.recap_variants["short"]
 
 
 @pytest.mark.asyncio
