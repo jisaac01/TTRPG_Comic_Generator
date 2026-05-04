@@ -89,4 +89,4 @@ poetry.lock
 Thumbs.db
 
 # Local data/artifacts
-checkpoints/*.json
+checkpoints/

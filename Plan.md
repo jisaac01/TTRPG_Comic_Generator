@@ -97,15 +97,15 @@ Goal: Generate high-fidelity image prompts based on a specific art direction.
 
 Art Direction Template:
 
-- [ ] Base Style: Brutalist, hand-inked graphic novel aesthetic. High contrast, Gothic shadows, heavy ink washes, grainy texture. No colors, black and white only.
+- [x] Base Style: Brutalist, hand-inked graphic novel aesthetic. High contrast, Gothic shadows, heavy ink washes, grainy texture. No colors, black and white only.
 
 Prompt Merger Logic:
 
-- [ ] `Final_Prompt = f"{ART_STYLE_TEMPLATE} Scene: {panel.visual_action}. Character Details: {entity_descriptions}. Format: comic book panel."`
+- [x] `Final_Prompt = f"{ART_STYLE_TEMPLATE} Scene: {panel.visual_action}. Character Details: {entity_descriptions}. Format: comic book panel."`
 
 Checkpoint:
 
-- [ ] Save to `checkpoints/04_image_prompts.json`.
+- [x] Save to `checkpoints/04_page_prompt.txt`.
 
 ## 6. The Pipeline Orchestrator (pipeline.py)
 

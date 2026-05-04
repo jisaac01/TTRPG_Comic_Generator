@@ -29,6 +29,8 @@ Optional flags:
 --analysis-model NAME   default: qwen2.5:7b
 --script-model NAME     default: qwen2.5:7b
 --panel-count N         default: 6
+--art-style-template    default: art_direction_template.txt (resolved under checkpoint-dir if relative)
+--prompts-output PATH   default: 04_page_prompt.txt (resolved under checkpoint-dir if relative)
 ```
 
 ## Running individual phases
@@ -51,6 +53,27 @@ python src/scriptwriter.py [--raw-input checkpoints/01_raw_text.json] [--entitie
 ```
 Output: `checkpoints/03_script.json` — continuity-aware panel script with setting, visual action, dialogue overlays, and held-item transitions.
 
+**Phase 4 — Prompt Engineering & Style Merging**
+Create a reusable art-direction template once, then reuse it every run:
+
+```bash
+cat > checkpoints/art_direction_template.txt << 'EOF'
+Base Style: Brutalist, hand-inked graphic novel aesthetic. High contrast, Gothic shadows, heavy ink washes, grainy texture. No colors, black and white only.
+EOF
+```
+
+Generate prompts:
+
+```bash
+python src/prompter.py \
+	--script-input checkpoints/03_script.json \
+	--entities-input checkpoints/02_entities.json \
+	--art-style-template checkpoints/art_direction_template.txt \
+	--output checkpoints/04_page_prompt.txt
+```
+
+Output: `checkpoints/04_page_prompt.txt` — one single composite prompt for a single comic-page image containing all panels.
+
 ## Running tests
 
 ```bash
@@ -64,5 +87,6 @@ pytest
 | `01_raw_text.json` | Sanitized story text, title, author |
 | `02_entities.json` | Characters, locations, story beats |
 | `03_script.json` | Panelized comic script with continuity fields |
+| `04_page_prompt.txt` | Single composite image prompt for one multi-panel comic page |
 
 Delete a checkpoint file to force that phase to re-run.
