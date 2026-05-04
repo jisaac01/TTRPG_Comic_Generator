@@ -1,6 +1,8 @@
 # TTRPG Comic Generator
 
-Converts a ScrybeQuill session recap into a structured comic script via a checkpoint-resumable pipeline.
+Converts a ScrybeQuill session recap into a structured comic script via a campaign-aware, versioned, checkpoint-resumable pipeline.
+
+Each run is isolated in its own version folder. Prior runs are never overwritten, so you can compare outputs across art style changes, text corrections, or model switches.
 
 ## Requirements
 
@@ -15,64 +17,124 @@ pip install playwright pydantic instructor ollama openai pytest pytest-asyncio b
 playwright install chromium
 ```
 
-## Running the full pipeline
+## Campaign setup
+
+Each campaign has its own folder under `campaigns/`. Create a reusable art direction template for the campaign before the first run:
 
 ```bash
-python src/pipeline.py <SCRYBEQUILL_URL>
-```
-
-The pipeline skips any phase whose checkpoint already exists under `checkpoints/`.
-
-Optional flags:
-```
---checkpoint-dir PATH   default: checkpoints
---analysis-model NAME   default: qwen2.5:7b
---script-model NAME     default: qwen2.5:7b
---panel-count N         default: 6
---art-style-template    default: art_direction_template.txt (resolved under checkpoint-dir if relative)
---prompts-output PATH   default: 04_page_prompt.txt (resolved under checkpoint-dir if relative)
-```
-
-## Running individual phases
-
-**Phase 1 — Scrape**
-```bash
-python src/scraper.py <URL> [--checkpoint checkpoints/01_raw_text.json] [--selector CSS]
-```
-Output: `checkpoints/01_raw_text.json`
-
-**Phase 2 — Analyze**
-```bash
-python src/analyzer.py [--input checkpoints/01_raw_text.json] [--output checkpoints/02_entities.json] [--model qwen2.5:7b]
-```
-Output: `checkpoints/02_entities.json` — characters, locations, and scene-level beats with attributed quotes.
-
-**Phase 3 — Script**
-```bash
-python src/scriptwriter.py [--raw-input checkpoints/01_raw_text.json] [--entities-input checkpoints/02_entities.json] [--output checkpoints/03_script.json] [--model qwen2.5:7b] [--panel-count 6]
-```
-Output: `checkpoints/03_script.json` — continuity-aware panel script with setting, visual action, dialogue overlays, and held-item transitions.
-
-**Phase 4 — Prompt Engineering & Style Merging**
-Create a reusable art-direction template once, then reuse it every run:
-
-```bash
-cat > checkpoints/art_direction_template.txt << 'EOF'
+mkdir -p campaigns/dreadmarsh
+cat > campaigns/dreadmarsh/art_direction_template.txt << 'EOF'
 Base Style: Brutalist, hand-inked graphic novel aesthetic. High contrast, Gothic shadows, heavy ink washes, grainy texture. No colors, black and white only.
 EOF
 ```
 
-Generate prompts:
+Different campaigns can have completely different art styles:
 
 ```bash
-python src/prompter.py \
-	--script-input checkpoints/03_script.json \
-	--entities-input checkpoints/02_entities.json \
-	--art-style-template checkpoints/art_direction_template.txt \
-	--output checkpoints/04_page_prompt.txt
+mkdir -p campaigns/belowdown
+cat > campaigns/belowdown/art_direction_template.txt << 'EOF'
+Base Style: Watercolor fantasy illustration. Soft washes, warm tones, hand-lettered feeling. Full color.
+EOF
 ```
 
-Output: `checkpoints/04_page_prompt.txt` — one single composite prompt for a single comic-page image containing all panels.
+## Running the pipeline
+
+```bash
+python src/pipeline.py <campaign> <SCRYBEQUILL_URL>
+```
+
+On the first run the episode folder is auto-named from the story title. Subsequent runs for the same URL create a new versioned subfolder, cloning the previous version as a baseline.
+
+### Examples
+
+```bash
+# First run — creates campaigns/dreadmarsh/dreadmarsh-crossing/v001/
+python src/pipeline.py dreadmarsh https://scrybequill.com/share/...
+
+# Re-run same episode — creates v002/ with all checkpoints cloned from v001 (no phases run)
+python src/pipeline.py dreadmarsh https://scrybequill.com/share/...
+
+# Update art style only — creates v003/, clones v002/, re-runs Phase 4 only
+python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --rerun-from prompt
+
+# Fix source text — creates v004/, clones v003/, re-runs everything from scrape
+python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --rerun-from scrape
+
+# Different campaign, same URL — completely isolated under campaigns/belowdown/
+python src/pipeline.py belowdown https://scrybequill.com/share/...
+```
+
+### Optional flags
+
+```
+--campaigns-root PATH        default: campaigns/
+--analysis-model NAME        default: qwen2.5:7b
+--script-model NAME          default: qwen2.5:7b
+--panel-count N              default: 6
+--art-style-template PATH    Override campaign-level template for this run only
+--rerun-from PHASE           scrape | analyze | script | prompt
+```
+
+## Directory layout
+
+```
+campaigns/
+  index.json                        # global lookup: campaign+URL → episode folder
+  dreadmarsh/
+    art_direction_template.txt      # campaign-level art style
+    dreadmarsh-crossing/            # episode folder (slug from story title, identity from URL)
+      episode_meta.json             # url, title, created_at
+      v001/
+        01_raw_text.json
+        02_entities.json
+        03_script.json
+        04_page_prompt.txt
+      v002/                         # second run; prior phases cloned, new phase re-run
+        ...
+  belowdown/
+    art_direction_template.txt
+    ...
+```
+
+## Idempotency and version history
+
+- Within a version, the pipeline skips any phase whose checkpoint already exists.
+- A new version is created on every run (auto-incremented: v001, v002, ...).
+- The previous version's files are cloned as a baseline so only phases invalidated by `--rerun-from` are re-computed.
+- Episode identity is canonical by URL — if the story title changes on the source site, the same episode folder is reused.
+
+## Running individual phases
+
+The individual phase scripts accept explicit paths and are useful for debugging or one-off re-runs outside the pipeline.
+
+**Phase 1 — Scrape**
+```bash
+python src/scraper.py <URL> --checkpoint campaigns/dreadmarsh/<episode>/v001/01_raw_text.json
+```
+
+**Phase 2 — Analyze**
+```bash
+python src/analyzer.py \
+  --input campaigns/dreadmarsh/<episode>/v001/01_raw_text.json \
+  --output campaigns/dreadmarsh/<episode>/v001/02_entities.json
+```
+
+**Phase 3 — Script**
+```bash
+python src/scriptwriter.py \
+  --raw-input campaigns/dreadmarsh/<episode>/v001/01_raw_text.json \
+  --entities-input campaigns/dreadmarsh/<episode>/v001/02_entities.json \
+  --output campaigns/dreadmarsh/<episode>/v001/03_script.json
+```
+
+**Phase 4 — Prompt**
+```bash
+python src/prompter.py \
+  --script-input campaigns/dreadmarsh/<episode>/v001/03_script.json \
+  --entities-input campaigns/dreadmarsh/<episode>/v001/02_entities.json \
+  --art-style-template campaigns/dreadmarsh/art_direction_template.txt \
+  --output campaigns/dreadmarsh/<episode>/v001/04_page_prompt.txt
+```
 
 ## Running tests
 
@@ -80,7 +142,7 @@ Output: `checkpoints/04_page_prompt.txt` — one single composite prompt for a s
 pytest
 ```
 
-## Checkpoints
+## Checkpoint files
 
 | File | Contents |
 |---|---|
@@ -88,5 +150,5 @@ pytest
 | `02_entities.json` | Characters, locations, story beats |
 | `03_script.json` | Panelized comic script with continuity fields |
 | `04_page_prompt.txt` | Single composite image prompt for one multi-panel comic page |
-
-Delete a checkpoint file to force that phase to re-run.
+| `episode_meta.json` | Episode URL, display slug, creation timestamp |
+| `campaigns/index.json` | Global campaign+URL → episode folder lookup |

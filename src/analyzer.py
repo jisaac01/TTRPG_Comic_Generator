@@ -116,8 +116,8 @@ def _normalize_beats(beats: list[StoryBeat]) -> list[StoryBeat]:
 
 
 def analyze_story(
-    raw_checkpoint_path: Path = Path("checkpoints/01_raw_text.json"),
-    output_path: Path = Path("checkpoints/02_entities.json"),
+    raw_checkpoint_path: Path = Path("campaigns/<campaign>/<episode>/v001/01_raw_text.json"),
+    output_path: Path = Path("campaigns/<campaign>/<episode>/v001/02_entities.json"),
     model: str = "qwen2.5:7b",
     extractor: Extractor | None = None,
 ) -> WorldStateCheckpoint:
@@ -150,13 +150,13 @@ def _run_cli() -> None:
     parser = argparse.ArgumentParser(description="Analyze scraped story text into structured entities.")
     parser.add_argument(
         "--input",
-        default="checkpoints/01_raw_text.json",
-        help="Input raw text checkpoint path",
+        required=True,
+        help="Input raw text checkpoint path (e.g. campaigns/<campaign>/<episode>/v001/01_raw_text.json)",
     )
     parser.add_argument(
         "--output",
-        default="checkpoints/02_entities.json",
-        help="Output entities checkpoint path",
+        required=True,
+        help="Output entities checkpoint path (e.g. campaigns/<campaign>/<episode>/v001/02_entities.json)",
     )
     parser.add_argument(
         "--model",

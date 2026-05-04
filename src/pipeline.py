@@ -3,53 +3,264 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import re
+import shutil
+import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Literal
 
 from analyzer import WorldStateCheckpoint, analyze_story
 from prompter import generate_page_prompt
 from scraper import RawTextCheckpoint, scrape_scrybequill
 from scriptwriter import ScriptCheckpoint, write_script
 
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+CAMPAIGNS_ROOT = Path("campaigns")
+INDEX_FILENAME = "index.json"
+EPISODE_META_FILENAME = "episode_meta.json"
+
+RerunFrom = Literal["scrape", "analyze", "script", "prompt"]
+
+# ---------------------------------------------------------------------------
+# Slug helpers
+# ---------------------------------------------------------------------------
+
+
+def _slugify(text: str) -> str:
+    """Convert a story title to a safe folder name slug."""
+    text = text.lower().strip()
+    # Replace non-word, non-whitespace chars (e.g. em-dash) with spaces first.
+    text = re.sub(r"[^\w\s]", " ", text)
+    text = re.sub(r"[\s_]+", "-", text)
+    text = text.strip("-")
+    return text or "episode"
+
+
+# ---------------------------------------------------------------------------
+# Index helpers (campaigns/index.json)
+# ---------------------------------------------------------------------------
+
+
+def _read_index(campaigns_root: Path) -> dict:
+    path = campaigns_root / INDEX_FILENAME
+    if path.exists():
+        return json.loads(path.read_text(encoding="utf-8"))
+    return {}
+
+
+def _write_index_atomic(campaigns_root: Path, index: dict) -> None:
+    """Write index.json atomically using a temp file + rename."""
+    campaigns_root.mkdir(parents=True, exist_ok=True)
+    target = campaigns_root / INDEX_FILENAME
+    fd, tmp_name = tempfile.mkstemp(dir=campaigns_root, prefix=".index_", suffix=".json")
+    try:
+        with open(fd, "w", encoding="utf-8") as fh:
+            json.dump(index, fh, indent=2, ensure_ascii=False)
+        Path(tmp_name).replace(target)
+    except Exception:
+        Path(tmp_name).unlink(missing_ok=True)
+        raise
+
+
+def _index_key(campaign: str, url: str) -> str:
+    return f"{campaign}::{url}"
+
+
+def _lookup_episode(campaigns_root: Path, campaign: str, url: str) -> str | None:
+    """Return the episode folder name for (campaign, url) or None if not found."""
+    index = _read_index(campaigns_root)
+    return index.get(_index_key(campaign, url))
+
+
+def _register_episode(
+    campaigns_root: Path, campaign: str, url: str, episode_folder: str
+) -> None:
+    index = _read_index(campaigns_root)
+    index[_index_key(campaign, url)] = episode_folder
+    _write_index_atomic(campaigns_root, index)
+
+
+# ---------------------------------------------------------------------------
+# Episode + version path resolution
+# ---------------------------------------------------------------------------
+
+
+def _episode_dir(campaigns_root: Path, campaign: str, episode_folder: str) -> Path:
+    return campaigns_root / campaign / episode_folder
+
+
+def _resolve_episode_dir(
+    campaigns_root: Path, campaign: str, url: str, title: str | None
+) -> Path:
+    """Find or create the episode directory, keyed canonically by URL."""
+    existing = _lookup_episode(campaigns_root, campaign, url)
+    if existing:
+        return _episode_dir(campaigns_root, campaign, existing)
+
+    # First run for this campaign + URL: create episode folder from title slug.
+    slug = _slugify(title) if title else "episode"
+    campaign_root = campaigns_root / campaign
+    campaign_root.mkdir(parents=True, exist_ok=True)
+
+    # Avoid collisions with existing folders if another episode has the same slug.
+    candidate = slug
+    counter = 2
+    while (campaign_root / candidate).exists():
+        candidate = f"{slug}-{counter}"
+        counter += 1
+
+    episode_path = campaign_root / candidate
+    episode_path.mkdir(parents=True, exist_ok=True)
+
+    # Write episode metadata.
+    meta = {
+        "url": url,
+        "slug": candidate,
+        "title": title,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    (episode_path / EPISODE_META_FILENAME).write_text(
+        json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+
+    _register_episode(campaigns_root, campaign, url, candidate)
+    return episode_path
+
+
+def _next_version_name(episode_dir: Path) -> str:
+    """Return the next auto-incremented version label (v001, v002, ...)."""
+    existing = sorted(
+        p.name for p in episode_dir.iterdir() if p.is_dir() and re.fullmatch(r"v\d{3}", p.name)
+    )
+    if not existing:
+        return "v001"
+    last_num = int(existing[-1][1:])
+    return f"v{last_num + 1:03d}"
+
+
+def _create_version_dir(
+    episode_dir: Path, rerun_from: RerunFrom | None
+) -> tuple[Path, str]:
+    """
+    Create the next version directory.
+
+    If a previous version exists, clone its checkpoints as the baseline so
+    that stages prior to *rerun_from* are preserved without re-running.
+
+    Returns (version_dir, version_name).
+    """
+    version_name = _next_version_name(episode_dir)
+    version_dir = episode_dir / version_name
+    version_dir.mkdir(parents=True, exist_ok=True)
+
+    existing = sorted(
+        p for p in episode_dir.iterdir() if p.is_dir() and re.fullmatch(r"v\d{3}", p.name)
+        and p.name != version_name
+    )
+    if existing:
+        prev_dir = existing[-1]
+        # Copy all checkpoint files from previous version as baseline.
+        for src in prev_dir.iterdir():
+            if src.is_file():
+                shutil.copy2(src, version_dir / src.name)
+
+        # Delete forward from the requested rerun point.
+        _PHASE_FILES: dict[RerunFrom, list[str]] = {
+            "scrape": ["01_raw_text.json", "02_entities.json", "03_script.json", "04_page_prompt.txt"],
+            "analyze": ["02_entities.json", "03_script.json", "04_page_prompt.txt"],
+            "script": ["03_script.json", "04_page_prompt.txt"],
+            "prompt": ["04_page_prompt.txt"],
+        }
+        if rerun_from:
+            for fname in _PHASE_FILES[rerun_from]:
+                (version_dir / fname).unlink(missing_ok=True)
+
+    return version_dir, version_name
+
+
+# ---------------------------------------------------------------------------
+# Pipeline class
+# ---------------------------------------------------------------------------
+
 
 class ComicPipeline:
     def __init__(
         self,
         url: str,
-        checkpoint_dir: Path = Path("checkpoints"),
+        campaign: str,
+        campaigns_root: Path = CAMPAIGNS_ROOT,
         analysis_model: str = "qwen2.5:7b",
         script_model: str = "qwen2.5:7b",
         panel_count: int = 6,
-        art_style_template: Path = Path("art_direction_template.txt"),
-        prompts_output: Path = Path("04_page_prompt.txt"),
+        art_style_template: Path | None = None,
+        rerun_from: RerunFrom | None = None,
     ):
         self.url = url
-        self.checkpoint_dir = checkpoint_dir
+        self.campaign = campaign
+        self.campaigns_root = campaigns_root
         self.analysis_model = analysis_model
         self.script_model = script_model
         self.panel_count = panel_count
         self.art_style_template = art_style_template
-        self.prompts_output = prompts_output
+        self.rerun_from = rerun_from
 
-    def _resolve_checkpoint_path(self, path: Path) -> Path:
-        if path.is_absolute():
-            return path
-        if len(path.parts) == 1:
-            return self.checkpoint_dir / path
-        return path
+    def _resolve_art_template(self, version_dir: Path, episode_dir: Path) -> Path:
+        """Resolve art style template: explicit > campaign-level > inline default."""
+        if self.art_style_template is not None:
+            return self.art_style_template
+        campaign_template = self.campaigns_root / self.campaign / "art_direction_template.txt"
+        if campaign_template.exists():
+            return campaign_template
+        # Fall back to a template in the version dir if one was cloned from a prior version.
+        version_template = version_dir / "art_direction_template.txt"
+        if version_template.exists():
+            return version_template
+        # Last resort: same directory as this script (legacy support during migration).
+        return Path("art_direction_template.txt")
 
     async def run(self) -> dict[str, dict]:
-        self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        # Phase 1: scrape first so we have the title for episode resolution.
+        # We need a temporary path to store the raw checkpoint before the episode
+        # directory is resolved (title comes from the scrape).
+        #
+        # Strategy: scrape into a temp directory first if no episode exists yet,
+        # then resolve the episode dir, then move the file into the version dir.
 
-        raw_path = self.checkpoint_dir / "01_raw_text.json"
-        entities_path = self.checkpoint_dir / "02_entities.json"
-        script_path = self.checkpoint_dir / "03_script.json"
-        prompts_path = self._resolve_checkpoint_path(self.prompts_output)
-        template_path = self._resolve_checkpoint_path(self.art_style_template)
+        existing_episode = _lookup_episode(self.campaigns_root, self.campaign, self.url)
 
-        if raw_path.exists():
-            raw = RawTextCheckpoint.model_validate_json(raw_path.read_text(encoding="utf-8"))
+        if existing_episode is None:
+            # First run: scrape to get the title so we can slug the episode folder.
+            with tempfile.TemporaryDirectory() as tmpdir:
+                tmp_raw_path = Path(tmpdir) / "01_raw_text.json"
+                raw = await scrape_scrybequill(url=self.url, checkpoint_path=tmp_raw_path)
+
+            episode_dir = _resolve_episode_dir(
+                self.campaigns_root, self.campaign, self.url, raw.title
+            )
+            version_dir, version_name = _create_version_dir(episode_dir, self.rerun_from)
+
+            raw_path = version_dir / "01_raw_text.json"
+            raw_path.write_text(
+                json.dumps(raw.model_dump(), indent=2, ensure_ascii=False), encoding="utf-8"
+            )
         else:
-            raw = await scrape_scrybequill(url=self.url, checkpoint_path=raw_path)
+            episode_dir = _episode_dir(self.campaigns_root, self.campaign, existing_episode)
+            version_dir, version_name = _create_version_dir(episode_dir, self.rerun_from)
+            raw_path = version_dir / "01_raw_text.json"
+
+            if raw_path.exists():
+                raw = RawTextCheckpoint.model_validate_json(raw_path.read_text(encoding="utf-8"))
+            else:
+                raw = await scrape_scrybequill(url=self.url, checkpoint_path=raw_path)
+
+        entities_path = version_dir / "02_entities.json"
+        script_path = version_dir / "03_script.json"
+        prompts_path = version_dir / "04_page_prompt.txt"
+        template_path = self._resolve_art_template(version_dir, episode_dir)
 
         if entities_path.exists():
             entities = WorldStateCheckpoint.model_validate_json(
@@ -91,16 +302,36 @@ class ComicPipeline:
                 "output_path": str(prompts_path),
                 "prompt": page_prompt,
             },
+            "version": version_name,
+            "version_dir": str(version_dir),
         }
 
 
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+
 async def _run_cli() -> None:
-    parser = argparse.ArgumentParser(description="Run checkpoint-aware comic pipeline.")
+    parser = argparse.ArgumentParser(
+        description="Run the campaign-aware comic pipeline.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  # First run for a campaign:\n"
+            "  python src/pipeline.py dreadmarsh https://scrybequill.com/share/...\n\n"
+            "  # Re-run with new art style (reuse all previous checkpoints except prompt):\n"
+            "  python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --rerun-from prompt\n\n"
+            "  # Fix source text errors (rerun everything from scrape):\n"
+            "  python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --rerun-from scrape\n"
+        ),
+    )
+    parser.add_argument("campaign", help="Campaign name (e.g. dreadmarsh, belowdown)")
     parser.add_argument("url", help="ScrybeQuill story URL")
     parser.add_argument(
-        "--checkpoint-dir",
-        default="checkpoints",
-        help="Directory for JSON checkpoints",
+        "--campaigns-root",
+        default=str(CAMPAIGNS_ROOT),
+        help="Root directory for all campaign data (default: campaigns/)",
     )
     parser.add_argument(
         "--analysis-model",
@@ -120,27 +351,47 @@ async def _run_cli() -> None:
     )
     parser.add_argument(
         "--art-style-template",
-        default="art_direction_template.txt",
-        help="Path to reusable art direction template (absolute or checkpoint-dir relative)",
+        default=None,
+        help=(
+            "Explicit path to an art direction template file. "
+            "If omitted, the pipeline looks for campaigns/<campaign>/art_direction_template.txt"
+        ),
     )
     parser.add_argument(
-        "--prompts-output",
-        default="04_page_prompt.txt",
-        help="Phase 4 output path (absolute or checkpoint-dir relative)",
+        "--rerun-from",
+        choices=["scrape", "analyze", "script", "prompt"],
+        default=None,
+        help=(
+            "Invalidate checkpoints from this phase onward and rerun. "
+            "Prior phases are cloned from the last version. "
+            "Options: scrape, analyze, script, prompt"
+        ),
     )
 
     args = parser.parse_args()
     pipeline = ComicPipeline(
         url=args.url,
-        checkpoint_dir=Path(args.checkpoint_dir),
+        campaign=args.campaign,
+        campaigns_root=Path(args.campaigns_root),
         analysis_model=args.analysis_model,
         script_model=args.script_model,
         panel_count=args.panel_count,
-        art_style_template=Path(args.art_style_template),
-        prompts_output=Path(args.prompts_output),
+        art_style_template=Path(args.art_style_template) if args.art_style_template else None,
+        rerun_from=args.rerun_from,
     )
     result = await pipeline.run()
-    print(json.dumps({"status": "ok", "checkpoints": list(result.keys())}, indent=2))
+    print(
+        json.dumps(
+            {
+                "status": "ok",
+                "campaign": args.campaign,
+                "version": result["version"],
+                "version_dir": result["version_dir"],
+                "checkpoints": [k for k in result if k not in ("version", "version_dir")],
+            },
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":

@@ -145,9 +145,9 @@ def _validate_item_continuity(panels: list[Panel]) -> None:
 
 
 def write_script(
-    raw_checkpoint_path: Path = Path("checkpoints/01_raw_text.json"),
-    entities_checkpoint_path: Path = Path("checkpoints/02_entities.json"),
-    output_path: Path = Path("checkpoints/03_script.json"),
+    raw_checkpoint_path: Path = Path("campaigns/<campaign>/<episode>/v001/01_raw_text.json"),
+    entities_checkpoint_path: Path = Path("campaigns/<campaign>/<episode>/v001/02_entities.json"),
+    output_path: Path = Path("campaigns/<campaign>/<episode>/v001/03_script.json"),
     model: str = "qwen2.5:7b",
     panel_count: int = 6,
     generator: ScriptGenerator | None = None,
@@ -190,18 +190,18 @@ def _run_cli() -> None:
     parser = argparse.ArgumentParser(description="Generate a continuity-aware comic script checkpoint.")
     parser.add_argument(
         "--raw-input",
-        default="checkpoints/01_raw_text.json",
-        help="Input raw text checkpoint path",
+        required=True,
+        help="Input raw text checkpoint path (e.g. campaigns/<campaign>/<episode>/v001/01_raw_text.json)",
     )
     parser.add_argument(
         "--entities-input",
-        default="checkpoints/02_entities.json",
-        help="Input entities checkpoint path",
+        required=True,
+        help="Input entities checkpoint path (e.g. campaigns/<campaign>/<episode>/v001/02_entities.json)",
     )
     parser.add_argument(
         "--output",
-        default="checkpoints/03_script.json",
-        help="Output script checkpoint path",
+        required=True,
+        help="Output script checkpoint path (e.g. campaigns/<campaign>/<episode>/v001/03_script.json)",
     )
     parser.add_argument(
         "--model",

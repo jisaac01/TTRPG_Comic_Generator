@@ -90,7 +90,7 @@ def save_checkpoint(checkpoint: RawTextCheckpoint, checkpoint_path: Path) -> Non
 
 async def scrape_scrybequill(
     url: str,
-    checkpoint_path: Path = Path("checkpoints/01_raw_text.json"),
+    checkpoint_path: Path = Path("campaigns/<campaign>/<episode>/v001/01_raw_text.json"),
     story_selector: str = DEFAULT_STORY_SELECTOR,
     title_selector: str = "h1",
     author_selector: str = ".author",
@@ -139,8 +139,8 @@ async def _run_cli() -> None:
     parser.add_argument("url", help="ScrybeQuill story URL")
     parser.add_argument(
         "--checkpoint",
-        default="checkpoints/01_raw_text.json",
-        help="Path to checkpoint JSON output",
+        default=None,
+        help="Path to checkpoint JSON output. When using the pipeline, this is managed automatically under campaigns/<campaign>/<episode>/<version>/.",
     )
     parser.add_argument(
         "--selector",
@@ -149,6 +149,9 @@ async def _run_cli() -> None:
     )
 
     args = parser.parse_args()
+
+    if args.checkpoint is None:
+        parser.error("--checkpoint is required when running scraper.py directly.")
 
     checkpoint = await scrape_scrybequill(
         url=args.url,

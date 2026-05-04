@@ -62,10 +62,10 @@ def _format_panel_block(script: ScriptCheckpoint) -> str:
 
 
 def generate_page_prompt(
-    script_checkpoint_path: Path = Path("checkpoints/03_script.json"),
-    entities_checkpoint_path: Path = Path("checkpoints/02_entities.json"),
-    art_style_template_path: Path = Path("checkpoints/art_direction_template.txt"),
-    output_path: Path = Path("checkpoints/04_page_prompt.txt"),
+    script_checkpoint_path: Path = Path("campaigns/<campaign>/<episode>/v001/03_script.json"),
+    entities_checkpoint_path: Path = Path("campaigns/<campaign>/<episode>/v001/02_entities.json"),
+    art_style_template_path: Path = Path("campaigns/<campaign>/art_direction_template.txt"),
+    output_path: Path = Path("campaigns/<campaign>/<episode>/v001/04_page_prompt.txt"),
 ) -> str:
     script = ScriptCheckpoint.model_validate_json(
         script_checkpoint_path.read_text(encoding="utf-8")
@@ -102,23 +102,23 @@ def _run_cli() -> None:
     )
     parser.add_argument(
         "--script-input",
-        default="checkpoints/03_script.json",
-        help="Input script checkpoint path",
+        required=True,
+        help="Input script checkpoint path (e.g. campaigns/<campaign>/<episode>/v001/03_script.json)",
     )
     parser.add_argument(
         "--entities-input",
-        default="checkpoints/02_entities.json",
-        help="Input entities checkpoint path",
+        required=True,
+        help="Input entities checkpoint path (e.g. campaigns/<campaign>/<episode>/v001/02_entities.json)",
     )
     parser.add_argument(
         "--art-style-template",
-        default="checkpoints/art_direction_template.txt",
-        help="Path to the reusable art direction template file",
+        required=True,
+        help="Path to the reusable art direction template file (e.g. campaigns/<campaign>/art_direction_template.txt)",
     )
     parser.add_argument(
         "--output",
-        default="checkpoints/04_page_prompt.txt",
-        help="Output page prompt text file path",
+        required=True,
+        help="Output page prompt text file path (e.g. campaigns/<campaign>/<episode>/v001/04_page_prompt.txt)",
     )
 
     args = parser.parse_args()
