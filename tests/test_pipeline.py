@@ -536,6 +536,33 @@ async def test_campaign_level_art_template_is_used_by_default(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_campaign_art_template_is_created_on_first_run(tmp_path):
+    """First run auto-creates campaign-level art_direction_template.txt when missing."""
+    template_path = tmp_path / "dreadmarsh" / "art_direction_template.txt"
+
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=2,
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
+        patch("pipeline.analyze_story", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
+        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
+    ):
+        await pipeline.run()
+
+    assert template_path.exists()
+    assert template_path.read_text(encoding="utf-8").strip()
+
+    _, kwargs = mock_prompts.call_args
+    assert kwargs["art_style_template_path"] == template_path
+
+
+@pytest.mark.asyncio
 async def test_explicit_art_template_overrides_campaign_default(tmp_path):
     """Explicit art_style_template constructor arg takes precedence over campaign default."""
     campaign_template = tmp_path / "dreadmarsh" / "art_direction_template.txt"

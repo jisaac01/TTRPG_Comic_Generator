@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Literal
 
 from analyzer import WorldStateCheckpoint, analyze_story
-from prompter import generate_page_prompt
+from prompter import DEFAULT_ART_STYLE_TEMPLATE, generate_page_prompt
 from scraper import RawTextCheckpoint, scrape_scrybequill
 from scriptwriter import ScriptCheckpoint, write_script
 
@@ -222,6 +222,18 @@ class ComicPipeline:
         # Last resort: same directory as this script (legacy support during migration).
         return Path("art_direction_template.txt")
 
+    def _ensure_campaign_art_template(self) -> None:
+        """Create a default campaign art template if one does not already exist."""
+        if self.art_style_template is not None:
+            return
+
+        campaign_template = self.campaigns_root / self.campaign / "art_direction_template.txt"
+        if campaign_template.exists():
+            return
+
+        campaign_template.parent.mkdir(parents=True, exist_ok=True)
+        campaign_template.write_text(f"{DEFAULT_ART_STYLE_TEMPLATE}\n", encoding="utf-8")
+
     async def run(self) -> dict[str, dict]:
         # Phase 1: scrape first so we have the title for episode resolution.
         # We need a temporary path to store the raw checkpoint before the episode
@@ -247,6 +259,9 @@ class ComicPipeline:
             raw_path.write_text(
                 json.dumps(raw.model_dump(), indent=2, ensure_ascii=False), encoding="utf-8"
             )
+
+            # Bootstrap campaign-level art template on first run.
+            self._ensure_campaign_art_template()
         else:
             episode_dir = _episode_dir(self.campaigns_root, self.campaign, existing_episode)
             version_dir, version_name = _create_version_dir(episode_dir, self.rerun_from)
