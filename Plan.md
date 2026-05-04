@@ -61,17 +61,17 @@ Goal: Convert raw prose into a structured "World State."
 
 Logic:
 
-- [ ] Define Pydantic models: `Character(name, description, demeanor)`, `Location(name, appearance)`, and `StoryBeat(index, text, quotes)`.
-- [ ] Use instructor with ollama to force the LLM to return these specific objects.
-- [ ] Pass the raw text into the analyzer to identify the visual "DNA" of the story.
+- [x] Define Pydantic models: `Character(name, description, demeanor)`, `Location(name, appearance)`, and `StoryBeat(index, text, quotes)`.
+- [x] Use instructor with ollama to force the LLM to return these specific objects.
+- [x] Pass the raw text into the analyzer to identify the visual "DNA" of the story.
 
 Checkpoint:
 
-- [ ] Save to `checkpoints/02_entities.json`.
+- [x] Save to `checkpoints/02_entities.json`.
 
 Test Case:
 
-- [ ] `tests/test_analyzer.py` — Assert that the extracted Character list is not empty and that quotes are correctly attributed to speakers.
+- [x] `tests/test_analyzer.py` — Assert that the extracted Character list is not empty and that quotes are correctly attributed to speakers.
 
 ## 4. Phase 3: The Comic Scripting Engine
 
