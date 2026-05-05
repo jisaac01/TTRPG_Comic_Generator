@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 from entities import WorldStateCheckpoint
+from prompt_templates import render_prompt_template
 from scriptwriter import ScriptCheckpoint
 
 
@@ -138,15 +139,12 @@ def generate_page_prompt(
     character_details = _format_character_details(world)
     panel_block = _format_panel_block(script)
 
-    prompt_text = (
-        f"{_format_art_direction(art_direction_template)}\n\n"
-        "Output goal: one single comic page image containing all panels below in order.\n"
-        "Character details (apply to every panel): "
-        f"{character_details}\n\n"
-        f"Panel count: {script.panel_count}\n"
-        "Panel specifications:\n"
-        f"{panel_block}\n\n"
-        "Final format: single comic page image."
+    prompt_text = render_prompt_template(
+        "page_prompt.txt",
+        art_direction=_format_art_direction(art_direction_template),
+        character_details=character_details,
+        panel_count=script.panel_count,
+        panel_block=panel_block,
     )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)

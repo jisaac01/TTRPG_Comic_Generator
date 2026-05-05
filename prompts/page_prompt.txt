@@ -1,0 +1,10 @@
+{art_direction}
+
+Output goal: one single comic page image containing all panels below in order.
+Character details (apply to every panel): {character_details}
+
+Panel count: {panel_count}
+Panel specifications:
+{panel_block}
+
+Final format: single comic page image.
