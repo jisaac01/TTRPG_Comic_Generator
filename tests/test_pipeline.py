@@ -596,10 +596,12 @@ async def test_campaign_level_art_template_is_used_by_default(tmp_path):
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
     ):
-        await pipeline.run()
+        result = await pipeline.run()
 
     _, kwargs = mock_prompts.call_args
-    assert kwargs["art_style_template_path"] == template_path
+    version_template_path = Path(result["version_dir"]) / "art_direction_template.json"
+    assert kwargs["art_style_template_path"] == version_template_path
+    assert version_template_path.read_text(encoding="utf-8") == template_path.read_text(encoding="utf-8")
 
 
 @pytest.mark.asyncio
@@ -620,13 +622,15 @@ async def test_campaign_art_template_is_created_on_first_run(tmp_path):
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
     ):
-        await pipeline.run()
+        result = await pipeline.run()
 
     assert template_path.exists()
     assert template_path.read_text(encoding="utf-8").strip()
 
     _, kwargs = mock_prompts.call_args
-    assert kwargs["art_style_template_path"] == template_path
+    version_template_path = Path(result["version_dir"]) / "art_direction_template.json"
+    assert kwargs["art_style_template_path"] == version_template_path
+    assert version_template_path.read_text(encoding="utf-8") == template_path.read_text(encoding="utf-8")
 
 
 @pytest.mark.asyncio
@@ -661,10 +665,12 @@ async def test_explicit_art_template_overrides_campaign_default(tmp_path):
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
     ):
-        await pipeline.run()
+        result = await pipeline.run()
 
     _, kwargs = mock_prompts.call_args
-    assert kwargs["art_style_template_path"] == explicit_template
+    version_template_path = Path(result["version_dir"]) / "art_direction_template.json"
+    assert kwargs["art_style_template_path"] == version_template_path
+    assert version_template_path.read_text(encoding="utf-8") == explicit_template.read_text(encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------

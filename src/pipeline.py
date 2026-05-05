@@ -260,6 +260,19 @@ class ComicPipeline:
         # Last resort: same directory as this script (legacy support during migration).
         return Path(ART_DIRECTION_TEMPLATE_FILENAME)
 
+    def _capture_art_template_for_version(self, template_path: Path, version_dir: Path) -> Path:
+        """Copy the resolved template into the version directory and return that path."""
+        version_template_path = version_dir / ART_DIRECTION_TEMPLATE_FILENAME
+
+        if not template_path.exists():
+            return template_path
+
+        if template_path == version_template_path:
+            return version_template_path
+
+        shutil.copy2(template_path, version_template_path)
+        return version_template_path
+
     def _ensure_campaign_art_template(self) -> None:
         """Create a default campaign art template if one does not already exist."""
         if self.art_style_template is not None:
@@ -399,6 +412,7 @@ class ComicPipeline:
             print("[4/4] Generating page prompt...skipped (checkpoint exists)")
             page_prompt = prompts_path.read_text(encoding="utf-8")
         else:
+            template_path = self._capture_art_template_for_version(template_path, version_dir)
             print(f"[4/4] Generating page prompt...  (template: {template_path})")
             try:
                 page_prompt = generate_page_prompt(
