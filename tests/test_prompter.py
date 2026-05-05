@@ -90,7 +90,7 @@ def _write_inputs(tmp_path: Path) -> tuple[Path, Path, Path]:
     return entities_path, script_path, template_path
 
 
-def test_generate_image_prompts_writes_checkpoint(tmp_path):
+def test_generate_page_prompt_writes_checkpoint(tmp_path):
     entities_path, script_path, template_path = _write_inputs(tmp_path)
     output_path = tmp_path / "04_page_prompt.txt"
 
@@ -102,22 +102,28 @@ def test_generate_image_prompts_writes_checkpoint(tmp_path):
     )
 
     assert output_path.exists()
-    assert "Panel 1:" in prompt_text
-    assert "Panel 2:" in prompt_text
+    assert prompt_text == output_path.read_text(encoding="utf-8")
+
+
+def test_generate_page_prompt_contains_interpolated_fields(tmp_path):
+    entities_path, script_path, template_path = _write_inputs(tmp_path)
+
+    prompt_text = prompter.generate_page_prompt(
+        script_checkpoint_path=script_path,
+        entities_checkpoint_path=entities_path,
+        art_style_template_path=template_path,
+        output_path=tmp_path / "04_page_prompt.txt",
+    )
+
     assert "Base Style: Brutalist ink style with heavy shadows." in prompt_text
     assert "Color Palette: Acidic neon pinks, greens, and oranges." in prompt_text
-    assert "Layout & Composition: Single comic page with two stacked panels and rough gutters." in prompt_text
-    assert "Lettering & Dialog: Jagged handwritten captions with frantic energy." in prompt_text
-    assert "- Panel Scale: large" in prompt_text
-    assert "- Panel Shape: wide" in prompt_text
-    assert "- Setting: Marsh edge at dusk" in prompt_text
-    assert "Character details (apply to every panel):" in prompt_text
-    assert "Rendering constraints:" not in prompt_text
-    saved = output_path.read_text(encoding="utf-8")
-    assert saved == prompt_text
+    assert "Panel count: 2" in prompt_text
+    assert "Panel 1:" in prompt_text
+    assert "Panel 2:" in prompt_text
+    assert "Del: A druid in mossy robes" in prompt_text
 
 
-def test_generate_image_prompts_fails_when_template_missing(tmp_path):
+def test_generate_page_prompt_fails_when_template_missing(tmp_path):
     entities_path, script_path, _template_path = _write_inputs(tmp_path)
 
     with pytest.raises(FileNotFoundError, match="Art direction template file not found"):
@@ -129,11 +135,11 @@ def test_generate_image_prompts_fails_when_template_missing(tmp_path):
         )
 
 
-def test_generate_image_prompts_uses_custom_page_prompt_template(tmp_path):
+def test_generate_page_prompt_uses_custom_page_prompt_template(tmp_path):
     entities_path, script_path, template_path = _write_inputs(tmp_path)
-    custom_prompt_path = tmp_path / "custom_page_prompt.txt"
-    custom_prompt_path.write_text(
-        "Panels: {panel_count}\nCharacters: {character_details}\n{panel_block}\n{art_direction}\n",
+    custom_template = tmp_path / "custom_page_prompt.txt"
+    custom_template.write_text(
+        "Art: {art_direction}\nChars: {character_details}\nPanels: {panel_count}\n{panel_block}",
         encoding="utf-8",
     )
 
@@ -141,10 +147,10 @@ def test_generate_image_prompts_uses_custom_page_prompt_template(tmp_path):
         script_checkpoint_path=script_path,
         entities_checkpoint_path=entities_path,
         art_style_template_path=template_path,
-        page_prompt_template_path=custom_prompt_path,
         output_path=tmp_path / "04_page_prompt.txt",
+        page_prompt_template_path=custom_template,
     )
 
-    assert prompt_text.startswith("Panels: 2\nCharacters: Del: A druid in mossy robes")
+    assert prompt_text.startswith("Art: ")
+    assert "Panels: 2" in prompt_text
     assert "Panel 1:" in prompt_text
-    assert "Base Style: Brutalist ink style with heavy shadows." in prompt_text

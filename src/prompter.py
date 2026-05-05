@@ -119,8 +119,8 @@ def generate_page_prompt(
     art_style_template_path: Path = Path(
         f"campaigns/<campaign>/{ART_DIRECTION_TEMPLATE_FILENAME}"
     ),
-    page_prompt_template_path: Path | None = None,
     output_path: Path = Path("campaigns/<campaign>/<episode>/v001/04_page_prompt.txt"),
+    page_prompt_template_path: Path | None = None,
 ) -> str:
     script = ScriptCheckpoint.model_validate_json(
         script_checkpoint_path.read_text(encoding="utf-8")
@@ -174,6 +174,11 @@ def _run_cli() -> None:
         required=True,
         help="Output page prompt text file path (e.g. campaigns/<campaign>/<episode>/v001/04_page_prompt.txt)",
     )
+    parser.add_argument(
+        "--page-prompt-template",
+        default=None,
+        help="Explicit path to the page prompt template file.",
+    )
 
     args = parser.parse_args()
     prompt_text = generate_page_prompt(
@@ -181,6 +186,9 @@ def _run_cli() -> None:
         entities_checkpoint_path=Path(args.entities_input),
         art_style_template_path=Path(args.art_style_template),
         output_path=Path(args.output),
+        page_prompt_template_path=Path(args.page_prompt_template)
+        if args.page_prompt_template
+        else None,
     )
     print(f"Saved page prompt ({len(prompt_text)} chars) to {args.output}")
 

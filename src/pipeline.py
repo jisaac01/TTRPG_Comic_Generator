@@ -25,7 +25,10 @@ from prompt_templates import (
     PROMPT_TEMPLATE_FILENAMES,
     SCRIPTWRITER_SYSTEM_PROMPT_FILENAME,
     SCRIPTWRITER_USER_PROMPT_FILENAME,
+    STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME,
+    STYLE_INTEGRATOR_USER_PROMPT_FILENAME,
 )
+from style_integrator import StyleIntegrationPartialFailure, integrate_style
 from scraper import RawTextCheckpoint, normalize_recap_version, scrape_scrybequill
 from scriptwriter import ScriptCheckpoint, write_script
 
@@ -37,7 +40,7 @@ CAMPAIGNS_ROOT = Path("campaigns")
 INDEX_FILENAME = "index.json"
 EPISODE_META_FILENAME = "episode_meta.json"
 
-RerunFrom = Literal["scrape", "entities", "script", "prompt"]
+RerunFrom = Literal["scrape", "entities", "script", "style", "prompt"]
 
 # ---------------------------------------------------------------------------
 # Slug helpers
@@ -188,9 +191,10 @@ def _create_version_dir(
 
         # Delete forward from the requested rerun point.
         _PHASE_FILES: dict[RerunFrom, list[str]] = {
-            "scrape": ["01_raw_text.json", "02_entities.json", "03_script.json", "04_page_prompt.txt"],
-            "entities": ["02_entities.json", "03_script.json", "04_page_prompt.txt"],
-            "script": ["03_script.json", "04_page_prompt.txt"],
+            "scrape": ["01_raw_text.json", "02_entities.json", "03_script.json", "03_5_styled_script.json", "04_page_prompt.txt"],
+            "entities": ["02_entities.json", "03_script.json", "03_5_styled_script.json", "04_page_prompt.txt"],
+            "script": ["03_script.json", "03_5_styled_script.json", "04_page_prompt.txt"],
+            "style": ["03_5_styled_script.json", "04_page_prompt.txt"],
             "prompt": ["04_page_prompt.txt"],
         }
         if rerun_from:
@@ -213,10 +217,13 @@ class ComicPipeline:
         campaigns_root: Path = CAMPAIGNS_ROOT,
         analysis_model: str = "qwen2.5:7b",
         script_model: str = "qwen2.5:7b",
+        style_model: str = "qwen2.5:7b",
         panel_count: int = 6,
         art_style_template: Path | None = None,
         scriptwriter_system_prompt: Path | None = None,
         scriptwriter_user_prompt: Path | None = None,
+        style_integrator_system_prompt: Path | None = None,
+        style_integrator_user_prompt: Path | None = None,
         page_prompt_template: Path | None = None,
         rerun_from: RerunFrom | None = None,
         recap_version: str = "standard",
@@ -228,10 +235,13 @@ class ComicPipeline:
         self.campaigns_root = campaigns_root
         self.analysis_model = analysis_model
         self.script_model = script_model
+        self.style_model = style_model
         self.panel_count = panel_count
         self.art_style_template = art_style_template
         self.scriptwriter_system_prompt = scriptwriter_system_prompt
         self.scriptwriter_user_prompt = scriptwriter_user_prompt
+        self.style_integrator_system_prompt = style_integrator_system_prompt
+        self.style_integrator_user_prompt = style_integrator_user_prompt
         self.page_prompt_template = page_prompt_template
         self.rerun_from = rerun_from
         self.recap_version = normalize_recap_version(recap_version)
@@ -291,6 +301,10 @@ class ComicPipeline:
             or self._campaign_prompt_path(SCRIPTWRITER_SYSTEM_PROMPT_FILENAME),
             SCRIPTWRITER_USER_PROMPT_FILENAME: self.scriptwriter_user_prompt
             or self._campaign_prompt_path(SCRIPTWRITER_USER_PROMPT_FILENAME),
+            STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME: self.style_integrator_system_prompt
+            or self._campaign_prompt_path(STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME),
+            STYLE_INTEGRATOR_USER_PROMPT_FILENAME: self.style_integrator_user_prompt
+            or self._campaign_prompt_path(STYLE_INTEGRATOR_USER_PROMPT_FILENAME),
             PAGE_PROMPT_TEMPLATE_FILENAME: self.page_prompt_template
             or self._campaign_prompt_path(PAGE_PROMPT_TEMPLATE_FILENAME),
         }
@@ -395,9 +409,11 @@ class ComicPipeline:
                     print(f"[1/4] Recap variant changed to {self.recap_version!r} - invalidating downstream checkpoints")
                     entities_path = version_dir / "02_entities.json"
                     script_path = version_dir / "03_script.json"
+                    styled_script_path = version_dir / "03_5_styled_script.json"
                     prompts_path = version_dir / "04_page_prompt.txt"
                     entities_path.unlink(missing_ok=True)
                     script_path.unlink(missing_ok=True)
+                    styled_script_path.unlink(missing_ok=True)
                     prompts_path.unlink(missing_ok=True)
                 else:
                     print(f"[1/4] Scraping...skipped (checkpoint exists, recap: {self.recap_version})")
@@ -413,6 +429,7 @@ class ComicPipeline:
         self._ensure_campaign_prompt_templates()
         entities_path = version_dir / "02_entities.json"
         script_path = version_dir / "03_script.json"
+        styled_script_path = version_dir / "03_5_styled_script.json"
         prompts_path = version_dir / "04_page_prompt.txt"
         template_path = self._resolve_art_template(version_dir, episode_dir)
         prompt_template_paths = self._capture_prompt_templates_for_version(
@@ -463,9 +480,38 @@ class ComicPipeline:
                 errors.append(f"script: {generation_error}")
                 print(f"      ...ERROR (script validation): {generation_error}")
 
-        page_prompt: str | None = None
+        styled_script: ScriptCheckpoint | None = None
         if script is None:
-            print("[4/4] Generating page prompt...skipped (no script)")
+            print("[3.5/4] Integrating art style...skipped (no script)")
+        elif styled_script_path.exists():
+            print("[3.5/4] Integrating art style...skipped (checkpoint exists)")
+            styled_script = ScriptCheckpoint.model_validate_json(
+                styled_script_path.read_text(encoding="utf-8")
+            )
+        else:
+            template_path = self._capture_art_template_for_version(template_path, version_dir)
+            print(f"[3.5/4] Integrating art style...  (model: {self.style_model}, template: {template_path})")
+            try:
+                styled_script = integrate_style(
+                    script_checkpoint_path=script_path,
+                    art_style_template_path=template_path,
+                    output_path=styled_script_path,
+                    model=self.style_model,
+                    system_prompt_path=prompt_template_paths[STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME],
+                    user_prompt_path=prompt_template_paths[STYLE_INTEGRATOR_USER_PROMPT_FILENAME],
+                )
+                print("      ...done")
+            except StyleIntegrationPartialFailure as exc:
+                styled_script = exc.checkpoint
+                errors.append(f"style: {exc}")
+                print(f"      ...WARN (style integration partially failed): {exc}")
+            except Exception as exc:
+                errors.append(f"style: {exc}")
+                print(f"      ...ERROR (style integration failed — skipping phase 4): {exc}")
+
+        page_prompt: str | None = None
+        if styled_script is None:
+            print("[4/4] Generating page prompt...skipped (no styled script)")
         elif prompts_path.exists():
             print("[4/4] Generating page prompt...skipped (checkpoint exists)")
             page_prompt = prompts_path.read_text(encoding="utf-8")
@@ -474,11 +520,11 @@ class ComicPipeline:
             print(f"[4/4] Generating page prompt...  (template: {template_path})")
             try:
                 page_prompt = generate_page_prompt(
-                    script_checkpoint_path=script_path,
+                    script_checkpoint_path=styled_script_path,
                     entities_checkpoint_path=entities_path,
                     art_style_template_path=template_path,
-                    page_prompt_template_path=prompt_template_paths[PAGE_PROMPT_TEMPLATE_FILENAME],
                     output_path=prompts_path,
+                    page_prompt_template_path=prompt_template_paths[PAGE_PROMPT_TEMPLATE_FILENAME],
                 )
                 print("      ...done")
             except Exception as exc:
@@ -489,6 +535,7 @@ class ComicPipeline:
             "raw_text": raw.model_dump(),
             "entities": entities.model_dump(),
             "script": script.model_dump() if script is not None else None,
+            "styled_script": styled_script.model_dump() if styled_script is not None else None,
             "page_prompt": {
                 "output_path": str(prompts_path),
                 "prompt": page_prompt,
@@ -512,7 +559,9 @@ async def _run_cli() -> None:
             "Examples:\n"
             "  # First run for a campaign:\n"
             "  python src/pipeline.py dreadmarsh https://scrybequill.com/share/...\n\n"
-            "  # Re-run with new art style (reuse all previous checkpoints except prompt):\n"
+            "  # Re-run style integration and prompt generation with the same script:\n"
+            "  python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --rerun-from style\n\n"
+            "  # Re-run only the final page prompt from the styled script checkpoint:\n"
             "  python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --rerun-from prompt\n\n"
             "  # Fix source text errors (rerun everything from scrape):\n"
             "  python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --rerun-from scrape\n"
@@ -529,6 +578,11 @@ async def _run_cli() -> None:
         "--script-model",
         default="qwen2.5:7b",
         help="Ollama model name used for Phase 3 scripting",
+    )
+    parser.add_argument(
+        "--style-model",
+        default="qwen2.5:7b",
+        help="Ollama model name used for Phase 3.5 art style integration",
     )
     parser.add_argument(
         "--panel-count",
@@ -563,6 +617,24 @@ async def _run_cli() -> None:
         ),
     )
     parser.add_argument(
+        "--style-integrator-system-prompt",
+        default=None,
+        help=(
+            "Explicit path to the style integrator system prompt template. "
+            f"If omitted, the pipeline uses campaigns/<campaign>/{STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME} "
+            "and bootstraps it from prompts/ on first use."
+        ),
+    )
+    parser.add_argument(
+        "--style-integrator-user-prompt",
+        default=None,
+        help=(
+            "Explicit path to the style integrator user prompt template. "
+            f"If omitted, the pipeline uses campaigns/<campaign>/{STYLE_INTEGRATOR_USER_PROMPT_FILENAME} "
+            "and bootstraps it from prompts/ on first use."
+        ),
+    )
+    parser.add_argument(
         "--page-prompt-template",
         default=None,
         help=(
@@ -573,12 +645,12 @@ async def _run_cli() -> None:
     )
     parser.add_argument(
         "--rerun-from",
-        choices=["scrape", "entities", "script", "prompt", "analyze"],
+        choices=["scrape", "entities", "script", "style", "prompt", "analyze"],
         default=None,
         help=(
             "Invalidate checkpoints from this phase onward and rerun. "
             "Prior phases are cloned from the last version. "
-            "Options: scrape, entities, script, prompt (analyze accepted as legacy alias)"
+            "Options: scrape, entities, script, style, prompt (analyze accepted as legacy alias)"
         ),
     )
     parser.add_argument(
@@ -601,6 +673,7 @@ async def _run_cli() -> None:
         campaign=args.campaign,
         campaigns_root=Path(args.campaigns_root),
         script_model=args.script_model,
+        style_model=args.style_model,
         panel_count=args.panel_count,
         art_style_template=Path(args.art_style_template) if args.art_style_template else None,
         scriptwriter_system_prompt=Path(args.scriptwriter_system_prompt)
@@ -609,6 +682,12 @@ async def _run_cli() -> None:
         scriptwriter_user_prompt=Path(args.scriptwriter_user_prompt)
         if args.scriptwriter_user_prompt
         else None,
+        style_integrator_system_prompt=Path(args.style_integrator_system_prompt)
+        if args.style_integrator_system_prompt
+        else None,
+        style_integrator_user_prompt=Path(args.style_integrator_user_prompt)
+        if args.style_integrator_user_prompt
+        else None,
         page_prompt_template=Path(args.page_prompt_template)
         if args.page_prompt_template
         else None,
@@ -616,7 +695,7 @@ async def _run_cli() -> None:
         recap_version=args.recap_version,
     )
     result = await pipeline.run()
-    checkpoint_keys = ("raw_text", "entities", "script", "page_prompt")
+    checkpoint_keys = ("raw_text", "entities", "script", "styled_script", "page_prompt")
     failed = [key for key in checkpoint_keys if result.get(key) is None]
     print(
         json.dumps(
