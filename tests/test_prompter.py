@@ -50,6 +50,8 @@ def _write_inputs(tmp_path: Path) -> tuple[Path, Path, Path]:
         "panels": [
             {
                 "index": 1,
+                "panel_scale": "large",
+                "panel_shape": "wide",
                 "setting": "Marsh edge at dusk",
                 "visual_action": "Del raises a torch while Vendetta scans the reeds.",
                 "dialogue_overlay": ["Del: Keep moving."],
@@ -58,6 +60,8 @@ def _write_inputs(tmp_path: Path) -> tuple[Path, Path, Path]:
             },
             {
                 "index": 2,
+                "panel_scale": "small",
+                "panel_shape": "inset",
                 "setting": "Narrow marsh path",
                 "visual_action": "Del leads with the torch as Orion marks tracks.",
                 "dialogue_overlay": ["Orion: Tracks ahead."],
@@ -104,6 +108,8 @@ def test_generate_image_prompts_writes_checkpoint(tmp_path):
     assert "Color Palette: Acidic neon pinks, greens, and oranges." in prompt_text
     assert "Layout & Composition: Single comic page with two stacked panels and rough gutters." in prompt_text
     assert "Lettering & Dialog: Jagged handwritten captions with frantic energy." in prompt_text
+    assert "- Panel Scale: large" in prompt_text
+    assert "- Panel Shape: wide" in prompt_text
     assert "- Setting: Marsh edge at dusk" in prompt_text
     assert "Character details (apply to every panel):" in prompt_text
     assert "Rendering constraints:" not in prompt_text

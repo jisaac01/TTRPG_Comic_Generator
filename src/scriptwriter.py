@@ -5,11 +5,11 @@ import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, cast
+from typing import Callable, Literal, cast
 
 from pydantic import BaseModel, Field
 
-from entities import Character, Location, Quote, StoryBeat
+from entities import Character, Location, StoryBeat
 from prompt_templates import (
     SCRIPTWRITER_SYSTEM_PROMPT_FILENAME,
     SCRIPTWRITER_USER_PROMPT_FILENAME,
@@ -31,6 +31,8 @@ class WorldStateInput(BaseModel):
 
 class Panel(BaseModel):
     index: int = Field(ge=1)
+    panel_scale: Literal["small", "medium", "large", "splash"]
+    panel_shape: Literal["standard", "wide", "tall", "inset", "irregular"]
     setting: str = Field(min_length=1)
     visual_action: str = Field(min_length=1)
     dialogue_overlay: list[str] = Field(default_factory=list)
@@ -157,6 +159,8 @@ def _normalize_panels(panels: list[Panel]) -> list[Panel]:
         normalized.append(
             Panel(
                 index=idx,
+                panel_scale=panel.panel_scale,
+                panel_shape=panel.panel_shape,
                 setting=panel.setting,
                 visual_action=panel.visual_action,
                 dialogue_overlay=panel.dialogue_overlay,

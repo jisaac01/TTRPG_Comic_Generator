@@ -101,6 +101,8 @@ def _format_panel_block(script: ScriptCheckpoint) -> str:
             "\n".join(
                 [
                     f"Panel {panel.index}:",
+                    f"- Panel Scale: {panel.panel_scale}",
+                    f"- Panel Shape: {panel.panel_shape}",
                     f"- Setting: {panel.setting}",
                     f"- Visual Action: {panel.visual_action}",
                     f"- Dialogue Overlay: {dialogue}",

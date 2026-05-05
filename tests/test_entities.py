@@ -9,7 +9,6 @@ sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 from entities import (
     Character,
     Location,
-    Quote,
     StoryBeat,
     WorldStateCheckpoint,
     _build_beats,
@@ -185,14 +184,14 @@ def test_build_locations_empty_when_no_entities():
 
 
 def test_build_beats_uses_outline_entries():
-    raw = _make_raw(outline=["Beat one", "Beat two", "Beat three"])
+    raw = _make_raw(outline=["### Beat one", "### Beat two", "### Beat three"])
     beats = _build_beats(raw)
     assert [b.index for b in beats] == [1, 2, 3]
     assert [b.text for b in beats] == ["Beat one", "Beat two", "Beat three"]
 
 
 def test_build_beats_skips_blank_outline_entries():
-    raw = _make_raw(outline=["Beat one", "  ", "Beat three"])
+    raw = _make_raw(outline=["### Beat one", "  ", "### Beat three"])
     beats = _build_beats(raw)
     assert len(beats) == 2
     assert beats[0].text == "Beat one"
@@ -213,10 +212,33 @@ def test_build_beats_normalizes_content_whitespace():
     assert beats[0].text == "Del crossed the marsh."
 
 
-def test_build_beats_quotes_empty_by_default():
-    raw = _make_raw(outline=["Beat one"])
+def test_build_beats_groups_details_under_heading():
+    raw = _make_raw(outline=[
+        "### The Curse Begins",
+        "The party was afflicted.",
+        "They must find five ingredients.",
+        "### Into the Swamp",
+        "They avoided the crocodile temple.",
+    ])
     beats = _build_beats(raw)
-    assert beats[0].quotes == []
+    assert len(beats) == 2
+    assert beats[0].text == "The Curse Begins\nThe party was afflicted.\nThey must find five ingredients."
+    assert beats[1].text == "Into the Swamp\nThey avoided the crocodile temple."
+
+
+def test_build_beats_heading_only_no_details():
+    raw = _make_raw(outline=["### Solo Beat"])
+    beats = _build_beats(raw)
+    assert len(beats) == 1
+    assert beats[0].text == "Solo Beat"
+
+
+def test_build_beats_falls_back_when_no_headings_in_outline():
+    """Outline with no ### items produces no beats; falls back to content."""
+    raw = _make_raw(content="Del crossed the marsh.", outline=["plain line"])
+    beats = _build_beats(raw)
+    assert len(beats) == 1
+    assert beats[0].text == "Del crossed the marsh."
 
 
 # ---------------------------------------------------------------------------
@@ -234,7 +256,7 @@ def test_build_entities_from_raw_writes_valid_checkpoint(tmp_path):
     raw = _make_raw(
         player_characters=[ScrapedEntity(name="Del", description="A druid")],
         locations=[ScrapedEntity(name="Marsh", description="Foggy")],
-        outline=["The party departs"],
+        outline=["### The party departs"],
     )
     raw_path = _write_raw(tmp_path, raw)
     output_path = tmp_path / "02_entities.json"
@@ -267,9 +289,9 @@ def test_build_entities_from_raw_checkpoint_json_is_valid(tmp_path):
     assert loaded.characters[0].name == "Del"
 
 
-def test_build_entities_from_raw_does_not_attach_quotes_to_beats(tmp_path):
+def test_build_entities_from_raw_beats_have_no_quotes_field(tmp_path):
     raw = _make_raw(
-        outline=["The ambush begins", "The party flees"],
+        outline=["### The ambush begins", "### The party flees"],
         quotes=[
             ScrapedQuote(text="Keep moving.", attribution="Vendetta"),
             ScrapedQuote(text="Watch out!", attribution="Del"),
@@ -280,13 +302,13 @@ def test_build_entities_from_raw_does_not_attach_quotes_to_beats(tmp_path):
 
     checkpoint = build_entities_from_raw(raw_path, output_path)
 
-    assert checkpoint.beats[0].quotes == []
-    assert checkpoint.beats[1].quotes == []
+    assert len(checkpoint.beats) == 2
+    assert not hasattr(checkpoint.beats[0], "quotes")
 
 
-def test_build_entities_from_raw_later_beats_have_no_quotes(tmp_path):
+def test_build_entities_from_raw_later_beats_no_quotes_field(tmp_path):
     raw = _make_raw(
-        outline=["Beat one", "Beat two"],
+        outline=["### Beat one", "### Beat two"],
         quotes=[ScrapedQuote(text="Hello.", attribution="Del")],
     )
     raw_path = _write_raw(tmp_path, raw)
@@ -294,13 +316,13 @@ def test_build_entities_from_raw_later_beats_have_no_quotes(tmp_path):
 
     checkpoint = build_entities_from_raw(raw_path, output_path)
 
-    assert checkpoint.beats[0].quotes == []
-    assert checkpoint.beats[1].quotes == []
+    assert len(checkpoint.beats) == 2
+    assert not hasattr(checkpoint.beats[1], "quotes")
 
 
 def test_build_entities_from_raw_skips_blank_quote_text(tmp_path):
     raw = _make_raw(
-        outline=["Beat one"],
+        outline=["### Beat one"],
         quotes=[
             ScrapedQuote(text="   ", attribution="Del"),
             ScrapedQuote(text="Valid quote.", attribution="Orion"),
@@ -311,12 +333,12 @@ def test_build_entities_from_raw_skips_blank_quote_text(tmp_path):
 
     checkpoint = build_entities_from_raw(raw_path, output_path)
 
-    assert checkpoint.beats[0].quotes == []
+    assert len(checkpoint.beats) == 1
 
 
 def test_build_entities_from_raw_quotes_are_ignored(tmp_path):
     raw = _make_raw(
-        outline=["Beat one"],
+        outline=["### Beat one"],
         quotes=[ScrapedQuote(text="A voice cries out.", attribution=None)],
     )
     raw_path = _write_raw(tmp_path, raw)
@@ -324,17 +346,17 @@ def test_build_entities_from_raw_quotes_are_ignored(tmp_path):
 
     checkpoint = build_entities_from_raw(raw_path, output_path)
 
-    assert checkpoint.beats[0].quotes == []
+    assert not hasattr(checkpoint.beats[0], "quotes")
 
 
 def test_build_entities_from_raw_no_quotes_leaves_empty_beat_quotes(tmp_path):
-    raw = _make_raw(outline=["Beat one"], quotes=[])
+    raw = _make_raw(outline=["### Beat one"], quotes=[])
     raw_path = _write_raw(tmp_path, raw)
     output_path = tmp_path / "02_entities.json"
 
     checkpoint = build_entities_from_raw(raw_path, output_path)
 
-    assert checkpoint.beats[0].quotes == []
+    assert len(checkpoint.beats) == 1
 
 
 def test_build_entities_from_raw_custom_model_label(tmp_path):

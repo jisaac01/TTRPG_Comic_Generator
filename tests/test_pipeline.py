@@ -86,6 +86,8 @@ _SCRIPT_CHECKPOINT = scriptwriter.ScriptCheckpoint(
     panels=[
         scriptwriter.Panel(
             index=1,
+            panel_scale="large",
+            panel_shape="wide",
             setting="Swamp edge at dusk",
             visual_action="Del raises a torch while Vendetta scans the reeds.",
             dialogue_overlay=["Del: Keep moving."],
@@ -94,6 +96,8 @@ _SCRIPT_CHECKPOINT = scriptwriter.ScriptCheckpoint(
         ),
         scriptwriter.Panel(
             index=2,
+            panel_scale="medium",
+            panel_shape="standard",
             setting="Narrow marsh path",
             visual_action="Del leads with the torch as Orion marks tracks.",
             dialogue_overlay=["Orion: Tracks ahead."],

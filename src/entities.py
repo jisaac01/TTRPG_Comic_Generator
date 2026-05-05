@@ -24,15 +24,9 @@ class Location(BaseModel):
     appearance: str = Field(min_length=1)
 
 
-class Quote(BaseModel):
-    speaker: str = Field(min_length=1)
-    text: str = Field(min_length=1)
-
-
 class StoryBeat(BaseModel):
     index: int = Field(ge=1)
     text: str = Field(min_length=1)
-    quotes: list[Quote] = Field(default_factory=list)
 
 
 class WorldStateCheckpoint(BaseModel):
@@ -111,19 +105,42 @@ def _build_locations(raw: RawTextCheckpoint) -> list[Location]:
 def _build_beats(raw: RawTextCheckpoint) -> list[StoryBeat]:
     """Convert outline entries to StoryBeats.
 
+    Outline items starting with '### ' begin a new beat; all subsequent
+    non-heading items are detail lines appended to that beat's text.
+
     Falls back to a single beat wrapping the full recap content when the
-    outline is empty.
+    outline is empty or contains no headings.
     """
     beats: list[StoryBeat] = []
-    for idx, text in enumerate(raw.outline, start=1):
-        cleaned = " ".join(text.split()).strip()
-        if cleaned:
-            beats.append(StoryBeat(index=idx, text=cleaned, quotes=[]))
+    current_header: str | None = None
+    current_details: list[str] = []
+
+    def _flush(index: int) -> None:
+        if current_header is None:
+            return
+        parts = [current_header] + current_details
+        beats.append(StoryBeat(index=index, text="\n".join(parts)))
+
+    beat_index = 1
+    for item in raw.outline:
+        cleaned = " ".join(item.split()).strip()
+        if not cleaned:
+            continue
+        if cleaned.startswith("### "):
+            _flush(beat_index)
+            if current_header is not None:
+                beat_index += 1
+            current_header = cleaned[4:].strip()
+            current_details = []
+        else:
+            current_details.append(cleaned)
+
+    _flush(beat_index)
 
     if beats:
         return beats
 
-    return [StoryBeat(index=1, text=" ".join(raw.content.split()), quotes=[])]
+    return [StoryBeat(index=1, text=" ".join(raw.content.split()))]
 
 
 def build_entities_from_raw(

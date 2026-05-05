@@ -1,11 +1,30 @@
 Story title: {title}
-Aim for {minimum_panel_target} to {maximum_panel_target} story panels.
-Follow beats as pacing anchors and keep events in chronological order.
-Use roughly one panel per beat when possible.
-Each panel must include: setting, visual_action, dialogue_overlay, held_items_before, held_items_after.
+
+Create a high-energy, action-packed comic book script optimized for the visual medium. Prioritize dynamic, cinematic panel compositions with dramatic angles, intense motion, impactful poses, and clear visual storytelling that conveys excitement, tension, and momentum. Show action through movement, effects, and expressions rather than narration. Build suspense between panels with strong page-turn energy.
+
+Follow beats as pacing anchors and keep events in strict chronological order.
+Use roughly one panel per beat when possible, but allow dynamic panel counts for high-action sequences (e.g., rapid cuts or splash-style emphasis).
+Aim for {minimum_panel_target} to an absolute maximum of {maximum_panel_target} story panels.
+
+Each panel must include: 
+- panel_scale (one of: small, medium, large, splash)
+- panel_shape (one of: standard, wide, tall, inset, irregular)
+- setting (vivid, atmospheric description)
+- visual_action (exciting, detailed action description with motion, camera angle suggestions, and dramatic flair)
+- dialogue_overlay (punchy, natural comic-style dialogue suited for speech balloons)
+- held_items_before
+- held_items_after
+
+Use panel_scale + panel_shape to communicate panel importance and composition clearly to the artist. Reserve splash panels for major story beats and use irregular or inset shapes only when they add clear storytelling impact.
+
 Continuity rule: held items must persist from panel N held_items_after to panel N+1 held_items_before for each named character unless a panel explicitly depicts the item being dropped or transferred.
-When provided reference quotes fit a scene, use them verbatim or with only light edits for balloon clarity.
-Use concise, visually clear prose suitable for an artist.
+
+When provided reference quotes fit a scene, use them verbatim or with only light edits for balloon clarity and impact.
+
+Use concise, visually clear, high-impact prose that excites the artist and brings the action to life. 
+Focus on kinetic energy, emotional intensity, and comic-book dynamism in every description.
+Important: keep panels focused on key details and characters, keeping descriptions concise.
+Put character actions in the visual_action section, and keep dialogue_overlay exclusively for dialogue and written text
 
 Entity data:
 {entities_context}

@@ -43,7 +43,6 @@ def _write_input_checkpoints(tmp_path: Path) -> tuple[Path, Path]:
             {
                 "index": 1,
                 "text": "The party enters the marsh at dusk.",
-                "quotes": [],
             }
         ],
         "analyzed_at": "2026-05-04T00:00:00+00:00",
@@ -61,6 +60,8 @@ def _valid_payload() -> scriptwriter.ScriptPayload:
         panels=[
             scriptwriter.Panel(
                 index=99,
+                panel_scale="large",
+                panel_shape="wide",
                 setting="Marsh edge",
                 visual_action="Del lights a torch while Vendetta watches the reeds.",
                 dialogue_overlay=["Del: Stay close."],
@@ -69,6 +70,8 @@ def _valid_payload() -> scriptwriter.ScriptPayload:
             ),
             scriptwriter.Panel(
                 index=17,
+                panel_scale="medium",
+                panel_shape="standard",
                 setting="Narrow marsh path",
                 visual_action="Del leads with the torch and Vendetta tracks footprints.",
                 dialogue_overlay=["Vendetta: Fresh tracks."],
@@ -77,6 +80,8 @@ def _valid_payload() -> scriptwriter.ScriptPayload:
             ),
             scriptwriter.Panel(
                 index=3,
+                panel_scale="small",
+                panel_shape="inset",
                 setting="Collapsed ruin gate",
                 visual_action="Vendetta studies the map as Del keeps the torch raised.",
                 dialogue_overlay=["Del: We hold here."],
@@ -244,10 +249,10 @@ def test_write_script_passes_panel_count_to_generator(tmp_path):
 
     payload = json.loads(entities_path.read_text(encoding="utf-8"))
     payload["beats"] = [
-        {"index": 1, "text": "Beat one.", "quotes": []},
-        {"index": 2, "text": "Beat two.", "quotes": []},
-        {"index": 3, "text": "Beat three.", "quotes": []},
-        {"index": 4, "text": "Beat four.", "quotes": []},
+        {"index": 1, "text": "Beat one."},
+        {"index": 2, "text": "Beat two."},
+        {"index": 3, "text": "Beat three."},
+        {"index": 4, "text": "Beat four."},
     ]
     entities_path.write_text(json.dumps(payload), encoding="utf-8")
 
@@ -258,6 +263,8 @@ def test_write_script_passes_panel_count_to_generator(tmp_path):
         panels = _valid_payload().panels
         fourth = scriptwriter.Panel(
             index=42,
+            panel_scale="splash",
+            panel_shape="irregular",
             setting="Broken watchtower",
             visual_action="Del and Vendetta scout from the tower over the foggy marsh.",
             dialogue_overlay=["Vendetta: Lights to the east."],
@@ -291,7 +298,6 @@ def test_format_entities_for_prompt_includes_quotes():
             scriptwriter.StoryBeat(
                 index=1,
                 text="The party reaches the old bridge.",
-                quotes=[scriptwriter.Quote(speaker="Del", text="Stay close to me.")],
             )
         ],
         analyzed_at="2026-05-04T00:00:00+00:00",
@@ -306,7 +312,7 @@ def test_format_entities_for_prompt_includes_quotes():
     assert 'Del: "Stay close to me."' in prompt_blob
 
 
-def test_format_entities_for_prompt_ignores_beat_quotes_when_raw_empty():
+def test_format_entities_for_prompt_empty_raw_quotes():
     world = scriptwriter.WorldStateInput(
         url="https://example.test/story",
         title="Swamp Trouble",
@@ -318,7 +324,6 @@ def test_format_entities_for_prompt_ignores_beat_quotes_when_raw_empty():
             scriptwriter.StoryBeat(
                 index=1,
                 text="The party reaches the old bridge.",
-                quotes=[scriptwriter.Quote(speaker="Del", text="Stay close to me.")],
             )
         ],
         analyzed_at="2026-05-04T00:00:00+00:00",
