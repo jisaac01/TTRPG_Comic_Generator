@@ -263,6 +263,73 @@ def test_extract_outline_returns_empty_when_section_missing():
     assert scraper.extract_outline_from_body(body_text) == []
 
 
+def test_extract_outline_from_markdown_parses_bullets_and_numbered_items():
+    markdown_text = """
+    ## Outline
+    - The Witch's Curse and the Quest's Beginning
+    2. Swamp Travels and First Success
+    * Lost and a Spooky Detour
+
+    ## Notes
+    - **Merelda**: A powerful witch.
+    """
+
+    outline = scraper.extract_outline_from_markdown(markdown_text)
+
+    assert outline == [
+        "The Witch's Curse and the Quest's Beginning",
+        "Swamp Travels and First Success",
+        "Lost and a Spooky Detour",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_scrape_scrybequill_uses_body_outline_when_export_is_incomplete(
+    monkeypatch, tmp_path
+):
+    page = _FakePage(
+        html_by_selector={
+            scraper.DEFAULT_STORY_SELECTOR: """
+                <article>
+                    <h2>Standard Recap</h2>
+                    <p>First line.</p>
+                    <h2>Outline</h2>
+                    <p>Beat one</p>
+                    <p>Beat two</p>
+                </article>
+            """
+        },
+        text_by_selector={"h1": "Test Story", ".author": "GM Quinn"},
+    )
+
+    monkeypatch.setattr(
+        scraper,
+        "async_playwright",
+        lambda: _FakePlaywrightContext(page),
+    )
+
+    called = {"outline_export": 0}
+
+    async def _fake_outline_export(_page):
+        called["outline_export"] += 1
+        return "## Outline\n- Beat one"
+
+    async def _fake_notes_export(_page):
+        return None
+
+    monkeypatch.setattr(scraper, "_extract_outline_markdown_from_export", _fake_outline_export)
+    monkeypatch.setattr(scraper, "_extract_notes_markdown_from_export", _fake_notes_export)
+
+    checkpoint_path = tmp_path / "01_raw_text.json"
+    result = await scraper.scrape_scrybequill(
+        url="https://scrybequill.example/story/123",
+        checkpoint_path=checkpoint_path,
+    )
+
+    assert called["outline_export"] == 1
+    assert result.outline == ["Beat one", "Beat two"]
+
+
 def test_extract_notes_categories_parses_npcs_and_locations():
     body_text = """
     Outline

@@ -382,6 +382,61 @@ def extract_outline_from_body(body_text: str) -> list[str]:
     return _clean_body_lines(content)
 
 
+def extract_outline_from_markdown(markdown_text: str) -> list[str]:
+    """Parse exported Outline markdown into a list of outline items."""
+    lines = re.sub(r"\r\n?", "\n", markdown_text).split("\n")
+
+    stop_headings = {
+        "notes",
+        "quotes",
+        "text recap",
+        "short recap",
+        "standard recap",
+        "alternate recap",
+        "alt recap",
+        "long recap",
+        "audio recap",
+        "video recap",
+        "additional links",
+    }
+
+    items: list[str] = []
+    in_outline_section = False
+
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line:
+            continue
+
+        heading_match = re.match(r"^(?:#{1,6}\s*)?\*{0,2}\s*([^*#].*?)\s*\*{0,2}\s*:?$", line)
+        heading_key: str | None = None
+        if heading_match is not None:
+            heading_key = " ".join(heading_match.group(1).split()).strip().lower().rstrip(":")
+
+        if heading_key == "outline":
+            in_outline_section = True
+            continue
+
+        if in_outline_section and heading_key in stop_headings:
+            break
+
+        # Accept explicit markdown list items and numbered list items first.
+        list_match = re.match(r"^(?:[-*+]\s+|\d+[.)]\s+)(.+)$", line)
+        if list_match is not None:
+            cleaned_item = _clean_markdown_inline(list_match.group(1))
+            if cleaned_item:
+                items.append(cleaned_item)
+            continue
+
+        # Also accept plain lines while inside the Outline section.
+        if in_outline_section:
+            cleaned_line = _clean_markdown_inline(line)
+            if cleaned_line:
+                items.append(cleaned_line)
+
+    return items
+
+
 def extract_notes_categories(
     body_text: str,
 ) -> dict[str, list[ScrapedEntity]]:
@@ -482,8 +537,18 @@ def extract_notes_categories_from_markdown(
 
 async def _extract_notes_markdown_from_export(page) -> str | None:
     """Attempt to retrieve Notes markdown by triggering the Notes export menu."""
+    return await _extract_markdown_from_export(page, "#hs-notes-export-dropdown")
+
+
+async def _extract_outline_markdown_from_export(page) -> str | None:
+    """Attempt to retrieve Outline markdown by triggering the Outline export menu."""
+    return await _extract_markdown_from_export(page, "#hs-outline-export-dropdown")
+
+
+async def _extract_markdown_from_export(page, dropdown_selector: str) -> str | None:
+    """Capture markdown copied from a section export dropdown menu."""
     try:
-        await page.wait_for_selector("#hs-notes-export-dropdown", timeout=5000)
+        await page.wait_for_selector(dropdown_selector, timeout=5000)
     except Exception:
         return None
 
@@ -525,7 +590,7 @@ async def _extract_notes_markdown_from_export(page) -> str | None:
         return None
 
     try:
-        await page.click("#hs-notes-export-dropdown", timeout=2500)
+        await page.click(dropdown_selector, timeout=2500)
     except Exception:
         return None
 
@@ -732,18 +797,22 @@ async def scrape_scrybequill(
         title = await _safe_text_content(page, title_selector)
         author = await _safe_text_content(page, author_selector)
         notes_markdown = await _extract_notes_markdown_from_export(page)
+        outline_markdown = await _extract_outline_markdown_from_export(page)
 
         await browser.close()
 
     # Extract structured sections from the already-captured body text.
     scraped_quotes: list[ScrapedQuote] = []
-    scraped_outline: list[str] = []
+    body_outline: list[str] = []
+    export_outline: list[str] = []
     scraped_notes: dict[str, list[ScrapedEntity]] = {}
     markdown_notes: dict[str, list[ScrapedEntity]] = {}
     if body_text:
         scraped_quotes = extract_quotes_from_body(body_text)
-        scraped_outline = extract_outline_from_body(body_text)
+        body_outline = extract_outline_from_body(body_text)
         scraped_notes = extract_notes_categories(body_text)
+    if outline_markdown:
+        export_outline = extract_outline_from_markdown(outline_markdown)
     if notes_markdown:
         markdown_notes = extract_notes_categories_from_markdown(notes_markdown)
         # Prefer notes-export markdown when available; it's currently the most
@@ -751,6 +820,16 @@ async def scrape_scrybequill(
         for key, value in markdown_notes.items():
             if value:
                 scraped_notes[key] = value
+
+    # Prefer whichever outline source appears more complete.
+    if len(export_outline) > len(body_outline):
+        scraped_outline = export_outline
+    elif len(body_outline) > len(export_outline):
+        scraped_outline = body_outline
+    else:
+        export_len = sum(len(item) for item in export_outline)
+        body_len = sum(len(item) for item in body_outline)
+        scraped_outline = export_outline if export_len > body_len else body_outline
 
     checkpoint = RawTextCheckpoint(
         url=url,

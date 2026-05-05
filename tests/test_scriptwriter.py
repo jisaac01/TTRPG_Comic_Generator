@@ -298,7 +298,34 @@ def test_format_entities_for_prompt_includes_quotes():
         analyzed_at="2026-05-04T00:00:00+00:00",
     )
 
-    prompt_blob = scriptwriter._format_entities_for_prompt(world)
+    prompt_blob = scriptwriter._format_entities_for_prompt(
+        world,
+        raw_quotes=[("Stay close to me.", "Del")],
+    )
 
     assert "Reference quotes:" in prompt_blob
-    assert 'Beat 1 | Del: "Stay close to me."' in prompt_blob
+    assert 'Del: "Stay close to me."' in prompt_blob
+
+
+def test_format_entities_for_prompt_ignores_beat_quotes_when_raw_empty():
+    world = scriptwriter.WorldStateInput(
+        url="https://example.test/story",
+        title="Swamp Trouble",
+        author="GM",
+        model="qwen2.5:7b",
+        characters=[],
+        locations=[],
+        beats=[
+            scriptwriter.StoryBeat(
+                index=1,
+                text="The party reaches the old bridge.",
+                quotes=[scriptwriter.Quote(speaker="Del", text="Stay close to me.")],
+            )
+        ],
+        analyzed_at="2026-05-04T00:00:00+00:00",
+    )
+
+    prompt_blob = scriptwriter._format_entities_for_prompt(world, raw_quotes=[])
+
+    assert "Reference quotes:" in prompt_blob
+    assert "- none" in prompt_blob

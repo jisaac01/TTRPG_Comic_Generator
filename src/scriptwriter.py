@@ -70,7 +70,10 @@ def _build_instructor_client():
     return instructor.from_openai(openai_client, mode=instructor.Mode.JSON)
 
 
-def _format_entities_for_prompt(world: WorldStateInput) -> str:
+def _format_entities_for_prompt(
+    world: WorldStateInput,
+    raw_quotes: list[tuple[str, str | None]] | None = None,
+) -> str:
     characters_blob = "\n".join(
         f"- {char.name}: {char.description}" for char in world.characters
     )
@@ -80,11 +83,16 @@ def _format_entities_for_prompt(world: WorldStateInput) -> str:
     beats_blob = "\n".join(f"- Beat {beat.index}: {beat.text}" for beat in world.beats)
 
     quote_lines: list[str] = []
-    for beat in world.beats:
-        for quote in beat.quotes:
-            quote_lines.append(
-                f"- Beat {beat.index} | {quote.speaker}: \"{quote.text}\""
-            )
+
+    # Prefer quotes from the scraped raw checkpoint because entities no longer
+    # embed quote text under beats.
+    for quote_text, attribution in raw_quotes or []:
+        cleaned_text = " ".join(quote_text.split()).strip()
+        if not cleaned_text:
+            continue
+        speaker = " ".join((attribution or "").split()).strip() or "Unknown"
+        quote_lines.append(f"- {speaker}: \"{cleaned_text}\"")
+
     quotes_blob = "\n".join(quote_lines)
 
     return (
@@ -116,6 +124,7 @@ def _resolve_panel_plan(requested_panel_count: int, beats: list[StoryBeat]) -> P
 def _generate_with_instructor_ollama(
     content: str,
     world: WorldStateInput,
+    raw_quotes: list[tuple[str, str | None]],
     model: str,
     panel_plan: PanelPlan,
     attempt: int = 1,
@@ -123,7 +132,7 @@ def _generate_with_instructor_ollama(
 ) -> ScriptPayload:
     client = _build_instructor_client()
     title = world.title or "Untitled story"
-    entities_context = _format_entities_for_prompt(world)
+    entities_context = _format_entities_for_prompt(world, raw_quotes)
 
     target_min = panel_plan.preferred if attempt == 1 else panel_plan.minimum
     target_max = panel_plan.preferred if attempt == 1 else panel_plan.maximum
@@ -250,6 +259,7 @@ def write_script(
                 payload = _generate_with_instructor_ollama(
                     raw.content,
                     world,
+                    [(quote.text, quote.attribution) for quote in raw.quotes],
                     model,
                     panel_plan,
                     attempt=attempt,
