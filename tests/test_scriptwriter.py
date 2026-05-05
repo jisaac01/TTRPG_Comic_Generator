@@ -118,7 +118,7 @@ def test_write_script_writes_checkpoint_and_normalizes_panel_indices(tmp_path):
     assert payload["panels"][1]["held_items_before"]["Del"] == ["torch"]
 
 
-def test_write_script_accepts_panel_count_outside_soft_range_with_error(tmp_path):
+def test_write_script_accepts_any_panel_count_without_error(tmp_path):
     raw_path, entities_path = _write_input_checkpoints(tmp_path)
 
     def fake_generator(_content, _world, _model, _panel_count):
@@ -134,19 +134,19 @@ def test_write_script_accepts_panel_count_outside_soft_range_with_error(tmp_path
     )
 
     assert checkpoint.panel_count == 1
-    assert len(checkpoint.generation_errors) == 1
-    assert "Expected panel count in [2, 4]" in checkpoint.generation_errors[0]
-    assert "Accepting out-of-range panel count" in checkpoint.generation_errors[0]
+    assert len(checkpoint.generation_errors) == 0
 
 
-def test_write_script_retries_and_succeeds_on_later_attempt(tmp_path):
+def test_write_script_retries_on_continuity_error_and_succeeds(tmp_path):
     raw_path, entities_path = _write_input_checkpoints(tmp_path)
     attempts = {"count": 0}
 
     def fake_generator(_content, _world, _model, _panel_count):
         attempts["count"] += 1
         if attempts["count"] == 1:
-            return scriptwriter.ScriptPayload(panels=_valid_payload().panels[:1])
+            broken = _valid_payload()
+            broken.panels[1].held_items_before["Del"] = []
+            return broken
         return _valid_payload()
 
     checkpoint = scriptwriter.write_script(
@@ -160,8 +160,7 @@ def test_write_script_retries_and_succeeds_on_later_attempt(tmp_path):
 
     assert attempts["count"] == 2
     assert len(checkpoint.panels) == 3
-    assert len(checkpoint.generation_errors) == 1
-    assert "Retrying" in checkpoint.generation_errors[0]
+    assert len(checkpoint.generation_errors) == 0
 
 
 def test_write_script_raises_on_continuity_break(tmp_path):
@@ -240,7 +239,7 @@ def test_write_script_raises_when_missing_character_with_items(tmp_path):
         )
 
 
-def test_write_script_prefers_beat_count_when_within_soft_range(tmp_path):
+def test_write_script_passes_panel_count_to_generator(tmp_path):
     raw_path, entities_path = _write_input_checkpoints(tmp_path)
 
     payload = json.loads(entities_path.read_text(encoding="utf-8"))
@@ -275,7 +274,7 @@ def test_write_script_prefers_beat_count_when_within_soft_range(tmp_path):
         generator=fake_generator,
     )
 
-    assert calls["panel_target"] == 4
+    assert calls["panel_target"] == 3
     assert checkpoint.panel_count == 4
     assert len(checkpoint.panels) == 4
 

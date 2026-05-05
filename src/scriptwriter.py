@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, cast
 
-from pydantic import BaseModel, Field, create_model
+from pydantic import BaseModel, Field
 
 from entities import Character, Location, Quote, StoryBeat
 from prompt_templates import (
@@ -57,12 +57,9 @@ ScriptGenerator = Callable[[str, WorldStateInput, str, int], ScriptPayload]
 
 
 class PanelPlan(BaseModel):
-    requested: int = Field(ge=1)
-    preferred: int = Field(ge=1)
     minimum: int = Field(ge=1)
     maximum: int = Field(ge=1)
     beat_count: int = Field(ge=0)
-    uses_beat_count: bool = False
 
 
 def _build_instructor_client():
@@ -112,18 +109,7 @@ def _resolve_panel_plan(requested_panel_count: int, beats: list[StoryBeat]) -> P
     beat_count = len(beats)
     minimum = max(1, requested_panel_count - 1)
     maximum = max(minimum, requested_panel_count + 1)
-
-    uses_beat_count = minimum <= beat_count <= maximum
-    preferred = beat_count if uses_beat_count else requested_panel_count
-
-    return PanelPlan(
-        requested=requested_panel_count,
-        preferred=preferred,
-        minimum=minimum,
-        maximum=maximum,
-        beat_count=beat_count,
-        uses_beat_count=uses_beat_count,
-    )
+    return PanelPlan(minimum=minimum, maximum=maximum, beat_count=beat_count)
 
 
 def _generate_with_instructor_ollama(
@@ -134,62 +120,35 @@ def _generate_with_instructor_ollama(
     panel_plan: PanelPlan,
     system_prompt_path: Path | None = None,
     user_prompt_path: Path | None = None,
-    attempt: int = 1,
-    previous_panel_count: int | None = None,
 ) -> ScriptPayload:
     client = _build_instructor_client()
     title = world.title or "Untitled story"
     entities_context = _format_entities_for_prompt(world, raw_quotes)
-
-    target_min = panel_plan.preferred if attempt == 1 else panel_plan.minimum
-    target_max = panel_plan.preferred if attempt == 1 else panel_plan.maximum
-    ConstrainedScriptPayload = create_model(
-        f"ConstrainedScriptPayloadAttempt{attempt}",
-        panels=(list[Panel], Field(min_length=target_min, max_length=target_max)),
-        __base__=BaseModel,
-    )
 
     system_prompt = render_prompt_template(
         SCRIPTWRITER_SYSTEM_PROMPT_FILENAME,
         template_path=system_prompt_path,
     )
 
-    target_line = (
-        f"Required panel count: exactly {panel_plan.preferred}."
-        if target_min == target_max
-        else f"Required panel count range: {target_min} to {target_max} panels."
-    )
-    retry_line = ""
-    if attempt > 1 and previous_panel_count is not None:
-        retry_line = (
-            f"This is retry attempt {attempt}. The previous output had {previous_panel_count} panels and was invalid. "
-            "Correct this by increasing panel granularity so each major beat gets visual coverage.\n"
-        )
-
     user_prompt = render_prompt_template(
         SCRIPTWRITER_USER_PROMPT_FILENAME,
         template_path=user_prompt_path,
         title=title,
-        requested_panel_target=panel_plan.requested,
-        preferred_panel_target=panel_plan.preferred,
         minimum_panel_target=panel_plan.minimum,
         maximum_panel_target=panel_plan.maximum,
-        target_line=target_line,
-        retry_line=retry_line,
         entities_context=entities_context,
         story_text=content,
     )
 
-    constrained_response = client.chat.completions.create(
+    return client.chat.completions.create(
         model=model,
         temperature=0.7,
-        response_model=ConstrainedScriptPayload,
+        response_model=ScriptPayload,
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
     )
-    return ScriptPayload.model_validate(constrained_response.model_dump())
 
 
 def _normalize_panels(panels: list[Panel]) -> list[Panel]:
@@ -257,7 +216,6 @@ def write_script(
         generate_fn = generator
 
     panels: list[Panel] | None = None
-    previous_panel_count: int | None = None
     for attempt in range(1, max_generation_attempts + 1):
         try:
             if generate_fn is None:
@@ -269,11 +227,9 @@ def write_script(
                     panel_plan,
                     system_prompt_path=system_prompt_path,
                     user_prompt_path=user_prompt_path,
-                    attempt=attempt,
-                    previous_panel_count=previous_panel_count,
                 )
             else:
-                payload = generate_fn(raw.content, world, model, panel_plan.preferred)
+                payload = generate_fn(raw.content, world, model, panel_count)
         except Exception as exc:
             generation_error = (
                 f"Attempt {attempt}/{max_generation_attempts}: generation failed before validation: {exc}"
@@ -290,27 +246,6 @@ def write_script(
             if attempt == max_generation_attempts:
                 raise
             continue
-
-        panel_len = len(candidate_panels)
-        if panel_len < panel_plan.minimum or panel_len > panel_plan.maximum:
-            previous_panel_count = panel_len
-            panel_error = (
-                "Expected panel count in "
-                f"[{panel_plan.minimum}, {panel_plan.maximum}] "
-                f"(requested={panel_plan.requested}, preferred={panel_plan.preferred}), "
-                f"received {panel_len}."
-            )
-            if attempt < max_generation_attempts:
-                generation_errors.append(
-                    f"Attempt {attempt}/{max_generation_attempts}: {panel_error} Retrying."
-                )
-                continue
-
-            generation_errors.append(
-                f"Attempt {attempt}/{max_generation_attempts}: {panel_error} Accepting out-of-range panel count."
-            )
-            panels = candidate_panels
-            break
 
         panels = candidate_panels
         break

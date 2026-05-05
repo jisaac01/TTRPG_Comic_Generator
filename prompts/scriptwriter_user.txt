@@ -1,9 +1,6 @@
 Story title: {title}
-Requested panel target: {requested_panel_target}.
-Preferred panel target: {preferred_panel_target}.
-Acceptable panel range: {minimum_panel_target} to {maximum_panel_target} panels.
-{target_line}
-{retry_line}Follow beats as pacing anchors and keep events in chronological order.
+Aim for {minimum_panel_target} to {maximum_panel_target} story panels.
+Follow beats as pacing anchors and keep events in chronological order.
 Use roughly one panel per beat when possible.
 Each panel must include: setting, visual_action, dialogue_overlay, held_items_before, held_items_after.
 Continuity rule: held items must persist from panel N held_items_after to panel N+1 held_items_before for each named character unless a panel explicitly depicts the item being dropped or transferred.
