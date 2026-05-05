@@ -5,11 +5,18 @@ import json
 from pathlib import Path
 
 from entities import WorldStateCheckpoint
-from prompt_templates import PAGE_PROMPT_TEMPLATE_FILENAME, render_prompt_template
+from prompt_templates import (
+    DEFAULT_PROMPTS_DIR,
+    PAGE_PROMPT_TEMPLATE_FILENAME,
+    render_prompt_template,
+)
 from scriptwriter import ScriptCheckpoint
 
 
 ART_DIRECTION_TEMPLATE_FILENAME = "art_direction_template.json"
+DEFAULT_ART_DIRECTION_TEMPLATE_PATH = (
+    DEFAULT_PROMPTS_DIR / ART_DIRECTION_TEMPLATE_FILENAME
+)
 ART_DIRECTION_TEMPLATE_FIELDS = (
     ("base_style", "Base Style"),
     ("color_palette", "Color Palette"),
@@ -17,25 +24,9 @@ ART_DIRECTION_TEMPLATE_FIELDS = (
     ("lettering_and_dialog", "Lettering & Dialog"),
 )
 
-DEFAULT_ART_DIRECTION_TEMPLATE = {
-    "base_style": (
-        "Brutalist, hand-inked graphic novel aesthetic. High contrast, Gothic "
-        "shadows, heavy ink washes, grainy texture."
-    ),
-    "color_palette": "Black and white only. No color.",
-    "layout_and_composition": (
-        "One single comic page image containing all panels in order, with clear "
-        "gutters and consistent character design across panels."
-    ),
-    "lettering_and_dialog": (
-        "Lettering should feel hand-drawn, legible, and integrated with the page "
-        "composition."
-    ),
-}
-
 
 def _default_art_direction_template_json() -> str:
-    return json.dumps(DEFAULT_ART_DIRECTION_TEMPLATE, indent=2)
+    return DEFAULT_ART_DIRECTION_TEMPLATE_PATH.read_text(encoding="utf-8").strip()
 
 
 def _format_character_details(world: WorldStateCheckpoint) -> str:

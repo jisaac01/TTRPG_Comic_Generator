@@ -16,7 +16,7 @@ from entities import (
 )
 from prompter import (
     ART_DIRECTION_TEMPLATE_FILENAME,
-    DEFAULT_ART_DIRECTION_TEMPLATE,
+    DEFAULT_ART_DIRECTION_TEMPLATE_PATH,
     generate_page_prompt,
 )
 from prompt_templates import (
@@ -339,10 +339,7 @@ class ComicPipeline:
             return
 
         campaign_template.parent.mkdir(parents=True, exist_ok=True)
-        campaign_template.write_text(
-            f"{json.dumps(DEFAULT_ART_DIRECTION_TEMPLATE, indent=2)}\n",
-            encoding="utf-8",
-        )
+        shutil.copy2(DEFAULT_ART_DIRECTION_TEMPLATE_PATH, campaign_template)
 
     async def run(self) -> dict[str, object]:
         # Phase 1: scrape first so we have the title for episode resolution.

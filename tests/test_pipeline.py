@@ -11,6 +11,7 @@ import pytest
 sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
 import entities
+from prompter import DEFAULT_ART_DIRECTION_TEMPLATE_PATH
 from prompt_templates import (
     DEFAULT_PROMPTS_DIR,
     PAGE_PROMPT_TEMPLATE_FILENAME,
@@ -708,7 +709,9 @@ async def test_campaign_art_template_is_created_on_first_run(tmp_path):
         result = await pipeline.run()
 
     assert template_path.exists()
-    assert template_path.read_text(encoding="utf-8").strip()
+    assert template_path.read_text(encoding="utf-8") == DEFAULT_ART_DIRECTION_TEMPLATE_PATH.read_text(
+        encoding="utf-8"
+    )
 
     _, kwargs = mock_prompts.call_args
     version_template_path = Path(result["version_dir"]) / "art_direction_template.json"

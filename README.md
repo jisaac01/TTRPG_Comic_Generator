@@ -19,32 +19,31 @@ playwright install chromium
 
 ## Campaign setup
 
-Each campaign has its own folder under `campaigns/`. Create a reusable art direction template for the campaign before the first run:
+Each campaign has its own folder under `campaigns/`. On the first pipeline run, the campaign folder is bootstrapped automatically with reusable defaults for:
+
+- `art_direction_template.json`
+- `scriptwriter_system.txt`
+- `scriptwriter_user.txt`
+- `page_prompt.txt`
+
+All four files are copied from the shared `prompts/` directory. Edit the campaign copies when you want campaign-specific behavior.
+
+If you want to pre-seed defaults manually, copy them the same way:
 
 ```bash
 mkdir -p campaigns/dreadmarsh
-cat > campaigns/dreadmarsh/art_direction_template.json << 'EOF'
-{
-  "base_style": "Brutalist, hand-inked graphic novel aesthetic. High contrast, Gothic shadows, heavy ink washes, grainy texture.",
-  "color_palette": "Black and white only. No color.",
-  "layout_and_composition": "One single comic page image containing all panels in order, with clear gutters and consistent character design across panels.",
-  "lettering_and_dialog": "Lettering should feel hand-drawn, legible, and integrated with the page composition."
-}
-EOF
+cp prompts/art_direction_template.json campaigns/dreadmarsh/art_direction_template.json
+cp prompts/scriptwriter_system.txt campaigns/dreadmarsh/scriptwriter_system.txt
+cp prompts/scriptwriter_user.txt campaigns/dreadmarsh/scriptwriter_user.txt
+cp prompts/page_prompt.txt campaigns/dreadmarsh/page_prompt.txt
 ```
 
 Different campaigns can have completely different art styles:
 
 ```bash
 mkdir -p campaigns/belowdown
-cat > campaigns/belowdown/art_direction_template.json << 'EOF'
-{
-  "base_style": "Watercolor fantasy illustration. Soft washes, warm tones, hand-lettered feeling.",
-  "color_palette": "Full color with warm, natural hues.",
-  "layout_and_composition": "One single comic page image containing all panels in order, with breathing room and soft panel borders.",
-  "lettering_and_dialog": "Gentle hand-lettered dialogue with storybook clarity."
-}
-EOF
+cp prompts/art_direction_template.json campaigns/belowdown/art_direction_template.json
+# Then edit campaigns/belowdown/art_direction_template.json for a different style.
 ```
 
 ## Running the pipeline
@@ -54,6 +53,8 @@ python src/pipeline.py <campaign> <SCRYBEQUILL_URL>
 ```
 
 On the first run the episode folder is auto-named from the story title. Subsequent runs for the same URL create a new versioned subfolder, cloning the previous version as a baseline.
+
+Each run also copies the effective art direction and prompt templates into the new version folder so the exact generation inputs are preserved alongside the checkpoints.
 
 ### Examples
 
@@ -70,6 +71,13 @@ python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --recap-vers
 # Update art style only — creates v003/, clones v002/, re-runs Phase 4 only
 python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --rerun-from prompt
 
+# Use alternate prompt templates for this run; copies them into the new version folder
+python src/pipeline.py dreadmarsh https://scrybequill.com/share/... \
+  --rerun-from prompt \
+  --scriptwriter-system-prompt custom_prompts/dreadmarsh_system.txt \
+  --scriptwriter-user-prompt custom_prompts/dreadmarsh_user.txt \
+  --page-prompt-template custom_prompts/dreadmarsh_page.txt
+
 # Fix source text — creates v004/, clones v003/, re-runs everything from scrape
 python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --rerun-from scrape
 
@@ -81,10 +89,14 @@ python src/pipeline.py belowdown https://scrybequill.com/share/...
 
 ```
 --campaigns-root PATH        default: campaigns/
---analysis-model NAME        default: qwen2.5:7b
 --script-model NAME          default: qwen2.5:7b
 --panel-count N              default: 6 (soft target; final script may be N ± 1)
 --art-style-template PATH    Override campaign-level template for this run only
+--scriptwriter-system-prompt PATH
+                             Override the system prompt template for this run only
+--scriptwriter-user-prompt PATH
+                             Override the user prompt template for this run only
+--page-prompt-template PATH  Override the page prompt template for this run only
 --rerun-from PHASE           scrape | entities | script | prompt (legacy analyze alias accepted)
 --recap-version VERSION      short | standard | alternate/alt | long
 ```
@@ -103,6 +115,9 @@ campaigns/
   index.json                        # global lookup: campaign+URL → episode folder
   dreadmarsh/
     art_direction_template.json     # campaign-level art direction
+    scriptwriter_system.txt         # campaign-level scriptwriter system prompt
+    scriptwriter_user.txt           # campaign-level scriptwriter user prompt
+    page_prompt.txt                 # campaign-level page prompt template
     dreadmarsh-crossing/            # episode folder (slug from story title, identity from URL)
       episode_meta.json             # url, title, created_at
       v001/
@@ -110,6 +125,10 @@ campaigns/
         02_entities.json
         03_script.json
         04_page_prompt.txt
+        art_direction_template.json
+        scriptwriter_system.txt
+        scriptwriter_user.txt
+        page_prompt.txt
       v002/                         # second run; prior phases cloned, new phase re-run
         ...
   belowdown/
@@ -122,6 +141,7 @@ campaigns/
 - Within a version, the pipeline skips any phase whose checkpoint already exists.
 - A new version is created on every run (auto-incremented: v001, v002, ...).
 - The previous version's files are cloned as a baseline so only phases invalidated by `--rerun-from` are re-computed.
+- The effective art direction and prompt template files are copied into every version folder for reproducibility.
 - Episode identity is canonical by URL — if the story title changes on the source site, the same episode folder is reused.
 
 ## Running individual phases
