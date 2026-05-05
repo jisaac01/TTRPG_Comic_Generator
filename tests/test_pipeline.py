@@ -339,6 +339,7 @@ async def test_first_run_result_contains_model_dump_dicts(tmp_path):
     assert isinstance(result["entities"], dict)
     assert isinstance(result["script"], dict)
     assert isinstance(result["page_prompt"], dict)
+    assert result["errors"] == []
     assert result["raw_text"]["url"] == "https://example.test/story"
     assert result["entities"]["model"] == "qwen2.5:7b"
 
@@ -713,3 +714,71 @@ async def test_script_model_and_panel_count_forwarded(tmp_path):
     _, kwargs = mock_script.call_args
     assert kwargs.get("model") == "llama3.1:8b"
     assert kwargs.get("panel_count") == 8
+
+
+# ---------------------------------------------------------------------------
+# Integration: graceful failure in script phase
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_script_failure_does_not_crash_pipeline(tmp_path):
+    """write_script failure is non-fatal: pipeline returns partial result with script=None."""
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=6,
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.write_script", side_effect=ValueError("Continuity break")),
+        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
+    ):
+        result = await pipeline.run()
+
+    assert result["script"] is None
+    assert result["page_prompt"] is None
+    assert result["errors"] == ["script: Continuity break"]
+    mock_prompts.assert_not_called()
+    assert result["raw_text"] is not None
+    assert result["entities"] is not None
+
+
+@pytest.mark.asyncio
+async def test_out_of_range_panel_count_records_error_but_continues(tmp_path):
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=6,
+    )
+
+    out_of_range_script = _SCRIPT_CHECKPOINT.model_copy(
+        update={
+            "panel_count": 3,
+            "generation_errors": [
+                "Attempt 3/3: Expected panel count in [5, 7] (requested=6, preferred=5), received 3. "
+                "Accepting out-of-range panel count."
+            ],
+        }
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.write_script", return_value=out_of_range_script),
+        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
+    ):
+        result = await pipeline.run()
+
+    assert result["script"] is not None
+    assert result["script"]["panel_count"] == 3
+    assert result["page_prompt"] is not None
+    assert result["errors"] == [
+        "script: Attempt 3/3: Expected panel count in [5, 7] (requested=6, preferred=5), received 3. "
+        "Accepting out-of-range panel count."
+    ]
+    mock_prompts.assert_called_once()

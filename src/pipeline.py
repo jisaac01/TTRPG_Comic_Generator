@@ -277,7 +277,7 @@ class ComicPipeline:
             encoding="utf-8",
         )
 
-    async def run(self) -> dict[str, dict]:
+    async def run(self) -> dict[str, object]:
         # Phase 1: scrape first so we have the title for episode resolution.
         # We need a temporary path to store the raw checkpoint before the episode
         # directory is resolved (title comes from the scrape).
@@ -350,6 +350,7 @@ class ComicPipeline:
         script_path = version_dir / "03_script.json"
         prompts_path = version_dir / "04_page_prompt.txt"
         template_path = self._resolve_art_template(version_dir, episode_dir)
+        errors: list[str] = []
 
         if entities_path.exists():
             print("[2/4] Building entities...skipped (checkpoint exists)")
@@ -365,41 +366,61 @@ class ComicPipeline:
             )
             print("      ...done")
 
+        script: ScriptCheckpoint | None = None
+        script_generated_this_run = False
         if script_path.exists():
             print("[3/4] Writing script...skipped (checkpoint exists)")
             script = ScriptCheckpoint.model_validate_json(script_path.read_text(encoding="utf-8"))
         else:
             print(f"[3/4] Writing script...  (model: {self.script_model}, panels: {self.panel_count})")
-            script = write_script(
-                raw_checkpoint_path=raw_path,
-                entities_checkpoint_path=entities_path,
-                output_path=script_path,
-                model=self.script_model,
-                panel_count=self.panel_count,
-            )
-            print("      ...done")
+            try:
+                script = write_script(
+                    raw_checkpoint_path=raw_path,
+                    entities_checkpoint_path=entities_path,
+                    output_path=script_path,
+                    model=self.script_model,
+                    panel_count=self.panel_count,
+                )
+                script_generated_this_run = True
+                print("      ...done")
+            except (ValueError, RuntimeError) as exc:
+                errors.append(f"script: {exc}")
+                print(f"      ...ERROR (script generation failed — skipping phases 3 & 4): {exc}")
 
-        if prompts_path.exists():
+        if script_generated_this_run and script is not None and script.generation_errors:
+            for generation_error in script.generation_errors:
+                errors.append(f"script: {generation_error}")
+                print(f"      ...ERROR (script validation): {generation_error}")
+
+        page_prompt: str | None = None
+        if script is None:
+            print("[4/4] Generating page prompt...skipped (no script)")
+        elif prompts_path.exists():
             print("[4/4] Generating page prompt...skipped (checkpoint exists)")
             page_prompt = prompts_path.read_text(encoding="utf-8")
         else:
             print(f"[4/4] Generating page prompt...  (template: {template_path})")
-            page_prompt = generate_page_prompt(
-                script_checkpoint_path=script_path,
-                entities_checkpoint_path=entities_path,
-                art_style_template_path=template_path,
-                output_path=prompts_path,
-            )
-            print("      ...done")
+            try:
+                page_prompt = generate_page_prompt(
+                    script_checkpoint_path=script_path,
+                    entities_checkpoint_path=entities_path,
+                    art_style_template_path=template_path,
+                    output_path=prompts_path,
+                )
+                print("      ...done")
+            except Exception as exc:
+                errors.append(f"page_prompt: {exc}")
+                print(f"      ...ERROR (page prompt generation failed): {exc}")
 
         return {
             "raw_text": raw.model_dump(),
             "entities": entities.model_dump(),
-            "script": script.model_dump(),
+            "script": script.model_dump() if script is not None else None,
             "page_prompt": {
                 "output_path": str(prompts_path),
                 "prompt": page_prompt,
-            },
+            } if page_prompt is not None else None,
+            "errors": errors,
             "version": version_name,
             "version_dir": str(version_dir),
         }
@@ -486,14 +507,18 @@ async def _run_cli() -> None:
         recap_version=args.recap_version,
     )
     result = await pipeline.run()
+    checkpoint_keys = ("raw_text", "entities", "script", "page_prompt")
+    failed = [key for key in checkpoint_keys if result.get(key) is None]
     print(
         json.dumps(
             {
-                "status": "ok",
+                "status": "partial" if failed else "ok",
                 "campaign": args.campaign,
                 "version": result["version"],
                 "version_dir": result["version_dir"],
-                "checkpoints": [k for k in result if k not in ("version", "version_dir")],
+                "checkpoints": [key for key in checkpoint_keys if result.get(key) is not None],
+                "failed": failed,
+                "errors": result.get("errors", []),
             },
             indent=2,
         )

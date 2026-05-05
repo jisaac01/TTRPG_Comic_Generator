@@ -19,12 +19,10 @@ def _write_inputs(tmp_path: Path) -> tuple[Path, Path, Path]:
             {
                 "name": "Del",
                 "description": "A druid in mossy robes",
-                "demeanor": "Calm and observant",
             },
             {
                 "name": "Vendetta",
                 "description": "A wary vampire scout",
-                "demeanor": "Cautious and strategic",
             },
         ],
         "locations": [

@@ -39,7 +39,7 @@ def _default_art_direction_template_json() -> str:
 
 def _format_character_details(world: WorldStateCheckpoint) -> str:
     details = [
-        f"{character.name}: {character.description}; demeanor={character.demeanor}"
+        f"{character.name}: {character.description}"
         for character in world.characters
     ]
     return " | ".join(details)

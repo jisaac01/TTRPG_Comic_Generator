@@ -17,7 +17,6 @@ from scraper import RawTextCheckpoint
 class Character(BaseModel):
     name: str = Field(min_length=1)
     description: str = Field(min_length=1)
-    demeanor: str = Field(min_length=1)
 
 
 class Location(BaseModel):
@@ -89,7 +88,6 @@ def _build_characters(raw: RawTextCheckpoint) -> list[Character]:
             Character(
                 name=name,
                 description=(description or "").strip() or "No source description provided.",
-                demeanor="Unknown",
             )
         )
     return characters
@@ -136,8 +134,7 @@ def build_entities_from_raw(
     """Build a WorldStateCheckpoint deterministically from scraped structured data.
 
     Merges player_characters and npcs into a unified characters list (deduped
-    by name), maps locations, converts outline entries to beats, and attaches
-    quotes from the scraped quotes section to the first beat.
+    by name), and maps locations and outline entries to beats.
 
     No LLM is involved. All data comes directly from the fields already
     extracted by the scraper.
@@ -149,21 +146,6 @@ def build_entities_from_raw(
     characters = _build_characters(raw)
     locations = _build_locations(raw)
     beats = _build_beats(raw)
-
-    if raw.quotes and beats:
-        quotes: list[Quote] = []
-        for scraped_quote in raw.quotes:
-            text = " ".join(scraped_quote.text.split()).strip()
-            if not text:
-                continue
-            speaker = (scraped_quote.attribution or "Unknown").strip() or "Unknown"
-            quotes.append(Quote(speaker=speaker, text=text))
-        if quotes:
-            beats[0] = StoryBeat(
-                index=beats[0].index,
-                text=beats[0].text,
-                quotes=quotes,
-            )
 
     checkpoint = WorldStateCheckpoint(
         url=raw.url,

@@ -124,12 +124,15 @@ def test_build_characters_fallback_description_when_whitespace_only():
     assert chars[0].description == "No source description provided."
 
 
-def test_build_characters_demeanor_always_unknown():
+def test_build_characters_has_only_name_and_description_fields():
     raw = _make_raw(
         player_characters=[ScrapedEntity(name="Del", description="A druid")]
     )
     chars = _build_characters(raw)
-    assert chars[0].demeanor == "Unknown"
+    assert chars[0].model_dump() == {
+        "name": "Del",
+        "description": "A druid",
+    }
 
 
 def test_build_characters_empty_when_no_entities():
@@ -264,7 +267,7 @@ def test_build_entities_from_raw_checkpoint_json_is_valid(tmp_path):
     assert loaded.characters[0].name == "Del"
 
 
-def test_build_entities_from_raw_attaches_quotes_to_first_beat(tmp_path):
+def test_build_entities_from_raw_does_not_attach_quotes_to_beats(tmp_path):
     raw = _make_raw(
         outline=["The ambush begins", "The party flees"],
         quotes=[
@@ -277,11 +280,8 @@ def test_build_entities_from_raw_attaches_quotes_to_first_beat(tmp_path):
 
     checkpoint = build_entities_from_raw(raw_path, output_path)
 
-    first_beat = checkpoint.beats[0]
-    assert len(first_beat.quotes) == 2
-    assert first_beat.quotes[0].speaker == "Vendetta"
-    assert first_beat.quotes[0].text == "Keep moving."
-    assert first_beat.quotes[1].speaker == "Del"
+    assert checkpoint.beats[0].quotes == []
+    assert checkpoint.beats[1].quotes == []
 
 
 def test_build_entities_from_raw_later_beats_have_no_quotes(tmp_path):
@@ -294,6 +294,7 @@ def test_build_entities_from_raw_later_beats_have_no_quotes(tmp_path):
 
     checkpoint = build_entities_from_raw(raw_path, output_path)
 
+    assert checkpoint.beats[0].quotes == []
     assert checkpoint.beats[1].quotes == []
 
 
@@ -310,11 +311,10 @@ def test_build_entities_from_raw_skips_blank_quote_text(tmp_path):
 
     checkpoint = build_entities_from_raw(raw_path, output_path)
 
-    assert len(checkpoint.beats[0].quotes) == 1
-    assert checkpoint.beats[0].quotes[0].speaker == "Orion"
+    assert checkpoint.beats[0].quotes == []
 
 
-def test_build_entities_from_raw_quote_attribution_fallback(tmp_path):
+def test_build_entities_from_raw_quotes_are_ignored(tmp_path):
     raw = _make_raw(
         outline=["Beat one"],
         quotes=[ScrapedQuote(text="A voice cries out.", attribution=None)],
@@ -324,7 +324,7 @@ def test_build_entities_from_raw_quote_attribution_fallback(tmp_path):
 
     checkpoint = build_entities_from_raw(raw_path, output_path)
 
-    assert checkpoint.beats[0].quotes[0].speaker == "Unknown"
+    assert checkpoint.beats[0].quotes == []
 
 
 def test_build_entities_from_raw_no_quotes_leaves_empty_beat_quotes(tmp_path):

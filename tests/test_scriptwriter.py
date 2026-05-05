@@ -27,12 +27,10 @@ def _write_input_checkpoints(tmp_path: Path) -> tuple[Path, Path]:
             {
                 "name": "Del",
                 "description": "A druid in mossy robes",
-                "demeanor": "Calm and observant",
             },
             {
                 "name": "Vendetta",
                 "description": "A wary vampire scout",
-                "demeanor": "Cautious and strategic",
             },
         ],
         "locations": [
@@ -120,20 +118,25 @@ def test_write_script_writes_checkpoint_and_normalizes_panel_indices(tmp_path):
     assert payload["panels"][1]["held_items_before"]["Del"] == ["torch"]
 
 
-def test_write_script_raises_when_panel_count_mismatch(tmp_path):
+def test_write_script_accepts_panel_count_outside_soft_range_with_error(tmp_path):
     raw_path, entities_path = _write_input_checkpoints(tmp_path)
 
     def fake_generator(_content, _world, _model, _panel_count):
-        return scriptwriter.ScriptPayload(panels=_valid_payload().panels[:2])
+        return scriptwriter.ScriptPayload(panels=_valid_payload().panels[:1])
 
-    with pytest.raises(ValueError, match="Expected exactly 3 panels"):
-        scriptwriter.write_script(
-            raw_checkpoint_path=raw_path,
-            entities_checkpoint_path=entities_path,
-            output_path=tmp_path / "03_script.json",
-            panel_count=3,
-            generator=fake_generator,
-        )
+    checkpoint = scriptwriter.write_script(
+        raw_checkpoint_path=raw_path,
+        entities_checkpoint_path=entities_path,
+        output_path=tmp_path / "03_script.json",
+        panel_count=3,
+        max_generation_attempts=1,
+        generator=fake_generator,
+    )
+
+    assert checkpoint.panel_count == 1
+    assert len(checkpoint.generation_errors) == 1
+    assert "Expected panel count in [2, 4]" in checkpoint.generation_errors[0]
+    assert "Accepting out-of-range panel count" in checkpoint.generation_errors[0]
 
 
 def test_write_script_retries_and_succeeds_on_later_attempt(tmp_path):
@@ -143,7 +146,7 @@ def test_write_script_retries_and_succeeds_on_later_attempt(tmp_path):
     def fake_generator(_content, _world, _model, _panel_count):
         attempts["count"] += 1
         if attempts["count"] == 1:
-            return scriptwriter.ScriptPayload(panels=_valid_payload().panels[:2])
+            return scriptwriter.ScriptPayload(panels=_valid_payload().panels[:1])
         return _valid_payload()
 
     checkpoint = scriptwriter.write_script(
@@ -157,6 +160,8 @@ def test_write_script_retries_and_succeeds_on_later_attempt(tmp_path):
 
     assert attempts["count"] == 2
     assert len(checkpoint.panels) == 3
+    assert len(checkpoint.generation_errors) == 1
+    assert "Retrying" in checkpoint.generation_errors[0]
 
 
 def test_write_script_raises_on_continuity_break(tmp_path):
@@ -233,3 +238,67 @@ def test_write_script_raises_when_missing_character_with_items(tmp_path):
             panel_count=3,
             generator=fake_generator,
         )
+
+
+def test_write_script_prefers_beat_count_when_within_soft_range(tmp_path):
+    raw_path, entities_path = _write_input_checkpoints(tmp_path)
+
+    payload = json.loads(entities_path.read_text(encoding="utf-8"))
+    payload["beats"] = [
+        {"index": 1, "text": "Beat one.", "quotes": []},
+        {"index": 2, "text": "Beat two.", "quotes": []},
+        {"index": 3, "text": "Beat three.", "quotes": []},
+        {"index": 4, "text": "Beat four.", "quotes": []},
+    ]
+    entities_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    calls = {"panel_target": None}
+
+    def fake_generator(_content, _world, _model, panel_count):
+        calls["panel_target"] = panel_count
+        panels = _valid_payload().panels
+        fourth = scriptwriter.Panel(
+            index=42,
+            setting="Broken watchtower",
+            visual_action="Del and Vendetta scout from the tower over the foggy marsh.",
+            dialogue_overlay=["Vendetta: Lights to the east."],
+            held_items_before={"Del": ["torch"], "Vendetta": ["map"]},
+            held_items_after={"Del": ["torch"], "Vendetta": ["map"]},
+        )
+        return scriptwriter.ScriptPayload(panels=[*panels, fourth])
+
+    checkpoint = scriptwriter.write_script(
+        raw_checkpoint_path=raw_path,
+        entities_checkpoint_path=entities_path,
+        output_path=tmp_path / "03_script.json",
+        panel_count=3,
+        generator=fake_generator,
+    )
+
+    assert calls["panel_target"] == 4
+    assert checkpoint.panel_count == 4
+    assert len(checkpoint.panels) == 4
+
+
+def test_format_entities_for_prompt_includes_quotes():
+    world = scriptwriter.WorldStateInput(
+        url="https://example.test/story",
+        title="Swamp Trouble",
+        author="GM",
+        model="qwen2.5:7b",
+        characters=[],
+        locations=[],
+        beats=[
+            scriptwriter.StoryBeat(
+                index=1,
+                text="The party reaches the old bridge.",
+                quotes=[scriptwriter.Quote(speaker="Del", text="Stay close to me.")],
+            )
+        ],
+        analyzed_at="2026-05-04T00:00:00+00:00",
+    )
+
+    prompt_blob = scriptwriter._format_entities_for_prompt(world)
+
+    assert "Reference quotes:" in prompt_blob
+    assert 'Beat 1 | Del: "Stay close to me."' in prompt_blob

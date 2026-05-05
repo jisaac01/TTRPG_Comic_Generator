@@ -83,11 +83,18 @@ python src/pipeline.py belowdown https://scrybequill.com/share/...
 --campaigns-root PATH        default: campaigns/
 --analysis-model NAME        default: qwen2.5:7b
 --script-model NAME          default: qwen2.5:7b
---panel-count N              default: 6
+--panel-count N              default: 6 (soft target; final script may be N ± 1)
 --art-style-template PATH    Override campaign-level template for this run only
---rerun-from PHASE           scrape | analyze | script | prompt
+--rerun-from PHASE           scrape | entities | script | prompt (legacy analyze alias accepted)
 --recap-version VERSION      short | standard | alternate/alt | long
 ```
+
+### Script generation behavior
+
+- `--panel-count` is a soft target, not a hard exact count.
+- Scriptwriter accepts a final panel count in `[N-1, N+1]` (minimum panel count is always 1).
+- If the number of story beats is within that range, beat count is preferred for pacing.
+- Scraped quotes are included in model context as reference dialogue and used when scene-appropriate.
 
 ## Directory layout
 
@@ -126,11 +133,9 @@ The individual phase scripts accept explicit paths and are useful for debugging 
 python src/scraper.py <URL> --checkpoint campaigns/dreadmarsh/<episode>/v001/01_raw_text.json --recap-version standard
 ```
 
-**Phase 2 — Analyze**
+**Phase 2 — Entities (deterministic from scraped notes)**
 ```bash
-python src/analyzer.py \
-  --input campaigns/dreadmarsh/<episode>/v001/01_raw_text.json \
-  --output campaigns/dreadmarsh/<episode>/v001/02_entities.json
+python -c "from pathlib import Path; from entities import build_entities_from_raw; build_entities_from_raw(Path('campaigns/dreadmarsh/<episode>/v001/01_raw_text.json'), Path('campaigns/dreadmarsh/<episode>/v001/02_entities.json'))"
 ```
 
 **Phase 3 — Script**
