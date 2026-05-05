@@ -11,6 +11,13 @@ import pytest
 sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
 import entities
+from prompt_templates import (
+    DEFAULT_PROMPTS_DIR,
+    PAGE_PROMPT_TEMPLATE_FILENAME,
+    PROMPT_TEMPLATE_FILENAMES,
+    SCRIPTWRITER_SYSTEM_PROMPT_FILENAME,
+    SCRIPTWRITER_USER_PROMPT_FILENAME,
+)
 import scraper
 import scriptwriter
 from pipeline import (
@@ -315,6 +322,82 @@ async def test_first_run_creates_campaign_episode_version(tmp_path):
     assert "entities" in result
     assert "script" in result
     assert "page_prompt" in result
+
+
+@pytest.mark.asyncio
+async def test_first_run_bootstraps_campaign_prompt_templates_and_copies_version_prompts(tmp_path):
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=2,
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT) as mock_script,
+        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
+    ):
+        result = await pipeline.run()
+
+    version_dir = Path(result["version_dir"])
+    for filename in PROMPT_TEMPLATE_FILENAMES:
+        campaign_prompt = tmp_path / "dreadmarsh" / filename
+        version_prompt = version_dir / filename
+        assert campaign_prompt.exists()
+        assert version_prompt.exists()
+        assert campaign_prompt.read_text(encoding="utf-8") == (
+            DEFAULT_PROMPTS_DIR / filename
+        ).read_text(encoding="utf-8")
+        assert version_prompt.read_text(encoding="utf-8") == campaign_prompt.read_text(encoding="utf-8")
+
+    _, script_kwargs = mock_script.call_args
+    assert script_kwargs["system_prompt_path"] == version_dir / SCRIPTWRITER_SYSTEM_PROMPT_FILENAME
+    assert script_kwargs["user_prompt_path"] == version_dir / SCRIPTWRITER_USER_PROMPT_FILENAME
+
+    _, prompt_kwargs = mock_prompts.call_args
+    assert prompt_kwargs["page_prompt_template_path"] == version_dir / PAGE_PROMPT_TEMPLATE_FILENAME
+
+
+@pytest.mark.asyncio
+async def test_explicit_prompt_overrides_are_copied_into_version(tmp_path):
+    system_prompt = tmp_path / "custom_system.txt"
+    user_prompt = tmp_path / "custom_user.txt"
+    page_prompt = tmp_path / "custom_page.txt"
+    system_prompt.write_text("SYSTEM OVERRIDE", encoding="utf-8")
+    user_prompt.write_text("USER OVERRIDE", encoding="utf-8")
+    page_prompt.write_text("PAGE OVERRIDE", encoding="utf-8")
+
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=2,
+        scriptwriter_system_prompt=system_prompt,
+        scriptwriter_user_prompt=user_prompt,
+        page_prompt_template=page_prompt,
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT) as mock_script,
+        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
+    ):
+        result = await pipeline.run()
+
+    version_dir = Path(result["version_dir"])
+    assert (version_dir / SCRIPTWRITER_SYSTEM_PROMPT_FILENAME).read_text(encoding="utf-8") == "SYSTEM OVERRIDE"
+    assert (version_dir / SCRIPTWRITER_USER_PROMPT_FILENAME).read_text(encoding="utf-8") == "USER OVERRIDE"
+    assert (version_dir / PAGE_PROMPT_TEMPLATE_FILENAME).read_text(encoding="utf-8") == "PAGE OVERRIDE"
+
+    _, script_kwargs = mock_script.call_args
+    assert script_kwargs["system_prompt_path"] == version_dir / SCRIPTWRITER_SYSTEM_PROMPT_FILENAME
+    assert script_kwargs["user_prompt_path"] == version_dir / SCRIPTWRITER_USER_PROMPT_FILENAME
+
+    _, prompt_kwargs = mock_prompts.call_args
+    assert prompt_kwargs["page_prompt_template_path"] == version_dir / PAGE_PROMPT_TEMPLATE_FILENAME
 
 
 @pytest.mark.asyncio

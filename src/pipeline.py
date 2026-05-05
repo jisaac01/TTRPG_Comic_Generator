@@ -19,6 +19,13 @@ from prompter import (
     DEFAULT_ART_DIRECTION_TEMPLATE,
     generate_page_prompt,
 )
+from prompt_templates import (
+    DEFAULT_PROMPTS_DIR,
+    PAGE_PROMPT_TEMPLATE_FILENAME,
+    PROMPT_TEMPLATE_FILENAMES,
+    SCRIPTWRITER_SYSTEM_PROMPT_FILENAME,
+    SCRIPTWRITER_USER_PROMPT_FILENAME,
+)
 from scraper import RawTextCheckpoint, normalize_recap_version, scrape_scrybequill
 from scriptwriter import ScriptCheckpoint, write_script
 
@@ -208,6 +215,9 @@ class ComicPipeline:
         script_model: str = "qwen2.5:7b",
         panel_count: int = 6,
         art_style_template: Path | None = None,
+        scriptwriter_system_prompt: Path | None = None,
+        scriptwriter_user_prompt: Path | None = None,
+        page_prompt_template: Path | None = None,
         rerun_from: RerunFrom | None = None,
         recap_version: str = "standard",
     ):
@@ -220,6 +230,9 @@ class ComicPipeline:
         self.script_model = script_model
         self.panel_count = panel_count
         self.art_style_template = art_style_template
+        self.scriptwriter_system_prompt = scriptwriter_system_prompt
+        self.scriptwriter_user_prompt = scriptwriter_user_prompt
+        self.page_prompt_template = page_prompt_template
         self.rerun_from = rerun_from
         self.recap_version = normalize_recap_version(recap_version)
 
@@ -259,6 +272,47 @@ class ComicPipeline:
             return version_template
         # Last resort: same directory as this script (legacy support during migration).
         return Path(ART_DIRECTION_TEMPLATE_FILENAME)
+
+    def _campaign_prompt_path(self, filename: str) -> Path:
+        return self.campaigns_root / self.campaign / filename
+
+    def _ensure_campaign_prompt_templates(self) -> None:
+        """Create campaign prompt template copies when they do not already exist."""
+        for filename in PROMPT_TEMPLATE_FILENAMES:
+            campaign_prompt = self._campaign_prompt_path(filename)
+            if campaign_prompt.exists():
+                continue
+            campaign_prompt.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(DEFAULT_PROMPTS_DIR / filename, campaign_prompt)
+
+    def _resolve_prompt_templates(self) -> dict[str, Path]:
+        return {
+            SCRIPTWRITER_SYSTEM_PROMPT_FILENAME: self.scriptwriter_system_prompt
+            or self._campaign_prompt_path(SCRIPTWRITER_SYSTEM_PROMPT_FILENAME),
+            SCRIPTWRITER_USER_PROMPT_FILENAME: self.scriptwriter_user_prompt
+            or self._campaign_prompt_path(SCRIPTWRITER_USER_PROMPT_FILENAME),
+            PAGE_PROMPT_TEMPLATE_FILENAME: self.page_prompt_template
+            or self._campaign_prompt_path(PAGE_PROMPT_TEMPLATE_FILENAME),
+        }
+
+    def _capture_prompt_templates_for_version(
+        self,
+        prompt_paths: dict[str, Path],
+        version_dir: Path,
+    ) -> dict[str, Path]:
+        """Copy prompt templates into the version directory and return their version-local paths."""
+        captured_paths: dict[str, Path] = {}
+        for filename, source_path in prompt_paths.items():
+            if not source_path.exists():
+                raise FileNotFoundError(
+                    f"Prompt template file not found at {source_path}."
+                )
+
+            version_prompt_path = version_dir / filename
+            if source_path != version_prompt_path:
+                shutil.copy2(source_path, version_prompt_path)
+            captured_paths[filename] = version_prompt_path
+        return captured_paths
 
     def _capture_art_template_for_version(self, template_path: Path, version_dir: Path) -> Path:
         """Copy the resolved template into the version directory and return that path."""
@@ -359,10 +413,15 @@ class ComicPipeline:
                 )
                 print(f"      ...done  (title: {raw.title!r}, recap: {self.recap_version})")
 
+        self._ensure_campaign_prompt_templates()
         entities_path = version_dir / "02_entities.json"
         script_path = version_dir / "03_script.json"
         prompts_path = version_dir / "04_page_prompt.txt"
         template_path = self._resolve_art_template(version_dir, episode_dir)
+        prompt_template_paths = self._capture_prompt_templates_for_version(
+            self._resolve_prompt_templates(),
+            version_dir,
+        )
         errors: list[str] = []
 
         if entities_path.exists():
@@ -393,6 +452,8 @@ class ComicPipeline:
                     output_path=script_path,
                     model=self.script_model,
                     panel_count=self.panel_count,
+                    system_prompt_path=prompt_template_paths[SCRIPTWRITER_SYSTEM_PROMPT_FILENAME],
+                    user_prompt_path=prompt_template_paths[SCRIPTWRITER_USER_PROMPT_FILENAME],
                 )
                 script_generated_this_run = True
                 print("      ...done")
@@ -419,6 +480,7 @@ class ComicPipeline:
                     script_checkpoint_path=script_path,
                     entities_checkpoint_path=entities_path,
                     art_style_template_path=template_path,
+                    page_prompt_template_path=prompt_template_paths[PAGE_PROMPT_TEMPLATE_FILENAME],
                     output_path=prompts_path,
                 )
                 print("      ...done")
@@ -486,6 +548,33 @@ async def _run_cli() -> None:
         ),
     )
     parser.add_argument(
+        "--scriptwriter-system-prompt",
+        default=None,
+        help=(
+            "Explicit path to the scriptwriter system prompt template. "
+            f"If omitted, the pipeline uses campaigns/<campaign>/{SCRIPTWRITER_SYSTEM_PROMPT_FILENAME} "
+            "and bootstraps it from prompts/ on first use."
+        ),
+    )
+    parser.add_argument(
+        "--scriptwriter-user-prompt",
+        default=None,
+        help=(
+            "Explicit path to the scriptwriter user prompt template. "
+            f"If omitted, the pipeline uses campaigns/<campaign>/{SCRIPTWRITER_USER_PROMPT_FILENAME} "
+            "and bootstraps it from prompts/ on first use."
+        ),
+    )
+    parser.add_argument(
+        "--page-prompt-template",
+        default=None,
+        help=(
+            "Explicit path to the page prompt template. "
+            f"If omitted, the pipeline uses campaigns/<campaign>/{PAGE_PROMPT_TEMPLATE_FILENAME} "
+            "and bootstraps it from prompts/ on first use."
+        ),
+    )
+    parser.add_argument(
         "--rerun-from",
         choices=["scrape", "entities", "script", "prompt", "analyze"],
         default=None,
@@ -517,6 +606,15 @@ async def _run_cli() -> None:
         script_model=args.script_model,
         panel_count=args.panel_count,
         art_style_template=Path(args.art_style_template) if args.art_style_template else None,
+        scriptwriter_system_prompt=Path(args.scriptwriter_system_prompt)
+        if args.scriptwriter_system_prompt
+        else None,
+        scriptwriter_user_prompt=Path(args.scriptwriter_user_prompt)
+        if args.scriptwriter_user_prompt
+        else None,
+        page_prompt_template=Path(args.page_prompt_template)
+        if args.page_prompt_template
+        else None,
         rerun_from=rerun_from_arg,
         recap_version=args.recap_version,
     )

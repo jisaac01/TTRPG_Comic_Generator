@@ -121,3 +121,24 @@ def test_generate_image_prompts_fails_when_template_missing(tmp_path):
             art_style_template_path=tmp_path / "missing_template.json",
             output_path=tmp_path / "04_page_prompt.txt",
         )
+
+
+def test_generate_image_prompts_uses_custom_page_prompt_template(tmp_path):
+    entities_path, script_path, template_path = _write_inputs(tmp_path)
+    custom_prompt_path = tmp_path / "custom_page_prompt.txt"
+    custom_prompt_path.write_text(
+        "Panels: {panel_count}\nCharacters: {character_details}\n{panel_block}\n{art_direction}\n",
+        encoding="utf-8",
+    )
+
+    prompt_text = prompter.generate_page_prompt(
+        script_checkpoint_path=script_path,
+        entities_checkpoint_path=entities_path,
+        art_style_template_path=template_path,
+        page_prompt_template_path=custom_prompt_path,
+        output_path=tmp_path / "04_page_prompt.txt",
+    )
+
+    assert prompt_text.startswith("Panels: 2\nCharacters: Del: A druid in mossy robes")
+    assert "Panel 1:" in prompt_text
+    assert "Base Style: Brutalist ink style with heavy shadows." in prompt_text

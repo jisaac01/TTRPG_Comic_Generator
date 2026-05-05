@@ -10,7 +10,11 @@ from typing import Callable, cast
 from pydantic import BaseModel, Field, create_model
 
 from entities import Character, Location, Quote, StoryBeat
-from prompt_templates import render_prompt_template
+from prompt_templates import (
+    SCRIPTWRITER_SYSTEM_PROMPT_FILENAME,
+    SCRIPTWRITER_USER_PROMPT_FILENAME,
+    render_prompt_template,
+)
 from scraper import RawTextCheckpoint
 
 
@@ -128,6 +132,8 @@ def _generate_with_instructor_ollama(
     raw_quotes: list[tuple[str, str | None]],
     model: str,
     panel_plan: PanelPlan,
+    system_prompt_path: Path | None = None,
+    user_prompt_path: Path | None = None,
     attempt: int = 1,
     previous_panel_count: int | None = None,
 ) -> ScriptPayload:
@@ -143,7 +149,10 @@ def _generate_with_instructor_ollama(
         __base__=BaseModel,
     )
 
-    system_prompt = render_prompt_template("scriptwriter_system.txt")
+    system_prompt = render_prompt_template(
+        SCRIPTWRITER_SYSTEM_PROMPT_FILENAME,
+        template_path=system_prompt_path,
+    )
 
     target_line = (
         f"Required panel count: exactly {panel_plan.preferred}."
@@ -158,7 +167,8 @@ def _generate_with_instructor_ollama(
         )
 
     user_prompt = render_prompt_template(
-        "scriptwriter_user.txt",
+        SCRIPTWRITER_USER_PROMPT_FILENAME,
+        template_path=user_prompt_path,
         title=title,
         requested_panel_target=panel_plan.requested,
         preferred_panel_target=panel_plan.preferred,
@@ -227,6 +237,8 @@ def write_script(
     model: str = "qwen2.5:7b",
     panel_count: int = 6,
     max_generation_attempts: int = 3,
+    system_prompt_path: Path | None = None,
+    user_prompt_path: Path | None = None,
     generator: ScriptGenerator | None = None,
 ) -> ScriptCheckpoint:
     if panel_count < 1:
@@ -255,6 +267,8 @@ def write_script(
                     [(quote.text, quote.attribution) for quote in raw.quotes],
                     model,
                     panel_plan,
+                    system_prompt_path=system_prompt_path,
+                    user_prompt_path=user_prompt_path,
                     attempt=attempt,
                     previous_panel_count=previous_panel_count,
                 )

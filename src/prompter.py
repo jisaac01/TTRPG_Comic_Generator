@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 from entities import WorldStateCheckpoint
-from prompt_templates import render_prompt_template
+from prompt_templates import PAGE_PROMPT_TEMPLATE_FILENAME, render_prompt_template
 from scriptwriter import ScriptCheckpoint
 
 
@@ -126,6 +126,7 @@ def generate_page_prompt(
     art_style_template_path: Path = Path(
         f"campaigns/<campaign>/{ART_DIRECTION_TEMPLATE_FILENAME}"
     ),
+    page_prompt_template_path: Path | None = None,
     output_path: Path = Path("campaigns/<campaign>/<episode>/v001/04_page_prompt.txt"),
 ) -> str:
     script = ScriptCheckpoint.model_validate_json(
@@ -140,7 +141,8 @@ def generate_page_prompt(
     panel_block = _format_panel_block(script)
 
     prompt_text = render_prompt_template(
-        "page_prompt.txt",
+        PAGE_PROMPT_TEMPLATE_FILENAME,
+        template_path=page_prompt_template_path,
         art_direction=_format_art_direction(art_direction_template),
         character_details=character_details,
         panel_count=script.panel_count,
