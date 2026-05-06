@@ -78,6 +78,9 @@ python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --rerun-from
 # Rebuild only the final page prompt from the styled script
 python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --rerun-from prompt
 
+# Skip style integration (Phase 3.5 becomes a no-op); Phase 4 reads from 03_script.json
+python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --skip-style
+
 # Use alternate prompt templates for this run; copies them into the new version folder
 python src/pipeline.py dreadmarsh https://scrybequill.com/share/... \
   --rerun-from style \
@@ -113,6 +116,7 @@ python src/pipeline.py belowdown https://scrybequill.com/share/...
 --page-prompt-template PATH  Override the page prompt template for this run only
 --rerun-from PHASE           scrape | entities | script | style | prompt (legacy analyze alias accepted)
 --recap-version VERSION      short | standard | alternate/alt | long
+--skip-style                 Skip Phase 3.5 and generate Phase 4 prompt from 03_script.json
 ```
 
 ### Script generation behavior
@@ -162,6 +166,7 @@ campaigns/
 - The previous version's files are cloned as a baseline so only phases invalidated by `--rerun-from` are re-computed.
 - The effective art direction and prompt template files are copied into every version folder for reproducibility.
 - Episode identity is canonical by URL — if the story title changes on the source site, the same episode folder is reused.
+- When `--skip-style` is set, Phase 3.5 is skipped and Phase 4 consumes `03_script.json` directly.
 
 ## Running individual phases
 
@@ -195,8 +200,16 @@ python src/style_integrator.py \
 
 **Phase 4 — Prompt**
 ```bash
+# Standard flow (after style integration):
 python src/prompter.py \
   --script-input campaigns/dreadmarsh/<episode>/v001/03_5_styled_script.json \
+  --entities-input campaigns/dreadmarsh/<episode>/v001/02_entities.json \
+  --art-style-template campaigns/dreadmarsh/art_direction_template.json \
+  --output campaigns/dreadmarsh/<episode>/v001/04_page_prompt.txt
+
+# Skip-style flow (pipeline --skip-style):
+python src/prompter.py \
+  --script-input campaigns/dreadmarsh/<episode>/v001/03_script.json \
   --entities-input campaigns/dreadmarsh/<episode>/v001/02_entities.json \
   --art-style-template campaigns/dreadmarsh/art_direction_template.json \
   --output campaigns/dreadmarsh/<episode>/v001/04_page_prompt.txt

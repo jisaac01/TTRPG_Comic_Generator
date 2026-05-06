@@ -669,6 +669,65 @@ async def test_rerun_from_prompt_only_reruns_prompt(tmp_path):
     assert result["version"] == "v002"
 
 
+@pytest.mark.asyncio
+async def test_skip_style_bypasses_integrator_and_prompts_from_script(tmp_path):
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=2,
+        skip_style=True,
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
+        patch("pipeline.integrate_style") as mock_integrate,
+        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
+    ):
+        result = await pipeline.run()
+
+    mock_integrate.assert_not_called()
+    mock_prompts.assert_called_once()
+    _, prompt_kwargs = mock_prompts.call_args
+    assert prompt_kwargs["script_checkpoint_path"] == Path(result["version_dir"]) / "03_script.json"
+    assert result["styled_script"] is not None
+    assert result["styled_script"]["panels"] == result["script"]["panels"]
+
+
+@pytest.mark.asyncio
+async def test_rerun_from_style_with_skip_style_reruns_prompt_only(tmp_path):
+    _make_episode(tmp_path, "dreadmarsh", "https://example.test/story", "Dreadmarsh Crossing")
+
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=2,
+        rerun_from="style",
+        skip_style=True,
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock) as mock_scrape,
+        patch("pipeline.build_entities_from_raw") as mock_entities,
+        patch("pipeline.write_script") as mock_script,
+        patch("pipeline.integrate_style") as mock_integrate,
+        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
+    ):
+        result = await pipeline.run()
+
+    mock_scrape.assert_not_awaited()
+    mock_entities.assert_not_called()
+    mock_script.assert_not_called()
+    mock_integrate.assert_not_called()
+    mock_prompts.assert_called_once()
+    _, prompt_kwargs = mock_prompts.call_args
+    assert prompt_kwargs["script_checkpoint_path"] == Path(result["version_dir"]) / "03_script.json"
+    assert result["version"] == "v002"
+
+
 # ---------------------------------------------------------------------------
 # Integration: URL is canonical episode identity (title changes tolerated)
 # ---------------------------------------------------------------------------

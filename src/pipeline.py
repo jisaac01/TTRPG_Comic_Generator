@@ -41,6 +41,7 @@ INDEX_FILENAME = "index.json"
 EPISODE_META_FILENAME = "episode_meta.json"
 
 RerunFrom = Literal["scrape", "entities", "script", "style", "prompt"]
+RerunFromArg = Literal["scrape", "entities", "script", "style", "prompt", "analyze"]
 
 # ---------------------------------------------------------------------------
 # Slug helpers
@@ -160,7 +161,7 @@ def _next_version_name(episode_dir: Path) -> str:
 
 
 def _create_version_dir(
-    episode_dir: Path, rerun_from: RerunFrom | None
+    episode_dir: Path, rerun_from: RerunFromArg | None
 ) -> tuple[Path, str]:
     """
     Create the next version directory.
@@ -225,8 +226,9 @@ class ComicPipeline:
         style_integrator_system_prompt: Path | None = None,
         style_integrator_user_prompt: Path | None = None,
         page_prompt_template: Path | None = None,
-        rerun_from: RerunFrom | None = None,
+        rerun_from: RerunFromArg | None = None,
         recap_version: str = "standard",
+        skip_style: bool = False,
     ):
         if rerun_from == "analyze":
             rerun_from = "entities"
@@ -245,6 +247,7 @@ class ComicPipeline:
         self.page_prompt_template = page_prompt_template
         self.rerun_from = rerun_from
         self.recap_version = normalize_recap_version(recap_version)
+        self.skip_style = skip_style
 
     def _apply_recap_selection(self, raw: RawTextCheckpoint) -> tuple[RawTextCheckpoint, bool, bool]:
         """Select content from recap variants and report selection/content changes."""
@@ -483,6 +486,9 @@ class ComicPipeline:
         styled_script: ScriptCheckpoint | None = None
         if script is None:
             print("[3.5/4] Integrating art style...skipped (no script)")
+        elif self.skip_style:
+            print("[3.5/4] Integrating art style...skipped (--skip-style)")
+            styled_script = script
         elif styled_script_path.exists():
             print("[3.5/4] Integrating art style...skipped (checkpoint exists)")
             styled_script = ScriptCheckpoint.model_validate_json(
@@ -517,10 +523,11 @@ class ComicPipeline:
             page_prompt = prompts_path.read_text(encoding="utf-8")
         else:
             template_path = self._capture_art_template_for_version(template_path, version_dir)
+            prompt_script_path = script_path if self.skip_style else styled_script_path
             print(f"[4/4] Generating page prompt...  (template: {template_path})")
             try:
                 page_prompt = generate_page_prompt(
-                    script_checkpoint_path=styled_script_path,
+                    script_checkpoint_path=prompt_script_path,
                     entities_checkpoint_path=entities_path,
                     art_style_template_path=template_path,
                     output_path=prompts_path,
@@ -662,6 +669,14 @@ async def _run_cli() -> None:
             "Options: short, standard, alternate/alt, long"
         ),
     )
+    parser.add_argument(
+        "--skip-style",
+        action="store_true",
+        help=(
+            "Skip Phase 3.5 style integration and generate the page prompt directly "
+            "from 03_script.json."
+        ),
+    )
 
     args = parser.parse_args()
     rerun_from_arg = args.rerun_from
@@ -693,6 +708,7 @@ async def _run_cli() -> None:
         else None,
         rerun_from=rerun_from_arg,
         recap_version=args.recap_version,
+        skip_style=args.skip_style,
     )
     result = await pipeline.run()
     checkpoint_keys = ("raw_text", "entities", "script", "styled_script", "page_prompt")
