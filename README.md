@@ -24,9 +24,11 @@ Each campaign has its own folder under `campaigns/`. On the first pipeline run, 
 - `art_direction_template.json`
 - `scriptwriter_system.txt`
 - `scriptwriter_user.txt`
+- `style_integrator_system.txt`
+- `style_integrator_user.txt`
 - `page_prompt.txt`
 
-All four files are copied from the shared `prompts/` directory. Edit the campaign copies when you want campaign-specific behavior.
+All five files are copied from the shared `prompts/` directory. Edit the campaign copies when you want campaign-specific behavior.
 
 If you want to pre-seed defaults manually, copy them the same way:
 
@@ -35,6 +37,8 @@ mkdir -p campaigns/dreadmarsh
 cp prompts/art_direction_template.json campaigns/dreadmarsh/art_direction_template.json
 cp prompts/scriptwriter_system.txt campaigns/dreadmarsh/scriptwriter_system.txt
 cp prompts/scriptwriter_user.txt campaigns/dreadmarsh/scriptwriter_user.txt
+cp prompts/style_integrator_system.txt campaigns/dreadmarsh/style_integrator_system.txt
+cp prompts/style_integrator_user.txt campaigns/dreadmarsh/style_integrator_user.txt
 cp prompts/page_prompt.txt campaigns/dreadmarsh/page_prompt.txt
 ```
 
@@ -68,15 +72,23 @@ python src/pipeline.py dreadmarsh https://scrybequill.com/share/...
 # Select a different recap variant from cached scrape data
 python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --recap-version short
 
-# Update art style only — creates v003/, clones v002/, re-runs Phase 4 only
+# Update art style integration only — creates v003/, clones v002/, re-runs Phase 3.5 and Phase 4
+python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --rerun-from style
+
+# Rebuild only the final page prompt from the styled script
 python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --rerun-from prompt
+
+# Skip style integration (Phase 3.5 becomes a no-op); Phase 4 reads from 03_script.json
+python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --skip-style
 
 # Use alternate prompt templates for this run; copies them into the new version folder
 python src/pipeline.py dreadmarsh https://scrybequill.com/share/... \
-  --rerun-from prompt \
+  --rerun-from style \
   --scriptwriter-system-prompt custom_prompts/dreadmarsh_system.txt \
   --scriptwriter-user-prompt custom_prompts/dreadmarsh_user.txt \
-  --page-prompt-template custom_prompts/dreadmarsh_page.txt
+  --style-integrator-system-prompt custom_prompts/dreadmarsh_style_system.txt \
+  --style-integrator-user-prompt custom_prompts/dreadmarsh_style_user.txt \
+  --page-prompt-template custom_prompts/dreadmarsh_page_prompt.txt
 
 # Fix source text — creates v004/, clones v003/, re-runs everything from scrape
 python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --rerun-from scrape
@@ -90,15 +102,21 @@ python src/pipeline.py belowdown https://scrybequill.com/share/...
 ```
 --campaigns-root PATH        default: campaigns/
 --script-model NAME          default: qwen2.5:7b
+--style-model NAME           default: qwen2.5:7b
 --panel-count N              default: 6 (soft target; final script may be N ± 1)
 --art-style-template PATH    Override campaign-level template for this run only
 --scriptwriter-system-prompt PATH
                              Override the system prompt template for this run only
 --scriptwriter-user-prompt PATH
                              Override the user prompt template for this run only
+--style-integrator-system-prompt PATH
+                             Override the style integrator system prompt template for this run only
+--style-integrator-user-prompt PATH
+                             Override the style integrator user prompt template for this run only
 --page-prompt-template PATH  Override the page prompt template for this run only
---rerun-from PHASE           scrape | entities | script | prompt (legacy analyze alias accepted)
+--rerun-from PHASE           scrape | entities | script | style | prompt (legacy analyze alias accepted)
 --recap-version VERSION      short | standard | alternate/alt | long
+--skip-style                 Skip Phase 3.5 and generate Phase 4 prompt from 03_script.json
 ```
 
 ### Script generation behavior
@@ -117,6 +135,8 @@ campaigns/
     art_direction_template.json     # campaign-level art direction
     scriptwriter_system.txt         # campaign-level scriptwriter system prompt
     scriptwriter_user.txt           # campaign-level scriptwriter user prompt
+    style_integrator_system.txt     # campaign-level style integrator system prompt
+    style_integrator_user.txt       # campaign-level style integrator user prompt
     page_prompt.txt                 # campaign-level page prompt template
     dreadmarsh-crossing/            # episode folder (slug from story title, identity from URL)
       episode_meta.json             # url, title, created_at
@@ -124,10 +144,13 @@ campaigns/
         01_raw_text.json
         02_entities.json
         03_script.json
+        03_5_styled_script.json
         04_page_prompt.txt
         art_direction_template.json
         scriptwriter_system.txt
         scriptwriter_user.txt
+        style_integrator_system.txt
+        style_integrator_user.txt
         page_prompt.txt
       v002/                         # second run; prior phases cloned, new phase re-run
         ...
@@ -143,6 +166,7 @@ campaigns/
 - The previous version's files are cloned as a baseline so only phases invalidated by `--rerun-from` are re-computed.
 - The effective art direction and prompt template files are copied into every version folder for reproducibility.
 - Episode identity is canonical by URL — if the story title changes on the source site, the same episode folder is reused.
+- When `--skip-style` is set, Phase 3.5 is skipped and Phase 4 consumes `03_script.json` directly.
 
 ## Running individual phases
 
@@ -166,8 +190,24 @@ python src/scriptwriter.py \
   --output campaigns/dreadmarsh/<episode>/v001/03_script.json
 ```
 
+**Phase 3.5 — Style Integration**
+```bash
+python src/style_integrator.py \
+  --script-input campaigns/dreadmarsh/<episode>/v001/03_script.json \
+  --art-style-template campaigns/dreadmarsh/art_direction_template.json \
+  --output campaigns/dreadmarsh/<episode>/v001/03_5_styled_script.json
+```
+
 **Phase 4 — Prompt**
 ```bash
+# Standard flow (after style integration):
+python src/prompter.py \
+  --script-input campaigns/dreadmarsh/<episode>/v001/03_5_styled_script.json \
+  --entities-input campaigns/dreadmarsh/<episode>/v001/02_entities.json \
+  --art-style-template campaigns/dreadmarsh/art_direction_template.json \
+  --output campaigns/dreadmarsh/<episode>/v001/04_page_prompt.txt
+
+# Skip-style flow (pipeline --skip-style):
 python src/prompter.py \
   --script-input campaigns/dreadmarsh/<episode>/v001/03_script.json \
   --entities-input campaigns/dreadmarsh/<episode>/v001/02_entities.json \
@@ -188,6 +228,7 @@ pytest
 | `01_raw_text.json` | Sanitized story text, title, author |
 | `02_entities.json` | Characters, locations, story beats |
 | `03_script.json` | Panelized comic script with continuity fields |
+| `03_5_styled_script.json` | Script checkpoint with art-direction-infused panel descriptions |
 | `04_page_prompt.txt` | Single composite image prompt for one multi-panel comic page |
 | `episode_meta.json` | Episode URL, display slug, creation timestamp |
 | `campaigns/index.json` | Global campaign+URL → episode folder lookup |

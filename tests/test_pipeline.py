@@ -18,9 +18,12 @@ from prompt_templates import (
     PROMPT_TEMPLATE_FILENAMES,
     SCRIPTWRITER_SYSTEM_PROMPT_FILENAME,
     SCRIPTWRITER_USER_PROMPT_FILENAME,
+    STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME,
+    STYLE_INTEGRATOR_USER_PROMPT_FILENAME,
 )
 import scraper
 import scriptwriter
+from style_integrator import StyleIntegrationPartialFailure
 from pipeline import (
     ComicPipeline,
     _create_version_dir,
@@ -110,6 +113,37 @@ _SCRIPT_CHECKPOINT = scriptwriter.ScriptCheckpoint(
 
 _PAGE_PROMPT = "Single-page comic prompt text"
 
+_STYLED_SCRIPT_CHECKPOINT = scriptwriter.ScriptCheckpoint(
+    url="https://example.test/story",
+    title="Dreadmarsh Crossing",
+    author="GM",
+    model="qwen2.5:7b",
+    panel_count=2,
+    panels=[
+        scriptwriter.Panel(
+            index=1,
+            panel_scale="large",
+            panel_shape="wide",
+            setting="A scribbly swamp edge at wobbly dusk",
+            visual_action="A scratchy Del raises a wobbly torch while Vendetta scans the reeds.",
+            dialogue_overlay=["Del: Keep moving."],
+            held_items_before={"Del": [], "Vendetta": []},
+            held_items_after={"Del": ["torch"], "Vendetta": []},
+        ),
+        scriptwriter.Panel(
+            index=2,
+            panel_scale="medium",
+            panel_shape="standard",
+            setting="A crooked narrow marsh path",
+            visual_action="A wobbly Del leads with the torch as Orion marks tracks.",
+            dialogue_overlay=["Orion: Tracks ahead."],
+            held_items_before={"Del": ["torch"], "Vendetta": []},
+            held_items_after={"Del": ["torch"], "Vendetta": []},
+        ),
+    ],
+    scripted_at="2026-05-04T00:00:00+00:00",
+)
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -117,7 +151,7 @@ _PAGE_PROMPT = "Single-page comic prompt text"
 
 
 def _write_version_checkpoints(version_dir: Path) -> None:
-    """Write all four checkpoints into a version directory."""
+    """Write all five checkpoints into a version directory."""
     (version_dir / "01_raw_text.json").write_text(
         _RAW_CHECKPOINT.model_dump_json(), encoding="utf-8"
     )
@@ -126,6 +160,9 @@ def _write_version_checkpoints(version_dir: Path) -> None:
     )
     (version_dir / "03_script.json").write_text(
         _SCRIPT_CHECKPOINT.model_dump_json(), encoding="utf-8"
+    )
+    (version_dir / "03_5_styled_script.json").write_text(
+        _STYLED_SCRIPT_CHECKPOINT.model_dump_json(), encoding="utf-8"
     )
     (version_dir / "04_page_prompt.txt").write_text(_PAGE_PROMPT, encoding="utf-8")
 
@@ -305,6 +342,7 @@ async def test_first_run_creates_campaign_episode_version(tmp_path):
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT) as mock_scrape,
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT) as mock_entities,
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT) as mock_script,
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
     ):
         result = await pipeline.run()
@@ -326,6 +364,7 @@ async def test_first_run_creates_campaign_episode_version(tmp_path):
     assert "raw_text" in result
     assert "entities" in result
     assert "script" in result
+    assert "styled_script" in result
     assert "page_prompt" in result
 
 
@@ -342,6 +381,7 @@ async def test_first_run_bootstraps_campaign_prompt_templates_and_copies_version
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT) as mock_script,
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT) as mock_integrate,
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
     ):
         result = await pipeline.run()
@@ -361,18 +401,26 @@ async def test_first_run_bootstraps_campaign_prompt_templates_and_copies_version
     assert script_kwargs["system_prompt_path"] == version_dir / SCRIPTWRITER_SYSTEM_PROMPT_FILENAME
     assert script_kwargs["user_prompt_path"] == version_dir / SCRIPTWRITER_USER_PROMPT_FILENAME
 
+    _, style_kwargs = mock_integrate.call_args
+    assert style_kwargs["system_prompt_path"] == version_dir / STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME
+    assert style_kwargs["user_prompt_path"] == version_dir / STYLE_INTEGRATOR_USER_PROMPT_FILENAME
+
     _, prompt_kwargs = mock_prompts.call_args
     assert prompt_kwargs["page_prompt_template_path"] == version_dir / PAGE_PROMPT_TEMPLATE_FILENAME
 
 
 @pytest.mark.asyncio
 async def test_explicit_prompt_overrides_are_copied_into_version(tmp_path):
+    page_prompt_template = tmp_path / "custom_page_prompt.txt"
+    style_system = tmp_path / "custom_style_system.txt"
+    style_user = tmp_path / "custom_style_user.txt"
     system_prompt = tmp_path / "custom_system.txt"
     user_prompt = tmp_path / "custom_user.txt"
-    page_prompt = tmp_path / "custom_page.txt"
     system_prompt.write_text("SYSTEM OVERRIDE", encoding="utf-8")
     user_prompt.write_text("USER OVERRIDE", encoding="utf-8")
-    page_prompt.write_text("PAGE OVERRIDE", encoding="utf-8")
+    style_system.write_text("STYLE SYSTEM OVERRIDE", encoding="utf-8")
+    style_user.write_text("STYLE USER OVERRIDE", encoding="utf-8")
+    page_prompt_template.write_text("CUSTOM PAGE PROMPT: {panel_count}", encoding="utf-8")
 
     pipeline = ComicPipeline(
         url="https://example.test/story",
@@ -381,13 +429,16 @@ async def test_explicit_prompt_overrides_are_copied_into_version(tmp_path):
         panel_count=2,
         scriptwriter_system_prompt=system_prompt,
         scriptwriter_user_prompt=user_prompt,
-        page_prompt_template=page_prompt,
+        style_integrator_system_prompt=style_system,
+        style_integrator_user_prompt=style_user,
+        page_prompt_template=page_prompt_template,
     )
 
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT) as mock_script,
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT) as mock_integrate,
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
     ):
         result = await pipeline.run()
@@ -395,11 +446,17 @@ async def test_explicit_prompt_overrides_are_copied_into_version(tmp_path):
     version_dir = Path(result["version_dir"])
     assert (version_dir / SCRIPTWRITER_SYSTEM_PROMPT_FILENAME).read_text(encoding="utf-8") == "SYSTEM OVERRIDE"
     assert (version_dir / SCRIPTWRITER_USER_PROMPT_FILENAME).read_text(encoding="utf-8") == "USER OVERRIDE"
-    assert (version_dir / PAGE_PROMPT_TEMPLATE_FILENAME).read_text(encoding="utf-8") == "PAGE OVERRIDE"
+    assert (version_dir / STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME).read_text(encoding="utf-8") == "STYLE SYSTEM OVERRIDE"
+    assert (version_dir / STYLE_INTEGRATOR_USER_PROMPT_FILENAME).read_text(encoding="utf-8") == "STYLE USER OVERRIDE"
+    assert (version_dir / PAGE_PROMPT_TEMPLATE_FILENAME).read_text(encoding="utf-8") == "CUSTOM PAGE PROMPT: {panel_count}"
 
     _, script_kwargs = mock_script.call_args
     assert script_kwargs["system_prompt_path"] == version_dir / SCRIPTWRITER_SYSTEM_PROMPT_FILENAME
     assert script_kwargs["user_prompt_path"] == version_dir / SCRIPTWRITER_USER_PROMPT_FILENAME
+
+    _, style_kwargs = mock_integrate.call_args
+    assert style_kwargs["system_prompt_path"] == version_dir / STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME
+    assert style_kwargs["user_prompt_path"] == version_dir / STYLE_INTEGRATOR_USER_PROMPT_FILENAME
 
     _, prompt_kwargs = mock_prompts.call_args
     assert prompt_kwargs["page_prompt_template_path"] == version_dir / PAGE_PROMPT_TEMPLATE_FILENAME
@@ -419,6 +476,7 @@ async def test_first_run_result_contains_model_dump_dicts(tmp_path):
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT),
     ):
         result = await pipeline.run()
@@ -426,6 +484,7 @@ async def test_first_run_result_contains_model_dump_dicts(tmp_path):
     assert isinstance(result["raw_text"], dict)
     assert isinstance(result["entities"], dict)
     assert isinstance(result["script"], dict)
+    assert isinstance(result["styled_script"], dict)
     assert isinstance(result["page_prompt"], dict)
     assert result["errors"] == []
     assert result["raw_text"]["url"] == "https://example.test/story"
@@ -446,6 +505,7 @@ async def test_first_run_forwards_explicit_recap_version_to_scraper(tmp_path):
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT) as mock_scrape,
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT),
     ):
         await pipeline.run()
@@ -475,6 +535,7 @@ async def test_run_skips_all_phases_when_all_checkpoints_exist(tmp_path):
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock) as mock_scrape,
         patch("pipeline.build_entities_from_raw") as mock_entities,
         patch("pipeline.write_script") as mock_script,
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt") as mock_prompts,
     ):
         result = await pipeline.run()
@@ -502,6 +563,7 @@ async def test_cached_raw_recap_switch_updates_content_and_reruns_downstream(tmp
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock) as mock_scrape,
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT) as mock_entities,
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT) as mock_script,
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
     ):
         result = await pipeline.run()
@@ -534,6 +596,7 @@ async def test_rerun_from_entities_skips_scraper_reruns_rest(tmp_path):
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock) as mock_scrape,
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT) as mock_entities,
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT) as mock_script,
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT) as mock_integrate,
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
     ):
         result = await pipeline.run()
@@ -541,6 +604,37 @@ async def test_rerun_from_entities_skips_scraper_reruns_rest(tmp_path):
     mock_scrape.assert_not_awaited()
     mock_entities.assert_called_once()
     mock_script.assert_called_once()
+    mock_integrate.assert_called_once()
+    mock_prompts.assert_called_once()
+    assert result["version"] == "v002"
+
+
+@pytest.mark.asyncio
+async def test_rerun_from_style_only_reruns_style_and_prompt(tmp_path):
+    """rerun_from=style: only style integration and prompt generation are called."""
+    _make_episode(tmp_path, "dreadmarsh", "https://example.test/story", "Dreadmarsh Crossing")
+
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=2,
+        rerun_from="style",
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock) as mock_scrape,
+        patch("pipeline.build_entities_from_raw") as mock_entities,
+        patch("pipeline.write_script") as mock_script,
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT) as mock_integrate,
+        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
+    ):
+        result = await pipeline.run()
+
+    mock_scrape.assert_not_awaited()
+    mock_entities.assert_not_called()
+    mock_script.assert_not_called()
+    mock_integrate.assert_called_once()
     mock_prompts.assert_called_once()
     assert result["version"] == "v002"
 
@@ -562,6 +656,7 @@ async def test_rerun_from_prompt_only_reruns_prompt(tmp_path):
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock) as mock_scrape,
         patch("pipeline.build_entities_from_raw") as mock_entities,
         patch("pipeline.write_script") as mock_script,
+        patch("pipeline.integrate_style") as mock_integrate,
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
     ):
         result = await pipeline.run()
@@ -569,7 +664,67 @@ async def test_rerun_from_prompt_only_reruns_prompt(tmp_path):
     mock_scrape.assert_not_awaited()
     mock_entities.assert_not_called()
     mock_script.assert_not_called()
+    mock_integrate.assert_not_called()
     mock_prompts.assert_called_once()
+    assert result["version"] == "v002"
+
+
+@pytest.mark.asyncio
+async def test_skip_style_bypasses_integrator_and_prompts_from_script(tmp_path):
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=2,
+        skip_style=True,
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
+        patch("pipeline.integrate_style") as mock_integrate,
+        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
+    ):
+        result = await pipeline.run()
+
+    mock_integrate.assert_not_called()
+    mock_prompts.assert_called_once()
+    _, prompt_kwargs = mock_prompts.call_args
+    assert prompt_kwargs["script_checkpoint_path"] == Path(result["version_dir"]) / "03_script.json"
+    assert result["styled_script"] is not None
+    assert result["styled_script"]["panels"] == result["script"]["panels"]
+
+
+@pytest.mark.asyncio
+async def test_rerun_from_style_with_skip_style_reruns_prompt_only(tmp_path):
+    _make_episode(tmp_path, "dreadmarsh", "https://example.test/story", "Dreadmarsh Crossing")
+
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=2,
+        rerun_from="style",
+        skip_style=True,
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock) as mock_scrape,
+        patch("pipeline.build_entities_from_raw") as mock_entities,
+        patch("pipeline.write_script") as mock_script,
+        patch("pipeline.integrate_style") as mock_integrate,
+        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
+    ):
+        result = await pipeline.run()
+
+    mock_scrape.assert_not_awaited()
+    mock_entities.assert_not_called()
+    mock_script.assert_not_called()
+    mock_integrate.assert_not_called()
+    mock_prompts.assert_called_once()
+    _, prompt_kwargs = mock_prompts.call_args
+    assert prompt_kwargs["script_checkpoint_path"] == Path(result["version_dir"]) / "03_script.json"
     assert result["version"] == "v002"
 
 
@@ -607,6 +762,7 @@ async def test_same_url_different_title_maps_to_existing_episode(tmp_path):
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=changed_title_raw),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT),
     ):
         result = await pipeline.run()
@@ -682,6 +838,7 @@ async def test_campaign_level_art_template_is_used_by_default(tmp_path):
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
     ):
         result = await pipeline.run()
@@ -708,6 +865,7 @@ async def test_campaign_art_template_is_created_on_first_run(tmp_path):
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
     ):
         result = await pipeline.run()
@@ -753,6 +911,7 @@ async def test_explicit_art_template_overrides_campaign_default(tmp_path):
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
     ):
         result = await pipeline.run()
@@ -781,6 +940,7 @@ async def test_entities_phase_uses_scraper_direct_label(tmp_path):
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT) as mock_entities,
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT),
     ):
         await pipeline.run()
@@ -803,6 +963,7 @@ async def test_script_model_and_panel_count_forwarded(tmp_path):
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT) as mock_script,
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT),
     ):
         await pipeline.run()
@@ -810,6 +971,29 @@ async def test_script_model_and_panel_count_forwarded(tmp_path):
     _, kwargs = mock_script.call_args
     assert kwargs.get("model") == "llama3.1:8b"
     assert kwargs.get("panel_count") == 8
+
+
+@pytest.mark.asyncio
+async def test_style_model_forwarded(tmp_path):
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        style_model="llama3.2:latest",
+        panel_count=2,
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT) as mock_integrate,
+        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT),
+    ):
+        await pipeline.run()
+
+    _, kwargs = mock_integrate.call_args
+    assert kwargs.get("model") == "llama3.2:latest"
 
 
 # ---------------------------------------------------------------------------
@@ -831,16 +1015,75 @@ async def test_script_failure_does_not_crash_pipeline(tmp_path):
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
         patch("pipeline.write_script", side_effect=ValueError("Continuity break")),
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
     ):
         result = await pipeline.run()
 
     assert result["script"] is None
+    assert result["styled_script"] is None
     assert result["page_prompt"] is None
     assert result["errors"] == ["script: Continuity break"]
     mock_prompts.assert_not_called()
     assert result["raw_text"] is not None
     assert result["entities"] is not None
+
+
+@pytest.mark.asyncio
+async def test_style_failure_does_not_crash_pipeline(tmp_path):
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=2,
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
+        patch("pipeline.integrate_style", side_effect=ValueError("Style rewrite failed")),
+        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
+    ):
+        result = await pipeline.run()
+
+    assert result["script"] is not None
+    assert result["styled_script"] is None
+    assert result["page_prompt"] is None
+    assert result["errors"] == ["style: Style rewrite failed"]
+    mock_prompts.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_partial_style_failure_records_error_and_continues_to_prompt(tmp_path):
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=2,
+    )
+
+    partial_error = StyleIntegrationPartialFailure(
+        "Style integration left panels unchanged: [2]. Every panel must be visibly rewritten.",
+        checkpoint=_STYLED_SCRIPT_CHECKPOINT,
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
+        patch("pipeline.integrate_style", side_effect=partial_error),
+        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
+    ):
+        result = await pipeline.run()
+
+    assert result["script"] is not None
+    assert result["styled_script"] is not None
+    assert result["page_prompt"] is not None
+    assert result["errors"] == [
+        "style: Style integration left panels unchanged: [2]. Every panel must be visibly rewritten."
+    ]
+    mock_prompts.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -866,6 +1109,7 @@ async def test_out_of_range_panel_count_records_error_but_continues(tmp_path):
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
         patch("pipeline.write_script", return_value=out_of_range_script),
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
     ):
         result = await pipeline.run()
