@@ -214,7 +214,7 @@ def test_integrate_style_passes_art_template_to_generator(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_integrate_style_raises_if_generator_returns_extra_panels(tmp_path):
+def test_integrate_style_logs_if_generator_returns_extra_panels(tmp_path):
     script_path = _write_script_checkpoint(tmp_path)
     art_path = _write_art_template(tmp_path)
     output_path = tmp_path / "03_5_styled_script.json"
@@ -227,34 +227,38 @@ def test_integrate_style_raises_if_generator_returns_extra_panels(tmp_path):
         )
     ])
 
-    with pytest.raises(ValueError, match=r"expected=\[1, 2\], received=\[1, 2, 99\]"):
-        style_integrator.integrate_style(
-            script_checkpoint_path=script_path,
-            art_style_template_path=art_path,
-            output_path=output_path,
-            max_generation_attempts=1,
-            generator=lambda _s, _a, _m: extra_payload,
-        )
+    checkpoint = style_integrator.integrate_style(
+        script_checkpoint_path=script_path,
+        art_style_template_path=art_path,
+        output_path=output_path,
+        generator=lambda _s, _a, _m: extra_payload,
+    )
+
+    assert checkpoint.panels[0].setting == "Marsh edge at dusk"
+    assert len(checkpoint.generation_errors) == 2
+    assert "Styled panel validation failed" in checkpoint.generation_errors[0]
 
 
-def test_integrate_style_raises_if_generator_returns_fewer_panels(tmp_path):
+def test_integrate_style_logs_if_generator_returns_fewer_panels(tmp_path):
     script_path = _write_script_checkpoint(tmp_path)
     art_path = _write_art_template(tmp_path)
     output_path = tmp_path / "03_5_styled_script.json"
 
     short_payload = style_integrator.StyledScriptPayload(panels=_styled_payload().panels[:1])
 
-    with pytest.raises(ValueError, match=r"expected=\[1, 2\], received=\[1\]"):
-        style_integrator.integrate_style(
-            script_checkpoint_path=script_path,
-            art_style_template_path=art_path,
-            output_path=output_path,
-            max_generation_attempts=1,
-            generator=lambda _s, _a, _m: short_payload,
-        )
+    checkpoint = style_integrator.integrate_style(
+        script_checkpoint_path=script_path,
+        art_style_template_path=art_path,
+        output_path=output_path,
+        generator=lambda _s, _a, _m: short_payload,
+    )
+
+    assert checkpoint.panels[1].setting == "Narrow path between reeds"
+    assert len(checkpoint.generation_errors) == 2
+    assert "Styled panel validation failed" in checkpoint.generation_errors[0]
 
 
-def test_integrate_style_raises_partial_failure_and_writes_checkpoint_if_a_panel_is_unchanged(tmp_path):
+def test_integrate_style_logs_partial_failure_and_writes_checkpoint_if_a_panel_is_unchanged(tmp_path):
     script_path = _write_script_checkpoint(tmp_path)
     art_path = _write_art_template(tmp_path)
     output_path = tmp_path / "03_5_styled_script.json"
@@ -274,21 +278,18 @@ def test_integrate_style_raises_partial_failure_and_writes_checkpoint_if_a_panel
         ]
     )
 
-    with pytest.raises(
-        style_integrator.StyleIntegrationPartialFailure,
-        match=r"left panels unchanged: \[1\]",
-    ) as exc_info:
-        style_integrator.integrate_style(
-            script_checkpoint_path=script_path,
-            art_style_template_path=art_path,
-            output_path=output_path,
-            max_generation_attempts=1,
-            generator=lambda _s, _a, _m: unchanged_payload,
-        )
+    checkpoint = style_integrator.integrate_style(
+        script_checkpoint_path=script_path,
+        art_style_template_path=art_path,
+        output_path=output_path,
+        generator=lambda _s, _a, _m: unchanged_payload,
+    )
 
     assert output_path.exists()
-    assert exc_info.value.checkpoint.panel_count == 2
-    assert exc_info.value.checkpoint.panels[0].setting == "Marsh edge at dusk"
+    assert checkpoint.panel_count == 2
+    assert checkpoint.panels[0].setting == "Marsh edge at dusk"
+    assert len(checkpoint.generation_errors) == 1
+    assert "left panels unchanged: [1]" in checkpoint.generation_errors[0]
 
 
 # ---------------------------------------------------------------------------

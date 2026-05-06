@@ -199,15 +199,12 @@ def write_script(
     output_path: Path = Path("campaigns/<campaign>/<episode>/v001/03_script.json"),
     model: str = "qwen2.5:7b",
     panel_count: int = 6,
-    max_generation_attempts: int = 3,
     system_prompt_path: Path | None = None,
     user_prompt_path: Path | None = None,
     generator: ScriptGenerator | None = None,
 ) -> ScriptCheckpoint:
     if panel_count < 1:
         raise ValueError("panel_count must be >= 1")
-    if max_generation_attempts < 1:
-        raise ValueError("max_generation_attempts must be >= 1")
 
     raw = RawTextCheckpoint.model_validate_json(raw_checkpoint_path.read_text(encoding="utf-8"))
     world = WorldStateInput.model_validate_json(entities_checkpoint_path.read_text(encoding="utf-8"))
@@ -219,43 +216,27 @@ def write_script(
     else:
         generate_fn = generator
 
-    panels: list[Panel] | None = None
-    for attempt in range(1, max_generation_attempts + 1):
-        try:
-            if generate_fn is None:
-                payload = _generate_with_instructor_ollama(
-                    raw.content,
-                    world,
-                    [(quote.text, quote.attribution) for quote in raw.quotes],
-                    model,
-                    panel_plan,
-                    system_prompt_path=system_prompt_path,
-                    user_prompt_path=user_prompt_path,
-                )
-            else:
-                payload = generate_fn(raw.content, world, model, panel_count)
-        except Exception as exc:
-            generation_error = (
-                f"Attempt {attempt}/{max_generation_attempts}: generation failed before validation: {exc}"
+    try:
+        if generate_fn is None:
+            payload = _generate_with_instructor_ollama(
+                raw.content,
+                world,
+                [(quote.text, quote.attribution) for quote in raw.quotes],
+                model,
+                panel_plan,
+                system_prompt_path=system_prompt_path,
+                user_prompt_path=user_prompt_path,
             )
-            if attempt < max_generation_attempts:
-                generation_errors.append(f"{generation_error} Retrying.")
-                continue
-            raise RuntimeError(generation_error) from exc
+        else:
+            payload = generate_fn(raw.content, world, model, panel_count)
+    except Exception as exc:
+        raise RuntimeError(f"Generation failed before validation: {exc}") from exc
 
-        candidate_panels = _normalize_panels(payload.panels)
-        try:
-            _validate_item_continuity(candidate_panels)
-        except ValueError:
-            if attempt == max_generation_attempts:
-                raise
-            continue
-
-        panels = candidate_panels
-        break
-
-    if panels is None:
-        raise RuntimeError("Script generation failed unexpectedly without validation errors.")
+    panels = _normalize_panels(payload.panels)
+    try:
+        _validate_item_continuity(panels)
+    except ValueError as exc:
+        generation_errors.append(f"Continuity validation failed: {exc}. Accepting validation failure.")
 
     checkpoint = ScriptCheckpoint(
         url=raw.url,
@@ -304,13 +285,6 @@ def _run_cli() -> None:
         type=int,
         help="Target number of comic panels (soft target; final count may vary by ±1)",
     )
-    parser.add_argument(
-        "--max-generation-attempts",
-        default=3,
-        type=int,
-        help="Number of generation attempts before failing validation",
-    )
-
     args = parser.parse_args()
     checkpoint = write_script(
         raw_checkpoint_path=Path(args.raw_input),
@@ -318,7 +292,6 @@ def _run_cli() -> None:
         output_path=Path(args.output),
         model=args.model,
         panel_count=args.panel_count,
-        max_generation_attempts=args.max_generation_attempts,
     )
     print(f"Saved {len(checkpoint.panels)} panels to {args.output}")
 

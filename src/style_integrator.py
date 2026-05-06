@@ -159,47 +159,47 @@ def integrate_style(
     model: str = "qwen2.5:7b",
     system_prompt_path: Path | None = None,
     user_prompt_path: Path | None = None,
-    max_generation_attempts: int = 3,
     generator: StyleGenerator | None = None,
 ) -> ScriptCheckpoint:
-    if max_generation_attempts < 1:
-        raise ValueError("max_generation_attempts must be >= 1")
-
     script = ScriptCheckpoint.model_validate_json(
         script_checkpoint_path.read_text(encoding="utf-8")
     )
     art_template = _load_art_template(art_style_template_path)
+    generation_errors: list[str] = []
 
-    styled_panels: list[StyledPanelRewrite] | None = None
-    unchanged_indices: list[int] = []
-    for attempt in range(1, max_generation_attempts + 1):
-        if generator is not None:
-            payload = generator(script, art_template, model)
-        else:
-            payload = _generate_with_instructor_ollama(
-                script,
-                art_template,
-                model,
-                system_prompt_path=system_prompt_path,
-                user_prompt_path=user_prompt_path,
-            )
+    if generator is not None:
+        payload = generator(script, art_template, model)
+    else:
+        payload = _generate_with_instructor_ollama(
+            script,
+            art_template,
+            model,
+            system_prompt_path=system_prompt_path,
+            user_prompt_path=user_prompt_path,
+        )
 
-        try:
-            _validate_styled_panels(payload.panels, script.panels)
-        except ValueError:
-            if attempt == max_generation_attempts:
-                raise
-            continue
-
-        unchanged_indices = _find_unchanged_panel_indices(payload.panels, script.panels)
-        if unchanged_indices and attempt < max_generation_attempts:
-            continue
-
+    try:
+        _validate_styled_panels(payload.panels, script.panels)
         styled_panels = payload.panels
-        break
+    except ValueError as exc:
+        generation_errors.append(
+            f"Styled panel validation failed: {exc}. Accepting validation failure by using source panel prose."
+        )
+        styled_panels = [
+            StyledPanelRewrite(
+                index=panel.index,
+                setting=panel.setting,
+                visual_action=panel.visual_action,
+            )
+            for panel in script.panels
+        ]
 
-    if styled_panels is None:
-        raise RuntimeError("Style integration failed unexpectedly without validation errors.")
+    unchanged_indices = _find_unchanged_panel_indices(styled_panels, script.panels)
+    if unchanged_indices:
+        generation_errors.append(
+            "Style integration left panels unchanged: "
+            f"{unchanged_indices}. Accepting unchanged panels."
+        )
 
     panels = _normalize_panels_from_source(styled_panels, script.panels)
 
@@ -210,7 +210,7 @@ def integrate_style(
         model=model,
         panel_count=len(panels),
         panels=panels,
-        generation_errors=[],
+        generation_errors=generation_errors,
         scripted_at=datetime.now(timezone.utc).isoformat(),
     )
 
@@ -219,13 +219,6 @@ def integrate_style(
         json.dumps(checkpoint.model_dump(), indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
-
-    if unchanged_indices:
-        raise StyleIntegrationPartialFailure(
-            "Style integration left panels unchanged: "
-            f"{unchanged_indices}. Every panel must be visibly rewritten.",
-            checkpoint=checkpoint,
-        )
 
     return checkpoint
 

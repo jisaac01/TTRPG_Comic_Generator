@@ -2,8 +2,6 @@ import json
 import sys
 from pathlib import Path
 
-import pytest
-
 sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
 import scriptwriter
@@ -134,7 +132,6 @@ def test_write_script_accepts_any_panel_count_without_error(tmp_path):
         entities_checkpoint_path=entities_path,
         output_path=tmp_path / "03_script.json",
         panel_count=3,
-        max_generation_attempts=1,
         generator=fake_generator,
     )
 
@@ -142,48 +139,24 @@ def test_write_script_accepts_any_panel_count_without_error(tmp_path):
     assert len(checkpoint.generation_errors) == 0
 
 
-def test_write_script_retries_on_continuity_error_and_succeeds(tmp_path):
+def test_write_script_logs_continuity_error_and_keeps_output(tmp_path):
     raw_path, entities_path = _write_input_checkpoints(tmp_path)
-    attempts = {"count": 0}
-
     def fake_generator(_content, _world, _model, _panel_count):
-        attempts["count"] += 1
-        if attempts["count"] == 1:
-            broken = _valid_payload()
-            broken.panels[1].held_items_before["Del"] = []
-            return broken
-        return _valid_payload()
+        broken = _valid_payload()
+        broken.panels[1].held_items_before["Del"] = []
+        return broken
 
     checkpoint = scriptwriter.write_script(
         raw_checkpoint_path=raw_path,
         entities_checkpoint_path=entities_path,
         output_path=tmp_path / "03_script.json",
         panel_count=3,
-        max_generation_attempts=3,
         generator=fake_generator,
     )
 
-    assert attempts["count"] == 2
     assert len(checkpoint.panels) == 3
-    assert len(checkpoint.generation_errors) == 0
-
-
-def test_write_script_raises_on_continuity_break(tmp_path):
-    raw_path, entities_path = _write_input_checkpoints(tmp_path)
-
-    def fake_generator(_content, _world, _model, _panel_count):
-        broken = _valid_payload()
-        broken.panels[1].held_items_before["Del"] = []
-        return broken
-
-    with pytest.raises(ValueError, match="Continuity break"):
-        scriptwriter.write_script(
-            raw_checkpoint_path=raw_path,
-            entities_checkpoint_path=entities_path,
-            output_path=tmp_path / "03_script.json",
-            panel_count=3,
-            generator=fake_generator,
-        )
+    assert len(checkpoint.generation_errors) == 1
+    assert "Continuity validation failed" in checkpoint.generation_errors[0]
 
 
 def test_write_script_allows_added_items_between_panels(tmp_path):
@@ -225,7 +198,7 @@ def test_write_script_allows_missing_character_when_inventory_empty(tmp_path):
     assert checkpoint.panel_count == 3
 
 
-def test_write_script_raises_when_missing_character_with_items(tmp_path):
+def test_write_script_logs_when_missing_character_with_items(tmp_path):
     raw_path, entities_path = _write_input_checkpoints(tmp_path)
 
     def fake_generator(_content, _world, _model, _panel_count):
@@ -234,14 +207,16 @@ def test_write_script_raises_when_missing_character_with_items(tmp_path):
         payload.panels[1].held_items_before.pop("Del", None)
         return payload
 
-    with pytest.raises(ValueError, match="missing held_items_before for Del"):
-        scriptwriter.write_script(
-            raw_checkpoint_path=raw_path,
-            entities_checkpoint_path=entities_path,
-            output_path=tmp_path / "03_script.json",
-            panel_count=3,
-            generator=fake_generator,
-        )
+    checkpoint = scriptwriter.write_script(
+        raw_checkpoint_path=raw_path,
+        entities_checkpoint_path=entities_path,
+        output_path=tmp_path / "03_script.json",
+        panel_count=3,
+        generator=fake_generator,
+    )
+
+    assert len(checkpoint.generation_errors) == 1
+    assert "missing held_items_before for Del" in checkpoint.generation_errors[0]
 
 
 def test_write_script_passes_panel_count_to_generator(tmp_path):
