@@ -17,7 +17,14 @@ from entities import (
 from prompter import (
     ART_DIRECTION_TEMPLATE_FILENAME,
     DEFAULT_ART_DIRECTION_TEMPLATE_PATH,
+    _load_art_template,
     generate_page_prompt,
+)
+from prompt_saver import (
+    prepare_architect_prompts,
+    prepare_page_prompt_template,
+    prepare_scriptwriter_prompts,
+    prepare_style_integrator_prompts,
 )
 from prompt_templates import (
     DEFAULT_PROMPTS_DIR,
@@ -30,6 +37,7 @@ from prompt_templates import (
     STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME,
     STYLE_INTEGRATOR_USER_PROMPT_FILENAME,
 )
+from scriptwriter import WorldStateInput
 from style_integrator import StyleIntegrationPartialFailure, integrate_style
 from scraper import RawTextCheckpoint, normalize_recap_version, scrape_scrybequill
 from scriptwriter import ScriptCheckpoint, write_script
@@ -507,6 +515,17 @@ class ComicPipeline:
                 f"[3/5] Building story architecture...  (model: {self.architect_model}, panels: {self.panel_count})"
             )
             try:
+                # Prepare and save prompts before model call
+                prepare_architect_prompts(
+                    version_dir=version_dir,
+                    world=entities,
+                    panel_count=self.panel_count,
+                    system_prompt_path=prompt_template_paths[STORY_ARCHITECT_SYSTEM_PROMPT_FILENAME],
+                    user_prompt_path=prompt_template_paths[STORY_ARCHITECT_USER_PROMPT_FILENAME],
+                )
+            except Exception as exc:
+                print(f"      ...WARNING (failed to save interpolated prompts): {exc}")
+            try:
                 story_architecture = architect_story(
                     raw_checkpoint_path=raw_path,
                     entities_checkpoint_path=entities_path,
@@ -533,6 +552,19 @@ class ComicPipeline:
             script = ScriptCheckpoint.model_validate_json(script_path.read_text(encoding="utf-8"))
         else:
             print(f"[4/5] Writing script...  (model: {self.script_model})")
+            try:
+                # Prepare and save prompts before model call
+                prepare_scriptwriter_prompts(
+                    version_dir=version_dir,
+                    world=cast(WorldStateInput, entities),
+                    architecture=story_architecture,
+                    content=raw.content,
+                    raw_quotes=[(quote.text, quote.attribution) for quote in raw.quotes],
+                    system_prompt_path=prompt_template_paths[SCRIPTWRITER_SYSTEM_PROMPT_FILENAME],
+                    user_prompt_path=prompt_template_paths[SCRIPTWRITER_USER_PROMPT_FILENAME],
+                )
+            except Exception as exc:
+                print(f"      ...WARNING (failed to save interpolated prompts): {exc}")
             try:
                 script = write_script(
                     raw_checkpoint_path=raw_path,
@@ -569,6 +601,18 @@ class ComicPipeline:
             template_path = self._capture_art_template_for_version(template_path, version_dir)
             print(f"[4.5/5] Integrating art style...  (model: {self.style_model}, template: {template_path})")
             try:
+                # Prepare and save prompts before model call
+                art_template = _load_art_template(template_path)
+                prepare_style_integrator_prompts(
+                    version_dir=version_dir,
+                    script=script,
+                    art_template=art_template,
+                    system_prompt_path=prompt_template_paths[STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME],
+                    user_prompt_path=prompt_template_paths[STYLE_INTEGRATOR_USER_PROMPT_FILENAME],
+                )
+            except Exception as exc:
+                print(f"      ...WARNING (failed to save interpolated prompts): {exc}")
+            try:
                 styled_script = integrate_style(
                     script_checkpoint_path=script_path,
                     art_style_template_path=template_path,
@@ -596,6 +640,21 @@ class ComicPipeline:
             template_path = self._capture_art_template_for_version(template_path, version_dir)
             prompt_script_path = script_path if self.skip_style else styled_script_path
             print(f"[5/5] Generating page prompt...  (template: {template_path})")
+            if prompt_script_path.exists():
+                try:
+                    prompt_script = ScriptCheckpoint.model_validate_json(
+                        prompt_script_path.read_text(encoding="utf-8")
+                    )
+                    art_template = _load_art_template(template_path)
+                    prepare_page_prompt_template(
+                        version_dir=version_dir,
+                        world=entities,
+                        script=prompt_script,
+                        art_template=art_template,
+                        template_path=prompt_template_paths[PAGE_PROMPT_TEMPLATE_FILENAME],
+                    )
+                except Exception as exc:
+                    print(f"      ...WARNING (failed to save interpolated prompts): {exc}")
             try:
                 page_prompt = generate_page_prompt(
                     script_checkpoint_path=prompt_script_path,
