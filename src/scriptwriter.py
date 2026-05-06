@@ -84,7 +84,14 @@ def _format_entities_for_prompt(
     locations_blob = "\n".join(
         f"- {location.name}: {location.appearance}" for location in world.locations
     )
-    beats_blob = "\n".join(f"- Beat {beat.index}: {beat.text}" for beat in world.beats)
+    beats_parts: list[str] = []
+    for beat in world.beats:
+        beat_str = f"- Beat {beat.index}: {beat.beat}"
+        if beat.highlights:
+            highlights_str = ", ".join(beat.highlights)
+            beat_str += f" ({highlights_str})"
+        beats_parts.append(beat_str)
+    beats_blob = "\n".join(beats_parts)
 
     quote_lines: list[str] = []
 

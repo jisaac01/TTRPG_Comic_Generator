@@ -40,7 +40,8 @@ def _write_input_checkpoints(tmp_path: Path) -> tuple[Path, Path]:
         "beats": [
             {
                 "index": 1,
-                "text": "The party enters the marsh at dusk.",
+                "beat": "The party enters the marsh at dusk.",
+                "highlights": ["The party enters the marsh at dusk."],
             }
         ],
         "analyzed_at": "2026-05-04T00:00:00+00:00",
@@ -224,10 +225,10 @@ def test_write_script_passes_panel_count_to_generator(tmp_path):
 
     payload = json.loads(entities_path.read_text(encoding="utf-8"))
     payload["beats"] = [
-        {"index": 1, "text": "Beat one."},
-        {"index": 2, "text": "Beat two."},
-        {"index": 3, "text": "Beat three."},
-        {"index": 4, "text": "Beat four."},
+            {"index": 1, "beat": "Beat one.", "highlights": ["Beat one."]},
+            {"index": 2, "beat": "Beat two.", "highlights": ["Beat two."]},
+            {"index": 3, "beat": "Beat three.", "highlights": ["Beat three."]},
+            {"index": 4, "beat": "Beat four.", "highlights": ["Beat four."]},
     ]
     entities_path.write_text(json.dumps(payload), encoding="utf-8")
 
@@ -272,7 +273,8 @@ def test_format_entities_for_prompt_includes_quotes():
         beats=[
             scriptwriter.StoryBeat(
                 index=1,
-                text="The party reaches the old bridge.",
+                beat="The party reaches the old bridge.",
+                highlights=["The party reaches the old bridge."],
             )
         ],
         analyzed_at="2026-05-04T00:00:00+00:00",
@@ -298,7 +300,8 @@ def test_format_entities_for_prompt_empty_raw_quotes():
         beats=[
             scriptwriter.StoryBeat(
                 index=1,
-                text="The party reaches the old bridge.",
+                beat="The party reaches the old bridge.",
+                highlights=["The party reaches the old bridge."],
             )
         ],
         analyzed_at="2026-05-04T00:00:00+00:00",

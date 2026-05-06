@@ -38,8 +38,8 @@ def _write_inputs(tmp_path: Path) -> tuple[Path, Path, Path]:
         "beats": [
             {
                 "index": 1,
-                "text": "The party enters the marsh at dusk.",
-                "quotes": [],
+                "beat": "The party enters the marsh at dusk.",
+                "highlights": ["The party enters the marsh at dusk."],
             }
         ],
         "analyzed_at": "2026-05-04T00:00:00+00:00",

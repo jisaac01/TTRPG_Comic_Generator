@@ -187,15 +187,16 @@ def test_build_beats_uses_outline_entries():
     raw = _make_raw(outline=["### Beat one", "### Beat two", "### Beat three"])
     beats = _build_beats(raw)
     assert [b.index for b in beats] == [1, 2, 3]
-    assert [b.text for b in beats] == ["Beat one", "Beat two", "Beat three"]
+    assert [b.beat for b in beats] == ["Beat one", "Beat two", "Beat three"]
+    assert all(b.highlights == [b.beat] for b in beats)
 
 
 def test_build_beats_skips_blank_outline_entries():
     raw = _make_raw(outline=["### Beat one", "  ", "### Beat three"])
     beats = _build_beats(raw)
     assert len(beats) == 2
-    assert beats[0].text == "Beat one"
-    assert beats[1].text == "Beat three"
+    assert beats[0].beat == "Beat one"
+    assert beats[1].beat == "Beat three"
 
 
 def test_build_beats_falls_back_to_content_when_outline_empty():
@@ -203,13 +204,15 @@ def test_build_beats_falls_back_to_content_when_outline_empty():
     beats = _build_beats(raw)
     assert len(beats) == 1
     assert beats[0].index == 1
-    assert beats[0].text == "Del crossed the marsh."
+    assert beats[0].beat == "Del crossed the marsh."
+    assert beats[0].highlights == ["Del crossed the marsh."]
 
 
 def test_build_beats_normalizes_content_whitespace():
     raw = _make_raw(content="Del  crossed\n\nthe   marsh.", outline=[])
     beats = _build_beats(raw)
-    assert beats[0].text == "Del crossed the marsh."
+    assert beats[0].beat == "Del crossed the marsh."
+    assert beats[0].highlights == ["Del crossed the marsh."]
 
 
 def test_build_beats_groups_details_under_heading():
@@ -222,15 +225,18 @@ def test_build_beats_groups_details_under_heading():
     ])
     beats = _build_beats(raw)
     assert len(beats) == 2
-    assert beats[0].text == "The Curse Begins\nThe party was afflicted.\nThey must find five ingredients."
-    assert beats[1].text == "Into the Swamp\nThey avoided the crocodile temple."
+    assert beats[0].beat == "The Curse Begins"
+    assert beats[0].highlights == ["The party was afflicted.", "They must find five ingredients."]
+    assert beats[1].beat == "Into the Swamp"
+    assert beats[1].highlights == ["They avoided the crocodile temple."]
 
 
 def test_build_beats_heading_only_no_details():
     raw = _make_raw(outline=["### Solo Beat"])
     beats = _build_beats(raw)
     assert len(beats) == 1
-    assert beats[0].text == "Solo Beat"
+    assert beats[0].beat == "Solo Beat"
+    assert beats[0].highlights == ["Solo Beat"]
 
 
 def test_build_beats_falls_back_when_no_headings_in_outline():
@@ -238,7 +244,8 @@ def test_build_beats_falls_back_when_no_headings_in_outline():
     raw = _make_raw(content="Del crossed the marsh.", outline=["plain line"])
     beats = _build_beats(raw)
     assert len(beats) == 1
-    assert beats[0].text == "Del crossed the marsh."
+    assert beats[0].beat == "Del crossed the marsh."
+    assert beats[0].highlights == ["Del crossed the marsh."]
 
 
 # ---------------------------------------------------------------------------
@@ -272,7 +279,7 @@ def test_build_entities_from_raw_writes_valid_checkpoint(tmp_path):
     assert len(checkpoint.locations) == 1
     assert checkpoint.locations[0].name == "Marsh"
     assert len(checkpoint.beats) == 1
-    assert checkpoint.beats[0].text == "The party departs"
+    assert checkpoint.beats[0].beat == "The party departs"
 
 
 def test_build_entities_from_raw_checkpoint_json_is_valid(tmp_path):

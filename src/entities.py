@@ -26,7 +26,8 @@ class Location(BaseModel):
 
 class StoryBeat(BaseModel):
     index: int = Field(ge=1)
-    text: str = Field(min_length=1)
+    beat: str = Field(min_length=1)
+    highlights: list[str] = Field(min_length=1)
 
 
 class WorldStateCheckpoint(BaseModel):
@@ -106,7 +107,7 @@ def _build_beats(raw: RawTextCheckpoint) -> list[StoryBeat]:
     """Convert outline entries to StoryBeats.
 
     Outline items starting with '### ' begin a new beat; all subsequent
-    non-heading items are detail lines appended to that beat's text.
+    non-heading items are detail lines (highlights) under that beat.
 
     Falls back to a single beat wrapping the full recap content when the
     outline is empty or contains no headings.
@@ -118,8 +119,8 @@ def _build_beats(raw: RawTextCheckpoint) -> list[StoryBeat]:
     def _flush(index: int) -> None:
         if current_header is None:
             return
-        parts = [current_header] + current_details
-        beats.append(StoryBeat(index=index, text="\n".join(parts)))
+        highlights = current_details if current_details else [current_header]
+        beats.append(StoryBeat(index=index, beat=current_header, highlights=highlights))
 
     beat_index = 1
     for item in raw.outline:
@@ -140,7 +141,8 @@ def _build_beats(raw: RawTextCheckpoint) -> list[StoryBeat]:
     if beats:
         return beats
 
-    return [StoryBeat(index=1, text=" ".join(raw.content.split()))]
+    fallback_text = " ".join(raw.content.split())
+    return [StoryBeat(index=1, beat=fallback_text, highlights=[fallback_text])]
 
 
 def build_entities_from_raw(

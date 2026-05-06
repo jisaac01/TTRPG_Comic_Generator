@@ -73,8 +73,8 @@ _WORLD_CHECKPOINT = entities.WorldStateCheckpoint(
     beats=[
         entities.StoryBeat(
             index=1,
-            text="Del crosses the marsh.",
-            quotes=[],
+            beat="Del crosses the marsh.",
+            highlights=["Del crosses the marsh."],
         )
     ],
     analyzed_at="2026-05-04T00:00:00+00:00",
