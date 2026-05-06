@@ -520,6 +520,10 @@ class ComicPipeline:
                     version_dir=version_dir,
                     world=entities,
                     panel_count=self.panel_count,
+                    raw_quotes=[
+                        {"text": quote.text, "attribution": quote.attribution}
+                        for quote in raw.quotes
+                    ],
                     system_prompt_path=prompt_template_paths[STORY_ARCHITECT_SYSTEM_PROMPT_FILENAME],
                     user_prompt_path=prompt_template_paths[STORY_ARCHITECT_USER_PROMPT_FILENAME],
                 )
@@ -558,7 +562,6 @@ class ComicPipeline:
                     version_dir=version_dir,
                     world=cast(WorldStateInput, entities),
                     architecture=story_architecture,
-                    raw_quotes=[(quote.text, quote.attribution) for quote in raw.quotes],
                     system_prompt_path=prompt_template_paths[SCRIPTWRITER_SYSTEM_PROMPT_FILENAME],
                     user_prompt_path=prompt_template_paths[SCRIPTWRITER_USER_PROMPT_FILENAME],
                 )

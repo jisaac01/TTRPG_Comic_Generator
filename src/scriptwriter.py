@@ -69,10 +69,7 @@ def _build_instructor_client():
     return instructor.from_openai(openai_client, mode=instructor.Mode.JSON)
 
 
-def _format_entities_for_prompt(
-    world: WorldStateInput,
-    raw_quotes: list[tuple[str, str | None]] | None = None,
-) -> str:
+def _format_entities_for_prompt(world: WorldStateInput) -> str:
     characters_blob = "\n".join(
         f"- {char.name}: {char.description}" for char in world.characters
     )
@@ -88,24 +85,10 @@ def _format_entities_for_prompt(
         beats_parts.append(beat_str)
     beats_blob = "\n".join(beats_parts)
 
-    quote_lines: list[str] = []
-
-    # Prefer quotes from the scraped raw checkpoint because entities no longer
-    # embed quote text under beats.
-    for quote_text, attribution in raw_quotes or []:
-        cleaned_text = " ".join(quote_text.split()).strip()
-        if not cleaned_text:
-            continue
-        speaker = " ".join((attribution or "").split()).strip() or "Unknown"
-        quote_lines.append(f"- {speaker}: \"{cleaned_text}\"")
-
-    quotes_blob = "\n".join(quote_lines)
-
     return (
         f"Characters:\n{characters_blob or '- none'}\n\n"
         f"Locations:\n{locations_blob or '- none'}\n\n"
-        f"Story beats:\n{beats_blob or '- none'}\n\n"
-        f"Reference quotes:\n{quotes_blob or '- none'}"
+        f"Story beats:\n{beats_blob or '- none'}"
     )
 
 
@@ -122,7 +105,8 @@ def _format_story_architecture_for_prompt(architecture: StoryArchitectureCheckpo
                 "panel_shape": panel.panel_shape,
                 "setting_brief": panel.setting_brief,
                 "character_focus": panel.character_focus,
-                "must_include": panel.must_include,
+                "notable_set_dressing": panel.notable_set_dressing,
+                "notable_quotes": [quote.model_dump() for quote in panel.notable_quotes],
                 "dialogue_goals": panel.dialogue_goals,
                 "continuity_notes": panel.continuity_notes,
             }
@@ -133,14 +117,13 @@ def _format_story_architecture_for_prompt(architecture: StoryArchitectureCheckpo
 def _generate_with_instructor_ollama(
     world: WorldStateInput,
     architecture: StoryArchitectureCheckpoint,
-    raw_quotes: list[tuple[str, str | None]],
     model: str,
     system_prompt_path: Path | None = None,
     user_prompt_path: Path | None = None,
 ) -> ScriptPayload:
     client = _build_instructor_client()
     title = world.title or "Untitled story"
-    entities_context = _format_entities_for_prompt(world, raw_quotes)
+    entities_context = _format_entities_for_prompt(world)
 
     system_prompt = render_prompt_template(
         SCRIPTWRITER_SYSTEM_PROMPT_FILENAME,
@@ -244,7 +227,6 @@ def write_script(
             payload = _generate_with_instructor_ollama(
                 world,
                 architecture,
-                [(quote.text, quote.attribution) for quote in raw.quotes],
                 model,
                 system_prompt_path=system_prompt_path,
                 user_prompt_path=user_prompt_path,

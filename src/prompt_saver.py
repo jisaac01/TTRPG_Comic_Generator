@@ -47,6 +47,7 @@ def prepare_architect_prompts(
     version_dir: Path,
     world: WorldStateCheckpoint,
     panel_count: int,
+    raw_quotes: list[dict[str, str | None]] | None = None,
     system_prompt_path: Path | None = None,
     user_prompt_path: Path | None = None,
 ) -> tuple[str, str]:
@@ -54,7 +55,7 @@ def prepare_architect_prompts(
     
     Returns tuple of (system_prompt, user_prompt) ready to send to model.
     """
-    from story_architect import _format_entities_for_prompt
+    from story_architect import _format_entities_for_prompt, _format_quotes_for_prompt
 
     prompts_dir = _ensure_prompts_dir(version_dir)
     
@@ -73,6 +74,7 @@ def prepare_architect_prompts(
         title=world.title or "Untitled story",
         panel_count=panel_count,
         entities_context=_format_entities_for_prompt(world),
+        reference_quotes=_format_quotes_for_prompt(raw_quotes),
         story_text="<story_text_omitted_for_brevity>",
     )
 
@@ -91,7 +93,6 @@ def prepare_scriptwriter_prompts(
     version_dir: Path,
     world: WorldStateInput,
     architecture: StoryArchitectureCheckpoint,
-    raw_quotes: list[tuple[str, str | None]],
     system_prompt_path: Path | None = None,
     user_prompt_path: Path | None = None,
 ) -> tuple[str, str]:
@@ -108,7 +109,7 @@ def prepare_scriptwriter_prompts(
     _save_prompt_template(prompts_dir, user_prompt_path, SCRIPTWRITER_USER_PROMPT_FILENAME)
 
     title = world.title or "Untitled story"
-    entities_context = _format_entities_for_prompt(world, raw_quotes)
+    entities_context = _format_entities_for_prompt(world)
 
     system_prompt = render_prompt_template(
         SCRIPTWRITER_SYSTEM_PROMPT_FILENAME,

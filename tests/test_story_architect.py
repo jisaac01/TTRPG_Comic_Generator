@@ -13,6 +13,12 @@ def _write_input_checkpoints(tmp_path: Path) -> tuple[Path, Path]:
         "title": "Swamp Trouble",
         "author": "GM",
         "content": "Del grabs a torch and leads the party through the marsh.",
+        "quotes": [
+            {
+                "text": "Stay close to me.",
+                "attribution": "Del warns the party as they enter the marsh.",
+            }
+        ],
         "source_selector": "div.story-content",
         "scraped_at": "2026-05-04T00:00:00+00:00",
     }
@@ -71,7 +77,14 @@ def _valid_payload() -> story_architect.StoryArchitecturePayload:
                 panel_shape="wide",
                 setting_brief="Marsh edge at dusk with deep fog.",
                 character_focus=["Del", "Vendetta"],
-                must_include=["The group entering the marsh"],
+                notable_set_dressing=["The group entering the marsh"],
+                notable_quotes=[
+                    story_architect.NotableQuote(
+                        text="Stay close to me.",
+                        speaker="Del",
+                        attribution_context="Del warns the party as they enter the marsh.",
+                    )
+                ],
                 dialogue_goals=["Show caution"],
                 continuity_notes=["No one is holding the torch yet"],
             ),
@@ -84,7 +97,8 @@ def _valid_payload() -> story_architect.StoryArchitecturePayload:
                 panel_shape="standard",
                 setting_brief="Narrow marsh path with reeds closing in.",
                 character_focus=["Del"],
-                must_include=["Del lighting a torch"],
+                notable_set_dressing=["Del lighting a torch"],
+                notable_quotes=[],
                 dialogue_goals=["Commit to moving forward"],
                 continuity_notes=["Torch becomes part of ongoing continuity"],
             ),
@@ -116,7 +130,35 @@ def test_architect_story_writes_checkpoint_and_normalizes_indices(tmp_path):
     assert checkpoint.target_panel_count == 2
     assert len(checkpoint.panels) == 2
     assert [panel.index for panel in checkpoint.panels] == [1, 2]
+    assert checkpoint.panels[0].notable_quotes[0].text == "Stay close to me."
+    assert checkpoint.panels[0].notable_quotes[0].speaker == "Del"
     assert checkpoint.generation_errors == []
+
+
+def test_architect_story_rejects_unreferenced_notable_quote_text(tmp_path):
+    raw_path, entities_path = _write_input_checkpoints(tmp_path)
+
+    def fake_generator(_content, _world, _model, _panel_count):
+        payload = _valid_payload()
+        payload.panels[0].notable_quotes = [
+            story_architect.NotableQuote(
+                text="Payment",
+                speaker="Bufo",
+                attribution_context="Bufo reads an inscription in the vault.",
+            )
+        ]
+        return payload
+
+    checkpoint = story_architect.architect_story(
+        raw_checkpoint_path=raw_path,
+        entities_checkpoint_path=entities_path,
+        output_path=tmp_path / "02_5_story_architecture.json",
+        panel_count=2,
+        generator=fake_generator,
+    )
+
+    assert checkpoint.panels[0].notable_quotes == []
+    assert any("quote text not found in reference quotes" in err for err in checkpoint.generation_errors)
 
 
 def test_architect_story_logs_uncovered_beats_and_keeps_output(tmp_path):

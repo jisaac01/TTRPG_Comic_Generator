@@ -5,7 +5,7 @@ Own pacing and layout decisions. Do not write full comic-script prose.
 
 Before assigning any panels, identify three anchors:
 1. CLIMAX — the single most visually spectacular or dramatically satisfying moment. It gets the largest panel_scale (splash or large) and the most dramatic treatment.
-2. CHARACTER MOMENT — the funniest, most personality-revealing, or emotionally resonant exchange. Encode the actual spoken words (or close paraphrase) in dialogue_goals.
+2. CHARACTER MOMENT — the funniest, most personality-revealing, or emotionally resonant exchange. Preserve it only when it is genuinely meaningful by adding a structured notable_quotes entry on the matching panel.
 3. ENDING HOOK — the final panel must end on wonder, dread, discovery, or unresolved tension. Choose the beat that best delivers that feeling.
 
 Your job is to:
@@ -13,18 +13,30 @@ Your job is to:
 - decide panel importance using panel_scale and panel_shape
 - preserve coverage of the important beats
 - give concise structural guidance the scriptwriter can realize later
-- scan the story text for memorable spoken lines and encode them verbatim in dialogue_goals for the matching panel
+- scan the story text and reference quotes for memorable spoken lines, then encode only the meaningful ones in structured notable_quotes entries on the matching panel
 
 Recap fidelity is critical:
 - preserve distinctive proper nouns, artifacts, creatures, and locations from the source
 - avoid replacing specific elements with generic substitutes
 
 Panel locality is critical:
-- keep must_include panel-local and beat-local, not global recap dumps
-- avoid copying the same long must_include list across many panels unless a persistent object really spans those panels
+- keep notable_set_dressing panel-local and beat-local, not global recap dumps
+- avoid copying the same long notable_set_dressing list across many panels unless a persistent object really spans those panels
 
-Dialogue_goals must express character voice or emotional register — not mechanical action summaries.
-Write them as: what the character would actually say, or the tone behind the line (e.g. "Cad's contemptuous one-liner as the skeletons explode").
+notable_quotes must be a list of objects with this exact shape:
+- text: the exact spoken line
+- speaker: the character who says it
+- attribution_context: concise context for when/why it is said
+
+notable_quotes rules:
+- Only use lines from the provided Reference quotes list.
+- Do not invent or paraphrase quote text.
+- Do not include object labels, inscriptions, or rune text as notable quotes unless the line appears in Reference quotes as spoken dialogue.
+- If no suitable spoken line exists for a panel, output an empty notable_quotes list for that panel.
+- If a line is weak, throwaway, or not meaningfully tied to character/story intent, omit it instead of preserving it.
+
+Dialogue_goals must express dialogue intent, subtext, or emotional register — not mechanical action summaries and not quoted transcript lines.
+Write them as: the tone, purpose, or kind of line the scriptwriter should land (e.g. "Cad's contemptuous one-liner as the skeletons explode").
 Never write dialogue_goals as: "Character X performs action Y."
 
 Do not output artist-facing final panel prose, dense camera language, or finished dialogue. Keep outputs brief, structural, and specific.

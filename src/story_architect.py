@@ -18,6 +18,12 @@ from prompt_templates import (
 from scraper import RawTextCheckpoint
 
 
+class NotableQuote(BaseModel):
+    text: str = Field(min_length=1)
+    speaker: str = Field(min_length=1)
+    attribution_context: str = Field(min_length=1)
+
+
 class ArchitecturePanel(BaseModel):
     index: int = Field(ge=1)
     beat_indices: list[int] = Field(min_length=1)
@@ -27,7 +33,8 @@ class ArchitecturePanel(BaseModel):
     panel_shape: Literal["standard", "wide", "tall", "inset", "irregular"]
     setting_brief: str = Field(min_length=1)
     character_focus: list[str] = Field(default_factory=list)
-    must_include: list[str] = Field(min_length=1)
+    notable_set_dressing: list[str] = Field(min_length=1)
+    notable_quotes: list[NotableQuote] = Field(default_factory=list)
     dialogue_goals: list[str] = Field(default_factory=list)
     continuity_notes: list[str] = Field(default_factory=list)
 
@@ -71,6 +78,21 @@ def _format_beats_for_prompt(beats: list[StoryBeat]) -> str:
     return "\n".join(beat_lines) or "- none"
 
 
+def _format_quotes_for_prompt(quotes: list[dict[str, str | None]] | None = None) -> str:
+    quote_lines: list[str] = []
+    for quote in quotes or []:
+        text = quote.get("text", "").strip() if isinstance(quote, dict) else ""
+        attribution = quote.get("attribution", "").strip() if isinstance(quote, dict) else ""
+        if text:
+            speaker = attribution or "Unknown"
+            quote_lines.append(f"- {speaker}: \"{text}\"")
+    return "\n".join(quote_lines) or "- none"
+
+
+def _normalize_quote_text(text: str) -> str:
+    return " ".join(text.split()).strip()
+
+
 def _format_entities_for_prompt(world: WorldStateCheckpoint) -> str:
     character_lines = "\n".join(
         f"- {character.name}: {character.description}" for character in world.characters
@@ -91,6 +113,7 @@ def _generate_with_instructor_ollama(
     world: WorldStateCheckpoint,
     model: str,
     panel_count: int,
+    quotes: list[dict[str, str | None]] | None = None,
     system_prompt_path: Path | None = None,
     user_prompt_path: Path | None = None,
 ) -> StoryArchitecturePayload:
@@ -107,6 +130,7 @@ def _generate_with_instructor_ollama(
         panel_count=panel_count,
         entities_context=_format_entities_for_prompt(world),
         story_text=content,
+        reference_quotes=_format_quotes_for_prompt(quotes),
     )
 
     return client.chat.completions.create(
@@ -120,9 +144,31 @@ def _generate_with_instructor_ollama(
     )
 
 
-def _normalize_panels(panels: list[ArchitecturePanel]) -> list[ArchitecturePanel]:
+def _normalize_panels(
+    panels: list[ArchitecturePanel],
+    source_quote_lookup: dict[str, str],
+) -> tuple[list[ArchitecturePanel], list[str]]:
     normalized: list[ArchitecturePanel] = []
+    quote_errors: list[str] = []
     for idx, panel in enumerate(panels, start=1):
+        normalized_notable_quotes: list[NotableQuote] = []
+        for notable_quote in panel.notable_quotes:
+            normalized_text = _normalize_quote_text(notable_quote.text)
+            canonical_attribution = source_quote_lookup.get(normalized_text)
+            if canonical_attribution is None:
+                quote_errors.append(
+                    "Notable quote validation failed in panel "
+                    f"{idx}: quote text not found in reference quotes: {notable_quote.text!r}."
+                )
+                continue
+            normalized_notable_quotes.append(
+                NotableQuote(
+                    text=normalized_text,
+                    speaker=notable_quote.speaker,
+                    attribution_context=canonical_attribution,
+                )
+            )
+
         normalized.append(
             ArchitecturePanel(
                 index=idx,
@@ -133,12 +179,13 @@ def _normalize_panels(panels: list[ArchitecturePanel]) -> list[ArchitecturePanel
                 panel_shape=panel.panel_shape,
                 setting_brief=panel.setting_brief,
                 character_focus=panel.character_focus,
-                must_include=panel.must_include,
+                notable_set_dressing=panel.notable_set_dressing,
+                notable_quotes=normalized_notable_quotes,
                 dialogue_goals=panel.dialogue_goals,
                 continuity_notes=panel.continuity_notes,
             )
         )
-    return normalized
+    return normalized, quote_errors
 
 
 def _find_uncovered_beat_indices(
@@ -167,6 +214,16 @@ def architect_story(
         entities_checkpoint_path.read_text(encoding="utf-8")
     )
 
+    quotes_list: list[dict[str, str | None]] = []
+    source_quote_lookup: dict[str, str] = {}
+    for quote in raw.quotes:
+        normalized_text = _normalize_quote_text(quote.text)
+        if not normalized_text:
+            continue
+        attribution = quote.attribution or "Unknown attribution"
+        quotes_list.append({"text": normalized_text, "attribution": attribution})
+        source_quote_lookup[normalized_text] = attribution
+
     if generator is not None:
         payload = generator(raw.content, world, model, panel_count)
     else:
@@ -175,12 +232,14 @@ def architect_story(
             world,
             model,
             panel_count,
+            quotes=quotes_list,
             system_prompt_path=system_prompt_path,
             user_prompt_path=user_prompt_path,
         )
 
-    panels = _normalize_panels(payload.panels)
+    panels, quote_errors = _normalize_panels(payload.panels, source_quote_lookup)
     generation_errors: list[str] = []
+    generation_errors.extend(quote_errors)
     uncovered_beat_indices = _find_uncovered_beat_indices(world.beats, panels)
     if uncovered_beat_indices:
         generation_errors.append(

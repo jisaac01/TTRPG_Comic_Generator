@@ -16,15 +16,15 @@ Each panel must include:
 - held_items_after
 
 Preserve the architect-selected panel_scale + panel_shape for each panel. Do not invent alternative layout metadata.
-Use the architecture's setting_brief, must_include items, dialogue_goals, and continuity_notes as hard constraints when writing each panel.
+Use the architecture's setting_brief, notable_set_dressing items, notable_quotes, dialogue_goals, and continuity_notes as hard constraints when writing each panel.
 Treat beat_summary as the primary narrative anchor for each panel.
-Raw story prose is intentionally not provided in this stage. Use architecture + entities + reference quotes as the complete narrative source of truth.
-Each must_include item must appear in the resulting panel content (setting or visual_action) with exact wording or very light inflection.
+Raw story prose is intentionally not provided in this stage. Use architecture + entities as the complete narrative source of truth.
+Each notable_set_dressing item must appear in the resulting panel content (setting or visual_action) with exact wording or very light inflection.
 Do not replace distinctive nouns from architecture with generic substitutes.
 
 Continuity rule: held items must persist from panel N held_items_after to panel N+1 held_items_before for each named character unless a panel explicitly depicts the item being dropped or transferred.
 
-Reference quote rule: Before writing each panel, scan ALL reference quotes. If any quote matches the panel's beat or setting, you MUST use it verbatim (or with only minimal balloon-clarity edits) in dialogue_overlay. Do not paraphrase or invent substitute lines when a real quote fits.
+Notable quote rule: Before writing each panel, inspect that panel's notable_quotes objects. If any are present, you MUST use notable_quotes.text verbatim (or with only minimal balloon-clarity edits) in dialogue_overlay for that same panel, with the matching notable_quotes.speaker. Use notable_quotes.attribution_context to keep intent and scene reference aligned. Do not move notable quotes to other panels, paraphrase them away, or invent substitute lines when a notable quote already fits.
 
 Dialogue quality rule: Every dialogue_overlay line must sound like natural speech — how the character would actually say something in that moment. Reject any line that merely describes what the character is doing, states a plan generically, or could belong to any character. Dialogue must reveal personality.
 

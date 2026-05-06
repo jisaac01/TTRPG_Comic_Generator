@@ -71,7 +71,14 @@ def _write_input_checkpoints(tmp_path: Path) -> tuple[Path, Path, Path]:
                         "panel_shape": "wide",
                         "setting_brief": "Marsh edge at dusk",
                         "character_focus": ["Del", "Vendetta"],
-                        "must_include": ["The marsh entry"],
+                        "notable_set_dressing": ["The marsh entry"],
+                        "notable_quotes": [
+                            {
+                                "text": "Stay close to me.",
+                                "speaker": "Del",
+                                "attribution_context": "Del warns the party as they enter the marsh.",
+                            }
+                        ],
                         "dialogue_goals": ["Caution"],
                         "continuity_notes": ["Nobody holds the torch yet"],
                     },
@@ -84,7 +91,8 @@ def _write_input_checkpoints(tmp_path: Path) -> tuple[Path, Path, Path]:
                         "panel_shape": "standard",
                         "setting_brief": "Narrow marsh path",
                         "character_focus": ["Del", "Vendetta"],
-                        "must_include": ["Del carrying the torch"],
+                        "notable_set_dressing": ["Del carrying the torch"],
+                        "notable_quotes": [],
                         "dialogue_goals": ["Urgency"],
                         "continuity_notes": ["Del keeps the torch lit"],
                     },
@@ -97,7 +105,14 @@ def _write_input_checkpoints(tmp_path: Path) -> tuple[Path, Path, Path]:
                         "panel_shape": "inset",
                         "setting_brief": "Collapsed ruin gate",
                         "character_focus": ["Del", "Vendetta"],
-                        "must_include": ["Ruin gate"],
+                        "notable_set_dressing": ["Ruin gate"],
+                        "notable_quotes": [
+                            {
+                                "text": "We hold here.",
+                                "speaker": "Del",
+                                "attribution_context": "Del calls for the party to hold position.",
+                            }
+                        ],
                         "dialogue_goals": ["Hold position"],
                         "continuity_notes": ["Del still holds the torch"],
                     },
@@ -307,7 +322,7 @@ def test_write_script_preserves_architect_selected_layout_fields(tmp_path):
     assert checkpoint.panel_count == 3
 
 
-def test_format_entities_for_prompt_includes_quotes():
+def test_format_entities_for_prompt_excludes_reference_quotes():
     world = scriptwriter.WorldStateInput(
         url="https://example.test/story",
         title="Swamp Trouble",
@@ -325,34 +340,21 @@ def test_format_entities_for_prompt_includes_quotes():
         analyzed_at="2026-05-04T00:00:00+00:00",
     )
 
-    prompt_blob = scriptwriter._format_entities_for_prompt(
-        world,
-        raw_quotes=[("Stay close to me.", "Del")],
+    prompt_blob = scriptwriter._format_entities_for_prompt(world)
+
+    assert "Story beats:" in prompt_blob
+    assert "Reference quotes:" not in prompt_blob
+
+
+def test_format_story_architecture_for_prompt_includes_notable_quotes(tmp_path):
+    _, _, architecture_path = _write_input_checkpoints(tmp_path)
+
+    architecture = story_architect.StoryArchitectureCheckpoint.model_validate_json(
+        architecture_path.read_text(encoding="utf-8")
     )
 
-    assert "Reference quotes:" in prompt_blob
-    assert 'Del: "Stay close to me."' in prompt_blob
+    prompt_blob = scriptwriter._format_story_architecture_for_prompt(architecture)
 
-
-def test_format_entities_for_prompt_empty_raw_quotes():
-    world = scriptwriter.WorldStateInput(
-        url="https://example.test/story",
-        title="Swamp Trouble",
-        author="GM",
-        model="qwen2.5:7b",
-        characters=[],
-        locations=[],
-        beats=[
-            scriptwriter.StoryBeat(
-                index=1,
-                beat="The party reaches the old bridge.",
-                highlights=["The party reaches the old bridge."],
-            )
-        ],
-        analyzed_at="2026-05-04T00:00:00+00:00",
-    )
-
-    prompt_blob = scriptwriter._format_entities_for_prompt(world, raw_quotes=[])
-
-    assert "Reference quotes:" in prompt_blob
-    assert "- none" in prompt_blob
+    assert '"notable_quotes": [' in prompt_blob
+    assert '"text": "Stay close to me."' in prompt_blob
+    assert '"speaker": "Del"' in prompt_blob
