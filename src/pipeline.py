@@ -190,6 +190,9 @@ def _create_version_dir(
             if src.is_file():
                 shutil.copy2(src, version_dir / src.name)
 
+        # Always clear the previous run status so a partial write can't be mistaken for a fresh result.
+        (version_dir / "run_status.json").unlink(missing_ok=True)
+
         # Delete forward from the requested rerun point.
         _PHASE_FILES: dict[RerunFrom, list[str]] = {
             "scrape": ["01_raw_text.json", "02_entities.json", "03_script.json", "03_5_styled_script.json", "04_page_prompt.txt"],
@@ -713,20 +716,19 @@ async def _run_cli() -> None:
     result = await pipeline.run()
     checkpoint_keys = ("raw_text", "entities", "script", "styled_script", "page_prompt")
     failed = [key for key in checkpoint_keys if result.get(key) is None]
-    print(
-        json.dumps(
-            {
-                "status": "partial" if failed else "ok",
-                "campaign": args.campaign,
-                "version": result["version"],
-                "version_dir": result["version_dir"],
-                "checkpoints": [key for key in checkpoint_keys if result.get(key) is not None],
-                "failed": failed,
-                "errors": result.get("errors", []),
-            },
-            indent=2,
-        )
-    )
+    status_blob = {
+        "status": "partial" if failed else "ok",
+        "campaign": args.campaign,
+        "version": result["version"],
+        "version_dir": result["version_dir"],
+        "checkpoints": [key for key in checkpoint_keys if result.get(key) is not None],
+        "failed": failed,
+        "errors": result.get("errors", []),
+    }
+    status_json = json.dumps(status_blob, indent=2)
+    print(status_json)
+    run_status_path = Path(result["version_dir"]) / "run_status.json"
+    run_status_path.write_text(status_json, encoding="utf-8")
 
 
 if __name__ == "__main__":
