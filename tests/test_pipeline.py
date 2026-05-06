@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from typing import cast
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -18,11 +19,14 @@ from prompt_templates import (
     PROMPT_TEMPLATE_FILENAMES,
     SCRIPTWRITER_SYSTEM_PROMPT_FILENAME,
     SCRIPTWRITER_USER_PROMPT_FILENAME,
+    STORY_ARCHITECT_SYSTEM_PROMPT_FILENAME,
+    STORY_ARCHITECT_USER_PROMPT_FILENAME,
     STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME,
     STYLE_INTEGRATOR_USER_PROMPT_FILENAME,
 )
 import scraper
 import scriptwriter
+import story_architect
 from style_integrator import StyleIntegrationPartialFailure
 from pipeline import (
     ComicPipeline,
@@ -61,7 +65,6 @@ _WORLD_CHECKPOINT = entities.WorldStateCheckpoint(
         entities.Character(
             name="Del",
             description="A druid in mossy robes",
-            demeanor="Calm and observant",
         )
     ],
     locations=[
@@ -111,6 +114,43 @@ _SCRIPT_CHECKPOINT = scriptwriter.ScriptCheckpoint(
     scripted_at="2026-05-04T00:00:00+00:00",
 )
 
+_ARCHITECTURE_CHECKPOINT = story_architect.StoryArchitectureCheckpoint(
+    url="https://example.test/story",
+    title="Dreadmarsh Crossing",
+    author="GM",
+    model="qwen2.5:7b",
+    target_panel_count=2,
+    panels=[
+        story_architect.ArchitecturePanel(
+            index=1,
+            beat_indices=[1],
+            beat_summary="The party regroups and prepares to push deeper.",
+            story_purpose="Establish the dangerous crossing.",
+            panel_scale="large",
+            panel_shape="wide",
+            setting_brief="Swamp edge at dusk",
+            character_focus=["Del", "Vendetta"],
+            must_include=["Torchlight entering the marsh"],
+            dialogue_goals=["Set urgency"],
+            continuity_notes=["No torch in hand before the beat"],
+        ),
+        story_architect.ArchitecturePanel(
+            index=2,
+            beat_indices=[1],
+            beat_summary="They keep moving through the marsh with torchlight.",
+            story_purpose="Keep the party moving through the bog.",
+            panel_scale="medium",
+            panel_shape="standard",
+            setting_brief="Narrow marsh path",
+            character_focus=["Del", "Vendetta"],
+            must_include=["Del carrying the torch"],
+            dialogue_goals=["Call out the next danger"],
+            continuity_notes=["Torch remains with Del"],
+        ),
+    ],
+    architected_at="2026-05-04T00:00:00+00:00",
+)
+
 _PAGE_PROMPT = "Single-page comic prompt text"
 
 _STYLED_SCRIPT_CHECKPOINT = scriptwriter.ScriptCheckpoint(
@@ -151,12 +191,15 @@ _STYLED_SCRIPT_CHECKPOINT = scriptwriter.ScriptCheckpoint(
 
 
 def _write_version_checkpoints(version_dir: Path) -> None:
-    """Write all five checkpoints into a version directory."""
+    """Write all checkpoints into a version directory."""
     (version_dir / "01_raw_text.json").write_text(
         _RAW_CHECKPOINT.model_dump_json(), encoding="utf-8"
     )
     (version_dir / "02_entities.json").write_text(
         _WORLD_CHECKPOINT.model_dump_json(), encoding="utf-8"
+    )
+    (version_dir / "02_5_story_architecture.json").write_text(
+        _ARCHITECTURE_CHECKPOINT.model_dump_json(), encoding="utf-8"
     )
     (version_dir / "03_script.json").write_text(
         _SCRIPT_CHECKPOINT.model_dump_json(), encoding="utf-8"
@@ -186,6 +229,14 @@ def _make_episode(campaigns_root: Path, campaign: str, url: str, title: str) -> 
     )
     _register_episode(campaigns_root, campaign, url, slug)
     return episode_dir
+
+
+def _version_dir_from_result(result: dict[str, object]) -> Path:
+    return Path(cast(str, result["version_dir"]))
+
+
+def _checkpoint_dict(result: dict[str, object], key: str) -> dict[str, object]:
+    return cast(dict[str, object], result[key])
 
 
 # ---------------------------------------------------------------------------
@@ -254,6 +305,7 @@ def test_create_version_dir_clones_previous_version(tmp_path):
     assert name == "v002"
     assert (version_dir / "01_raw_text.json").exists()
     assert (version_dir / "02_entities.json").exists()
+    assert (version_dir / "02_5_story_architecture.json").exists()
     assert (version_dir / "03_script.json").exists()
     assert (version_dir / "04_page_prompt.txt").exists()
 
@@ -268,6 +320,7 @@ def test_create_version_dir_rerun_from_prompt_deletes_only_prompt(tmp_path):
 
     assert (version_dir / "01_raw_text.json").exists()
     assert (version_dir / "02_entities.json").exists()
+    assert (version_dir / "02_5_story_architecture.json").exists()
     assert (version_dir / "03_script.json").exists()
     assert not (version_dir / "04_page_prompt.txt").exists()
 
@@ -282,6 +335,7 @@ def test_create_version_dir_rerun_from_analyze_deletes_analyze_onwards(tmp_path)
 
     assert (version_dir / "01_raw_text.json").exists()
     assert not (version_dir / "02_entities.json").exists()
+    assert not (version_dir / "02_5_story_architecture.json").exists()
     assert not (version_dir / "03_script.json").exists()
     assert not (version_dir / "04_page_prompt.txt").exists()
 
@@ -341,6 +395,7 @@ async def test_first_run_creates_campaign_episode_version(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT) as mock_scrape,
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT) as mock_entities,
+        patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT) as mock_architect,
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT) as mock_script,
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
@@ -348,14 +403,16 @@ async def test_first_run_creates_campaign_episode_version(tmp_path):
         result = await pipeline.run()
 
     mock_scrape.assert_awaited_once()
-    _, kwargs = mock_scrape.await_args
+    assert mock_scrape.await_args is not None
+    kwargs = mock_scrape.await_args.kwargs
     assert kwargs["recap_version"] == "standard"
     mock_entities.assert_called_once()
+    mock_architect.assert_called_once()
     mock_script.assert_called_once()
     mock_prompts.assert_called_once()
 
     assert result["version"] == "v001"
-    version_dir = Path(result["version_dir"])
+    version_dir = _version_dir_from_result(result)
     assert version_dir.exists()
     assert version_dir.parent.parent == tmp_path / "dreadmarsh"
 
@@ -363,6 +420,7 @@ async def test_first_run_creates_campaign_episode_version(tmp_path):
 
     assert "raw_text" in result
     assert "entities" in result
+    assert "story_architecture" in result
     assert "script" in result
     assert "styled_script" in result
     assert "page_prompt" in result
@@ -380,13 +438,14 @@ async def test_first_run_bootstraps_campaign_prompt_templates_and_copies_version
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT) as mock_architect,
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT) as mock_script,
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT) as mock_integrate,
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
     ):
         result = await pipeline.run()
 
-    version_dir = Path(result["version_dir"])
+    version_dir = _version_dir_from_result(result)
     for filename in PROMPT_TEMPLATE_FILENAMES:
         campaign_prompt = tmp_path / "dreadmarsh" / filename
         version_prompt = version_dir / filename
@@ -396,6 +455,10 @@ async def test_first_run_bootstraps_campaign_prompt_templates_and_copies_version
             DEFAULT_PROMPTS_DIR / filename
         ).read_text(encoding="utf-8")
         assert version_prompt.read_text(encoding="utf-8") == campaign_prompt.read_text(encoding="utf-8")
+
+    _, architect_kwargs = mock_architect.call_args
+    assert architect_kwargs["system_prompt_path"] == version_dir / STORY_ARCHITECT_SYSTEM_PROMPT_FILENAME
+    assert architect_kwargs["user_prompt_path"] == version_dir / STORY_ARCHITECT_USER_PROMPT_FILENAME
 
     _, script_kwargs = mock_script.call_args
     assert script_kwargs["system_prompt_path"] == version_dir / SCRIPTWRITER_SYSTEM_PROMPT_FILENAME
@@ -412,10 +475,14 @@ async def test_first_run_bootstraps_campaign_prompt_templates_and_copies_version
 @pytest.mark.asyncio
 async def test_explicit_prompt_overrides_are_copied_into_version(tmp_path):
     page_prompt_template = tmp_path / "custom_page_prompt.txt"
+    architect_system = tmp_path / "custom_architect_system.txt"
+    architect_user = tmp_path / "custom_architect_user.txt"
     style_system = tmp_path / "custom_style_system.txt"
     style_user = tmp_path / "custom_style_user.txt"
     system_prompt = tmp_path / "custom_system.txt"
     user_prompt = tmp_path / "custom_user.txt"
+    architect_system.write_text("ARCHITECT SYSTEM OVERRIDE", encoding="utf-8")
+    architect_user.write_text("ARCHITECT USER OVERRIDE", encoding="utf-8")
     system_prompt.write_text("SYSTEM OVERRIDE", encoding="utf-8")
     user_prompt.write_text("USER OVERRIDE", encoding="utf-8")
     style_system.write_text("STYLE SYSTEM OVERRIDE", encoding="utf-8")
@@ -427,6 +494,8 @@ async def test_explicit_prompt_overrides_are_copied_into_version(tmp_path):
         campaign="dreadmarsh",
         campaigns_root=tmp_path,
         panel_count=2,
+        story_architect_system_prompt=architect_system,
+        story_architect_user_prompt=architect_user,
         scriptwriter_system_prompt=system_prompt,
         scriptwriter_user_prompt=user_prompt,
         style_integrator_system_prompt=style_system,
@@ -437,18 +506,25 @@ async def test_explicit_prompt_overrides_are_copied_into_version(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT) as mock_architect,
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT) as mock_script,
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT) as mock_integrate,
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
     ):
         result = await pipeline.run()
 
-    version_dir = Path(result["version_dir"])
+    version_dir = _version_dir_from_result(result)
+    assert (version_dir / STORY_ARCHITECT_SYSTEM_PROMPT_FILENAME).read_text(encoding="utf-8") == "ARCHITECT SYSTEM OVERRIDE"
+    assert (version_dir / STORY_ARCHITECT_USER_PROMPT_FILENAME).read_text(encoding="utf-8") == "ARCHITECT USER OVERRIDE"
     assert (version_dir / SCRIPTWRITER_SYSTEM_PROMPT_FILENAME).read_text(encoding="utf-8") == "SYSTEM OVERRIDE"
     assert (version_dir / SCRIPTWRITER_USER_PROMPT_FILENAME).read_text(encoding="utf-8") == "USER OVERRIDE"
     assert (version_dir / STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME).read_text(encoding="utf-8") == "STYLE SYSTEM OVERRIDE"
     assert (version_dir / STYLE_INTEGRATOR_USER_PROMPT_FILENAME).read_text(encoding="utf-8") == "STYLE USER OVERRIDE"
     assert (version_dir / PAGE_PROMPT_TEMPLATE_FILENAME).read_text(encoding="utf-8") == "CUSTOM PAGE PROMPT: {panel_count}"
+
+    _, architect_kwargs = mock_architect.call_args
+    assert architect_kwargs["system_prompt_path"] == version_dir / STORY_ARCHITECT_SYSTEM_PROMPT_FILENAME
+    assert architect_kwargs["user_prompt_path"] == version_dir / STORY_ARCHITECT_USER_PROMPT_FILENAME
 
     _, script_kwargs = mock_script.call_args
     assert script_kwargs["system_prompt_path"] == version_dir / SCRIPTWRITER_SYSTEM_PROMPT_FILENAME
@@ -475,6 +551,7 @@ async def test_first_run_result_contains_model_dump_dicts(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT),
@@ -483,12 +560,13 @@ async def test_first_run_result_contains_model_dump_dicts(tmp_path):
 
     assert isinstance(result["raw_text"], dict)
     assert isinstance(result["entities"], dict)
+    assert isinstance(result["story_architecture"], dict)
     assert isinstance(result["script"], dict)
     assert isinstance(result["styled_script"], dict)
     assert isinstance(result["page_prompt"], dict)
     assert result["errors"] == []
-    assert result["raw_text"]["url"] == "https://example.test/story"
-    assert result["entities"]["model"] == "qwen2.5:7b"
+    assert _checkpoint_dict(result, "raw_text")["url"] == "https://example.test/story"
+    assert _checkpoint_dict(result, "entities")["model"] == "qwen2.5:7b"
 
 
 @pytest.mark.asyncio
@@ -504,13 +582,15 @@ async def test_first_run_forwards_explicit_recap_version_to_scraper(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT) as mock_scrape,
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT),
     ):
         await pipeline.run()
 
-    _, kwargs = mock_scrape.await_args
+    assert mock_scrape.await_args is not None
+    kwargs = mock_scrape.await_args.kwargs
     assert kwargs["recap_version"] == "alternate"
 
 
@@ -534,6 +614,7 @@ async def test_run_skips_all_phases_when_all_checkpoints_exist(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock) as mock_scrape,
         patch("pipeline.build_entities_from_raw") as mock_entities,
+        patch("pipeline.architect_story") as mock_architect,
         patch("pipeline.write_script") as mock_script,
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt") as mock_prompts,
@@ -542,6 +623,7 @@ async def test_run_skips_all_phases_when_all_checkpoints_exist(tmp_path):
 
     mock_scrape.assert_not_awaited()
     mock_entities.assert_not_called()
+    mock_architect.assert_not_called()
     mock_script.assert_not_called()
     mock_prompts.assert_not_called()
     assert result["version"] == "v002"
@@ -562,6 +644,7 @@ async def test_cached_raw_recap_switch_updates_content_and_reruns_downstream(tmp
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock) as mock_scrape,
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT) as mock_entities,
+        patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT) as mock_architect,
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT) as mock_script,
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
@@ -570,10 +653,11 @@ async def test_cached_raw_recap_switch_updates_content_and_reruns_downstream(tmp
 
     mock_scrape.assert_not_awaited()
     mock_entities.assert_called_once()
+    mock_architect.assert_called_once()
     mock_script.assert_called_once()
     mock_prompts.assert_called_once()
 
-    raw_path = Path(result["version_dir"]) / "01_raw_text.json"
+    raw_path = _version_dir_from_result(result) / "01_raw_text.json"
     raw_payload = json.loads(raw_path.read_text(encoding="utf-8"))
     assert raw_payload["selected_recap"] == "short"
     assert raw_payload["content"] == _RAW_CHECKPOINT.recap_variants["short"]
@@ -595,6 +679,7 @@ async def test_rerun_from_entities_skips_scraper_reruns_rest(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock) as mock_scrape,
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT) as mock_entities,
+        patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT) as mock_architect,
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT) as mock_script,
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT) as mock_integrate,
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
@@ -603,6 +688,38 @@ async def test_rerun_from_entities_skips_scraper_reruns_rest(tmp_path):
 
     mock_scrape.assert_not_awaited()
     mock_entities.assert_called_once()
+    mock_architect.assert_called_once()
+    mock_script.assert_called_once()
+    mock_integrate.assert_called_once()
+    mock_prompts.assert_called_once()
+    assert result["version"] == "v002"
+
+
+@pytest.mark.asyncio
+async def test_rerun_from_architect_reruns_architect_and_downstream(tmp_path):
+    _make_episode(tmp_path, "dreadmarsh", "https://example.test/story", "Dreadmarsh Crossing")
+
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=2,
+        rerun_from="architect",
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock) as mock_scrape,
+        patch("pipeline.build_entities_from_raw") as mock_entities,
+        patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT) as mock_architect,
+        patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT) as mock_script,
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT) as mock_integrate,
+        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
+    ):
+        result = await pipeline.run()
+
+    mock_scrape.assert_not_awaited()
+    mock_entities.assert_not_called()
+    mock_architect.assert_called_once()
     mock_script.assert_called_once()
     mock_integrate.assert_called_once()
     mock_prompts.assert_called_once()
@@ -625,6 +742,7 @@ async def test_rerun_from_style_only_reruns_style_and_prompt(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock) as mock_scrape,
         patch("pipeline.build_entities_from_raw") as mock_entities,
+        patch("pipeline.architect_story") as mock_architect,
         patch("pipeline.write_script") as mock_script,
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT) as mock_integrate,
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
@@ -633,6 +751,7 @@ async def test_rerun_from_style_only_reruns_style_and_prompt(tmp_path):
 
     mock_scrape.assert_not_awaited()
     mock_entities.assert_not_called()
+    mock_architect.assert_not_called()
     mock_script.assert_not_called()
     mock_integrate.assert_called_once()
     mock_prompts.assert_called_once()
@@ -655,6 +774,7 @@ async def test_rerun_from_prompt_only_reruns_prompt(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock) as mock_scrape,
         patch("pipeline.build_entities_from_raw") as mock_entities,
+        patch("pipeline.architect_story") as mock_architect,
         patch("pipeline.write_script") as mock_script,
         patch("pipeline.integrate_style") as mock_integrate,
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
@@ -663,6 +783,7 @@ async def test_rerun_from_prompt_only_reruns_prompt(tmp_path):
 
     mock_scrape.assert_not_awaited()
     mock_entities.assert_not_called()
+    mock_architect.assert_not_called()
     mock_script.assert_not_called()
     mock_integrate.assert_not_called()
     mock_prompts.assert_called_once()
@@ -682,6 +803,7 @@ async def test_skip_style_bypasses_integrator_and_prompts_from_script(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.integrate_style") as mock_integrate,
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
@@ -691,9 +813,9 @@ async def test_skip_style_bypasses_integrator_and_prompts_from_script(tmp_path):
     mock_integrate.assert_not_called()
     mock_prompts.assert_called_once()
     _, prompt_kwargs = mock_prompts.call_args
-    assert prompt_kwargs["script_checkpoint_path"] == Path(result["version_dir"]) / "03_script.json"
+    assert prompt_kwargs["script_checkpoint_path"] == _version_dir_from_result(result) / "03_script.json"
     assert result["styled_script"] is not None
-    assert result["styled_script"]["panels"] == result["script"]["panels"]
+    assert _checkpoint_dict(result, "styled_script")["panels"] == _checkpoint_dict(result, "script")["panels"]
 
 
 @pytest.mark.asyncio
@@ -712,6 +834,7 @@ async def test_rerun_from_style_with_skip_style_reruns_prompt_only(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock) as mock_scrape,
         patch("pipeline.build_entities_from_raw") as mock_entities,
+        patch("pipeline.architect_story") as mock_architect,
         patch("pipeline.write_script") as mock_script,
         patch("pipeline.integrate_style") as mock_integrate,
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
@@ -720,11 +843,12 @@ async def test_rerun_from_style_with_skip_style_reruns_prompt_only(tmp_path):
 
     mock_scrape.assert_not_awaited()
     mock_entities.assert_not_called()
+    mock_architect.assert_not_called()
     mock_script.assert_not_called()
     mock_integrate.assert_not_called()
     mock_prompts.assert_called_once()
     _, prompt_kwargs = mock_prompts.call_args
-    assert prompt_kwargs["script_checkpoint_path"] == Path(result["version_dir"]) / "03_script.json"
+    assert prompt_kwargs["script_checkpoint_path"] == _version_dir_from_result(result) / "03_script.json"
     assert result["version"] == "v002"
 
 
@@ -761,13 +885,14 @@ async def test_same_url_different_title_maps_to_existing_episode(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=changed_title_raw),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT),
     ):
         result = await pipeline.run()
 
-    version_dir = Path(result["version_dir"])
+    version_dir = _version_dir_from_result(result)
     assert version_dir.parent.name == original_episode_name
     assert _lookup_episode(tmp_path, "dreadmarsh", "https://example.test/story") == original_episode_name
 
@@ -795,6 +920,7 @@ async def test_two_campaigns_are_isolated(tmp_path):
         with (
             patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=raw),
             patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+            patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT),
             patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
             patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT),
         ):
@@ -837,6 +963,7 @@ async def test_campaign_level_art_template_is_used_by_default(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
@@ -844,7 +971,7 @@ async def test_campaign_level_art_template_is_used_by_default(tmp_path):
         result = await pipeline.run()
 
     _, kwargs = mock_prompts.call_args
-    version_template_path = Path(result["version_dir"]) / "art_direction_template.json"
+    version_template_path = _version_dir_from_result(result) / "art_direction_template.json"
     assert kwargs["art_style_template_path"] == version_template_path
     assert version_template_path.read_text(encoding="utf-8") == template_path.read_text(encoding="utf-8")
 
@@ -864,6 +991,7 @@ async def test_campaign_art_template_is_created_on_first_run(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
@@ -876,7 +1004,7 @@ async def test_campaign_art_template_is_created_on_first_run(tmp_path):
     )
 
     _, kwargs = mock_prompts.call_args
-    version_template_path = Path(result["version_dir"]) / "art_direction_template.json"
+    version_template_path = _version_dir_from_result(result) / "art_direction_template.json"
     assert kwargs["art_style_template_path"] == version_template_path
     assert version_template_path.read_text(encoding="utf-8") == template_path.read_text(encoding="utf-8")
 
@@ -910,6 +1038,7 @@ async def test_explicit_art_template_overrides_campaign_default(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
@@ -917,7 +1046,7 @@ async def test_explicit_art_template_overrides_campaign_default(tmp_path):
         result = await pipeline.run()
 
     _, kwargs = mock_prompts.call_args
-    version_template_path = Path(result["version_dir"]) / "art_direction_template.json"
+    version_template_path = _version_dir_from_result(result) / "art_direction_template.json"
     assert kwargs["art_style_template_path"] == version_template_path
     assert version_template_path.read_text(encoding="utf-8") == explicit_template.read_text(encoding="utf-8")
 
@@ -939,6 +1068,7 @@ async def test_entities_phase_uses_scraper_direct_label(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT) as mock_entities,
+        patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT),
@@ -955,6 +1085,7 @@ async def test_script_model_and_panel_count_forwarded(tmp_path):
         url="https://example.test/story",
         campaign="dreadmarsh",
         campaigns_root=tmp_path,
+        architect_model="llama3.1:8b",
         script_model="llama3.1:8b",
         panel_count=8,
     )
@@ -962,15 +1093,20 @@ async def test_script_model_and_panel_count_forwarded(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT) as mock_architect,
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT) as mock_script,
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT),
     ):
         await pipeline.run()
 
+    _, architect_kwargs = mock_architect.call_args
+    assert architect_kwargs.get("model") == "llama3.1:8b"
+    assert architect_kwargs.get("panel_count") == 8
+
     _, kwargs = mock_script.call_args
     assert kwargs.get("model") == "llama3.1:8b"
-    assert kwargs.get("panel_count") == 8
+    assert kwargs.get("story_architecture_checkpoint_path").name == "02_5_story_architecture.json"
 
 
 @pytest.mark.asyncio
@@ -986,6 +1122,7 @@ async def test_style_model_forwarded(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT) as mock_integrate,
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT),
@@ -1014,6 +1151,7 @@ async def test_script_failure_does_not_crash_pipeline(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT),
         patch("pipeline.write_script", side_effect=ValueError("Continuity break")),
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
@@ -1027,6 +1165,34 @@ async def test_script_failure_does_not_crash_pipeline(tmp_path):
     mock_prompts.assert_not_called()
     assert result["raw_text"] is not None
     assert result["entities"] is not None
+    assert result["story_architecture"] is not None
+
+
+@pytest.mark.asyncio
+async def test_story_architect_failure_does_not_crash_pipeline(tmp_path):
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=6,
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.architect_story", side_effect=ValueError("Beat coverage failed")),
+        patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
+        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
+    ):
+        result = await pipeline.run()
+
+    assert result["story_architecture"] is None
+    assert result["script"] is None
+    assert result["styled_script"] is None
+    assert result["page_prompt"] is None
+    assert result["errors"] == ["story_architecture: Beat coverage failed"]
+    mock_prompts.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -1041,6 +1207,7 @@ async def test_style_failure_does_not_crash_pipeline(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.integrate_style", side_effect=ValueError("Style rewrite failed")),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
@@ -1071,6 +1238,7 @@ async def test_partial_style_failure_records_error_and_continues_to_prompt(tmp_p
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.integrate_style", side_effect=partial_error),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
@@ -1099,8 +1267,8 @@ async def test_out_of_range_panel_count_records_error_but_continues(tmp_path):
         update={
             "panel_count": 3,
             "generation_errors": [
-                "Attempt 3/3: Expected panel count in [5, 7] (requested=6, preferred=5), received 3. "
-                "Accepting out-of-range panel count."
+                "Architecture alignment failed: expected 5 panels from story architecture, received 3. "
+                "Accepting panel-count mismatch."
             ],
         }
     )
@@ -1108,6 +1276,7 @@ async def test_out_of_range_panel_count_records_error_but_continues(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT),
         patch("pipeline.write_script", return_value=out_of_range_script),
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
@@ -1115,10 +1284,10 @@ async def test_out_of_range_panel_count_records_error_but_continues(tmp_path):
         result = await pipeline.run()
 
     assert result["script"] is not None
-    assert result["script"]["panel_count"] == 3
+    assert _checkpoint_dict(result, "script")["panel_count"] == 3
     assert result["page_prompt"] is not None
     assert result["errors"] == [
-        "script: Attempt 3/3: Expected panel count in [5, 7] (requested=6, preferred=5), received 3. "
-        "Accepting out-of-range panel count."
+        "script: Architecture alignment failed: expected 5 panels from story architecture, received 3. "
+        "Accepting panel-count mismatch."
     ]
     mock_prompts.assert_called_once()

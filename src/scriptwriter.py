@@ -16,6 +16,7 @@ from prompt_templates import (
     render_prompt_template,
 )
 from scraper import RawTextCheckpoint
+from story_architect import StoryArchitectureCheckpoint
 
 
 class WorldStateInput(BaseModel):
@@ -55,13 +56,7 @@ class ScriptCheckpoint(BaseModel):
     scripted_at: str
 
 
-ScriptGenerator = Callable[[str, WorldStateInput, str, int], ScriptPayload]
-
-
-class PanelPlan(BaseModel):
-    minimum: int = Field(ge=1)
-    maximum: int = Field(ge=1)
-    beat_count: int = Field(ge=0)
+ScriptGenerator = Callable[[str, WorldStateInput, StoryArchitectureCheckpoint, str], ScriptPayload]
 
 
 def _build_instructor_client():
@@ -114,19 +109,33 @@ def _format_entities_for_prompt(
     )
 
 
-def _resolve_panel_plan(requested_panel_count: int, beats: list[StoryBeat]) -> PanelPlan:
-    beat_count = len(beats)
-    minimum = max(1, requested_panel_count - 1)
-    maximum = max(minimum, requested_panel_count + 1)
-    return PanelPlan(minimum=minimum, maximum=maximum, beat_count=beat_count)
+def _format_story_architecture_for_prompt(architecture: StoryArchitectureCheckpoint) -> str:
+    panel_payload: list[dict[str, object]] = []
+    for panel in architecture.panels:
+        panel_payload.append(
+            {
+                "index": panel.index,
+                "beat_indices": panel.beat_indices,
+                "beat_summary": panel.beat_summary,
+                "story_purpose": panel.story_purpose,
+                "panel_scale": panel.panel_scale,
+                "panel_shape": panel.panel_shape,
+                "setting_brief": panel.setting_brief,
+                "character_focus": panel.character_focus,
+                "must_include": panel.must_include,
+                "dialogue_goals": panel.dialogue_goals,
+                "continuity_notes": panel.continuity_notes,
+            }
+        )
+    return json.dumps(panel_payload, indent=2, ensure_ascii=False)
 
 
 def _generate_with_instructor_ollama(
     content: str,
     world: WorldStateInput,
+    architecture: StoryArchitectureCheckpoint,
     raw_quotes: list[tuple[str, str | None]],
     model: str,
-    panel_plan: PanelPlan,
     system_prompt_path: Path | None = None,
     user_prompt_path: Path | None = None,
 ) -> ScriptPayload:
@@ -143,9 +152,9 @@ def _generate_with_instructor_ollama(
         SCRIPTWRITER_USER_PROMPT_FILENAME,
         template_path=user_prompt_path,
         title=title,
-        minimum_panel_target=panel_plan.minimum,
-        maximum_panel_target=panel_plan.maximum,
+        panel_count=len(architecture.panels),
         entities_context=entities_context,
+        story_architecture=_format_story_architecture_for_prompt(architecture),
         story_text=content,
     )
 
@@ -160,14 +169,22 @@ def _generate_with_instructor_ollama(
     )
 
 
-def _normalize_panels(panels: list[Panel]) -> list[Panel]:
+def _normalize_panels(
+    panels: list[Panel],
+    architecture: StoryArchitectureCheckpoint,
+) -> list[Panel]:
     normalized: list[Panel] = []
     for idx, panel in enumerate(panels, start=1):
+        architecture_panel = architecture.panels[idx - 1] if idx <= len(architecture.panels) else None
         normalized.append(
             Panel(
                 index=idx,
-                panel_scale=panel.panel_scale,
-                panel_shape=panel.panel_shape,
+                panel_scale=(
+                    architecture_panel.panel_scale if architecture_panel is not None else panel.panel_scale
+                ),
+                panel_shape=(
+                    architecture_panel.panel_shape if architecture_panel is not None else panel.panel_shape
+                ),
                 setting=panel.setting,
                 visual_action=panel.visual_action,
                 dialogue_overlay=panel.dialogue_overlay,
@@ -203,19 +220,20 @@ def _validate_item_continuity(panels: list[Panel]) -> None:
 def write_script(
     raw_checkpoint_path: Path = Path("campaigns/<campaign>/<episode>/v001/01_raw_text.json"),
     entities_checkpoint_path: Path = Path("campaigns/<campaign>/<episode>/v001/02_entities.json"),
+    story_architecture_checkpoint_path: Path = Path(
+        "campaigns/<campaign>/<episode>/v001/02_5_story_architecture.json"
+    ),
     output_path: Path = Path("campaigns/<campaign>/<episode>/v001/03_script.json"),
     model: str = "qwen2.5:7b",
-    panel_count: int = 6,
     system_prompt_path: Path | None = None,
     user_prompt_path: Path | None = None,
     generator: ScriptGenerator | None = None,
 ) -> ScriptCheckpoint:
-    if panel_count < 1:
-        raise ValueError("panel_count must be >= 1")
-
     raw = RawTextCheckpoint.model_validate_json(raw_checkpoint_path.read_text(encoding="utf-8"))
     world = WorldStateInput.model_validate_json(entities_checkpoint_path.read_text(encoding="utf-8"))
-    panel_plan = _resolve_panel_plan(panel_count, world.beats)
+    architecture = StoryArchitectureCheckpoint.model_validate_json(
+        story_architecture_checkpoint_path.read_text(encoding="utf-8")
+    )
     generation_errors: list[str] = []
 
     if generator is None:
@@ -228,18 +246,25 @@ def write_script(
             payload = _generate_with_instructor_ollama(
                 raw.content,
                 world,
+                architecture,
                 [(quote.text, quote.attribution) for quote in raw.quotes],
                 model,
-                panel_plan,
                 system_prompt_path=system_prompt_path,
                 user_prompt_path=user_prompt_path,
             )
         else:
-            payload = generate_fn(raw.content, world, model, panel_count)
+            payload = generate_fn(raw.content, world, architecture, model)
     except Exception as exc:
         raise RuntimeError(f"Generation failed before validation: {exc}") from exc
 
-    panels = _normalize_panels(payload.panels)
+    panels = _normalize_panels(payload.panels, architecture)
+    expected_panel_count = len(architecture.panels)
+    if len(panels) != expected_panel_count:
+        generation_errors.append(
+            "Architecture alignment failed: expected "
+            f"{expected_panel_count} panels from story architecture, received {len(panels)}. "
+            "Accepting panel-count mismatch."
+        )
     try:
         _validate_item_continuity(panels)
     except ValueError as exc:
@@ -277,6 +302,14 @@ def _run_cli() -> None:
         help="Input entities checkpoint path (e.g. campaigns/<campaign>/<episode>/v001/02_entities.json)",
     )
     parser.add_argument(
+        "--story-architecture-input",
+        required=True,
+        help=(
+            "Input story architecture checkpoint path "
+            "(e.g. campaigns/<campaign>/<episode>/v001/02_5_story_architecture.json)"
+        ),
+    )
+    parser.add_argument(
         "--output",
         required=True,
         help="Output script checkpoint path (e.g. campaigns/<campaign>/<episode>/v001/03_script.json)",
@@ -286,19 +319,13 @@ def _run_cli() -> None:
         default="qwen2.5:7b",
         help="Ollama model name",
     )
-    parser.add_argument(
-        "--panel-count",
-        default=6,
-        type=int,
-        help="Target number of comic panels (soft target; final count may vary by ±1)",
-    )
     args = parser.parse_args()
     checkpoint = write_script(
         raw_checkpoint_path=Path(args.raw_input),
         entities_checkpoint_path=Path(args.entities_input),
+        story_architecture_checkpoint_path=Path(args.story_architecture_input),
         output_path=Path(args.output),
         model=args.model,
-        panel_count=args.panel_count,
     )
     print(f"Saved {len(checkpoint.panels)} panels to {args.output}")
 

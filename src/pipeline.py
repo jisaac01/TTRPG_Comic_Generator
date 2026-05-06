@@ -8,7 +8,7 @@ import shutil
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 from entities import (
     WorldStateCheckpoint,
@@ -25,12 +25,15 @@ from prompt_templates import (
     PROMPT_TEMPLATE_FILENAMES,
     SCRIPTWRITER_SYSTEM_PROMPT_FILENAME,
     SCRIPTWRITER_USER_PROMPT_FILENAME,
+    STORY_ARCHITECT_SYSTEM_PROMPT_FILENAME,
+    STORY_ARCHITECT_USER_PROMPT_FILENAME,
     STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME,
     STYLE_INTEGRATOR_USER_PROMPT_FILENAME,
 )
 from style_integrator import StyleIntegrationPartialFailure, integrate_style
 from scraper import RawTextCheckpoint, normalize_recap_version, scrape_scrybequill
 from scriptwriter import ScriptCheckpoint, write_script
+from story_architect import StoryArchitectureCheckpoint, architect_story
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -40,8 +43,8 @@ CAMPAIGNS_ROOT = Path("campaigns")
 INDEX_FILENAME = "index.json"
 EPISODE_META_FILENAME = "episode_meta.json"
 
-RerunFrom = Literal["scrape", "entities", "script", "style", "prompt"]
-RerunFromArg = Literal["scrape", "entities", "script", "style", "prompt", "analyze"]
+RerunFrom = Literal["scrape", "entities", "architect", "script", "style", "prompt"]
+RerunFromArg = Literal["scrape", "entities", "architect", "script", "style", "prompt", "analyze"]
 
 # ---------------------------------------------------------------------------
 # Slug helpers
@@ -194,12 +197,31 @@ def _create_version_dir(
         # via _capture_prompt_templates_for_version and _capture_art_template_for_version,
         # so they are never copied from the previous version.
         _CHECKPOINTS_TO_COPY: dict[RerunFrom | None, list[str]] = {
-            None: ["01_raw_text.json", "02_entities.json", "03_script.json", "03_5_styled_script.json", "04_page_prompt.txt"],
+            None: [
+                "01_raw_text.json",
+                "02_entities.json",
+                "02_5_story_architecture.json",
+                "03_script.json",
+                "03_5_styled_script.json",
+                "04_page_prompt.txt",
+            ],
             "scrape": [],
             "entities": ["01_raw_text.json"],
-            "script": ["01_raw_text.json", "02_entities.json"],
-            "style": ["01_raw_text.json", "02_entities.json", "03_script.json"],
-            "prompt": ["01_raw_text.json", "02_entities.json", "03_script.json", "03_5_styled_script.json"],
+            "architect": ["01_raw_text.json", "02_entities.json"],
+            "script": ["01_raw_text.json", "02_entities.json", "02_5_story_architecture.json"],
+            "style": [
+                "01_raw_text.json",
+                "02_entities.json",
+                "02_5_story_architecture.json",
+                "03_script.json",
+            ],
+            "prompt": [
+                "01_raw_text.json",
+                "02_entities.json",
+                "02_5_story_architecture.json",
+                "03_script.json",
+                "03_5_styled_script.json",
+            ],
         }
         files_to_copy = _CHECKPOINTS_TO_COPY.get(rerun_from, [])
         
@@ -223,10 +245,13 @@ class ComicPipeline:
         campaign: str,
         campaigns_root: Path = CAMPAIGNS_ROOT,
         analysis_model: str = "qwen2.5:7b",
+        architect_model: str = "qwen2.5:7b",
         script_model: str = "qwen2.5:7b",
         style_model: str = "qwen2.5:7b",
         panel_count: int = 6,
         art_style_template: Path | None = None,
+        story_architect_system_prompt: Path | None = None,
+        story_architect_user_prompt: Path | None = None,
         scriptwriter_system_prompt: Path | None = None,
         scriptwriter_user_prompt: Path | None = None,
         style_integrator_system_prompt: Path | None = None,
@@ -242,16 +267,19 @@ class ComicPipeline:
         self.campaign = campaign
         self.campaigns_root = campaigns_root
         self.analysis_model = analysis_model
+        self.architect_model = architect_model
         self.script_model = script_model
         self.style_model = style_model
         self.panel_count = panel_count
         self.art_style_template = art_style_template
+        self.story_architect_system_prompt = story_architect_system_prompt
+        self.story_architect_user_prompt = story_architect_user_prompt
         self.scriptwriter_system_prompt = scriptwriter_system_prompt
         self.scriptwriter_user_prompt = scriptwriter_user_prompt
         self.style_integrator_system_prompt = style_integrator_system_prompt
         self.style_integrator_user_prompt = style_integrator_user_prompt
         self.page_prompt_template = page_prompt_template
-        self.rerun_from = rerun_from
+        self.rerun_from: RerunFromArg | None = rerun_from
         self.recap_version = normalize_recap_version(recap_version)
         self.skip_style = skip_style
 
@@ -306,6 +334,10 @@ class ComicPipeline:
 
     def _resolve_prompt_templates(self) -> dict[str, Path]:
         return {
+            STORY_ARCHITECT_SYSTEM_PROMPT_FILENAME: self.story_architect_system_prompt
+            or self._campaign_prompt_path(STORY_ARCHITECT_SYSTEM_PROMPT_FILENAME),
+            STORY_ARCHITECT_USER_PROMPT_FILENAME: self.story_architect_user_prompt
+            or self._campaign_prompt_path(STORY_ARCHITECT_USER_PROMPT_FILENAME),
             SCRIPTWRITER_SYSTEM_PROMPT_FILENAME: self.scriptwriter_system_prompt
             or self._campaign_prompt_path(SCRIPTWRITER_SYSTEM_PROMPT_FILENAME),
             SCRIPTWRITER_USER_PROMPT_FILENAME: self.scriptwriter_user_prompt
@@ -376,7 +408,7 @@ class ComicPipeline:
 
         if existing_episode is None:
             # First run: scrape to get the title so we can slug the episode folder.
-            print("[1/4] Scraping...")
+            print("[1/5] Scraping...")
             with tempfile.TemporaryDirectory() as tmpdir:
                 tmp_raw_path = Path(tmpdir) / "01_raw_text.json"
                 raw = await scrape_scrybequill(
@@ -415,19 +447,21 @@ class ComicPipeline:
                         encoding="utf-8",
                     )
                 if content_changed:
-                    print(f"[1/4] Recap variant changed to {self.recap_version!r} - invalidating downstream checkpoints")
+                    print(f"[1/5] Recap variant changed to {self.recap_version!r} - invalidating downstream checkpoints")
                     entities_path = version_dir / "02_entities.json"
+                    story_architecture_path = version_dir / "02_5_story_architecture.json"
                     script_path = version_dir / "03_script.json"
                     styled_script_path = version_dir / "03_5_styled_script.json"
                     prompts_path = version_dir / "04_page_prompt.txt"
                     entities_path.unlink(missing_ok=True)
+                    story_architecture_path.unlink(missing_ok=True)
                     script_path.unlink(missing_ok=True)
                     styled_script_path.unlink(missing_ok=True)
                     prompts_path.unlink(missing_ok=True)
                 else:
-                    print(f"[1/4] Scraping...skipped (checkpoint exists, recap: {self.recap_version})")
+                    print(f"[1/5] Scraping...skipped (checkpoint exists, recap: {self.recap_version})")
             else:
-                print("[1/4] Scraping...")
+                print("[1/5] Scraping...")
                 raw = await scrape_scrybequill(
                     url=self.url,
                     checkpoint_path=raw_path,
@@ -437,6 +471,7 @@ class ComicPipeline:
 
         self._ensure_campaign_prompt_templates()
         entities_path = version_dir / "02_entities.json"
+        story_architecture_path = version_dir / "02_5_story_architecture.json"
         script_path = version_dir / "03_script.json"
         styled_script_path = version_dir / "03_5_styled_script.json"
         prompts_path = version_dir / "04_page_prompt.txt"
@@ -448,12 +483,12 @@ class ComicPipeline:
         errors: list[str] = []
 
         if entities_path.exists():
-            print("[2/4] Building entities...skipped (checkpoint exists)")
+            print("[2/5] Building entities...skipped (checkpoint exists)")
             entities = WorldStateCheckpoint.model_validate_json(
                 entities_path.read_text(encoding="utf-8")
             )
         else:
-            print("[2/4] Building entities from scraped notes...")
+            print("[2/5] Building entities from scraped notes...")
             entities = build_entities_from_raw(
                 raw_checkpoint_path=raw_path,
                 output_path=entities_path,
@@ -461,20 +496,50 @@ class ComicPipeline:
             )
             print("      ...done")
 
+        story_architecture: StoryArchitectureCheckpoint | None = None
+        if story_architecture_path.exists():
+            print("[3/5] Building story architecture...skipped (checkpoint exists)")
+            story_architecture = StoryArchitectureCheckpoint.model_validate_json(
+                story_architecture_path.read_text(encoding="utf-8")
+            )
+        else:
+            print(
+                f"[3/5] Building story architecture...  (model: {self.architect_model}, panels: {self.panel_count})"
+            )
+            try:
+                story_architecture = architect_story(
+                    raw_checkpoint_path=raw_path,
+                    entities_checkpoint_path=entities_path,
+                    output_path=story_architecture_path,
+                    model=self.architect_model,
+                    panel_count=self.panel_count,
+                    system_prompt_path=prompt_template_paths[STORY_ARCHITECT_SYSTEM_PROMPT_FILENAME],
+                    user_prompt_path=prompt_template_paths[STORY_ARCHITECT_USER_PROMPT_FILENAME],
+                )
+                print("      ...done")
+            except (ValueError, RuntimeError) as exc:
+                errors.append(f"story_architecture: {exc}")
+                print(
+                    "      ...ERROR (story architecture generation failed — skipping phases 4 & 5): "
+                    f"{exc}"
+                )
+
         script: ScriptCheckpoint | None = None
         script_generated_this_run = False
-        if script_path.exists():
-            print("[3/4] Writing script...skipped (checkpoint exists)")
+        if story_architecture is None:
+            print("[4/5] Writing script...skipped (no story architecture)")
+        elif script_path.exists():
+            print("[4/5] Writing script...skipped (checkpoint exists)")
             script = ScriptCheckpoint.model_validate_json(script_path.read_text(encoding="utf-8"))
         else:
-            print(f"[3/4] Writing script...  (model: {self.script_model}, panels: {self.panel_count})")
+            print(f"[4/5] Writing script...  (model: {self.script_model})")
             try:
                 script = write_script(
                     raw_checkpoint_path=raw_path,
                     entities_checkpoint_path=entities_path,
+                    story_architecture_checkpoint_path=story_architecture_path,
                     output_path=script_path,
                     model=self.script_model,
-                    panel_count=self.panel_count,
                     system_prompt_path=prompt_template_paths[SCRIPTWRITER_SYSTEM_PROMPT_FILENAME],
                     user_prompt_path=prompt_template_paths[SCRIPTWRITER_USER_PROMPT_FILENAME],
                 )
@@ -491,18 +556,18 @@ class ComicPipeline:
 
         styled_script: ScriptCheckpoint | None = None
         if script is None:
-            print("[3.5/4] Integrating art style...skipped (no script)")
+            print("[4.5/5] Integrating art style...skipped (no script)")
         elif self.skip_style:
-            print("[3.5/4] Integrating art style...skipped (--skip-style)")
+            print("[4.5/5] Integrating art style...skipped (--skip-style)")
             styled_script = script
         elif styled_script_path.exists():
-            print("[3.5/4] Integrating art style...skipped (checkpoint exists)")
+            print("[4.5/5] Integrating art style...skipped (checkpoint exists)")
             styled_script = ScriptCheckpoint.model_validate_json(
                 styled_script_path.read_text(encoding="utf-8")
             )
         else:
             template_path = self._capture_art_template_for_version(template_path, version_dir)
-            print(f"[3.5/4] Integrating art style...  (model: {self.style_model}, template: {template_path})")
+            print(f"[4.5/5] Integrating art style...  (model: {self.style_model}, template: {template_path})")
             try:
                 styled_script = integrate_style(
                     script_checkpoint_path=script_path,
@@ -523,14 +588,14 @@ class ComicPipeline:
 
         page_prompt: str | None = None
         if styled_script is None:
-            print("[4/4] Generating page prompt...skipped (no styled script)")
+            print("[5/5] Generating page prompt...skipped (no styled script)")
         elif prompts_path.exists():
-            print("[4/4] Generating page prompt...skipped (checkpoint exists)")
+            print("[5/5] Generating page prompt...skipped (checkpoint exists)")
             page_prompt = prompts_path.read_text(encoding="utf-8")
         else:
             template_path = self._capture_art_template_for_version(template_path, version_dir)
             prompt_script_path = script_path if self.skip_style else styled_script_path
-            print(f"[4/4] Generating page prompt...  (template: {template_path})")
+            print(f"[5/5] Generating page prompt...  (template: {template_path})")
             try:
                 page_prompt = generate_page_prompt(
                     script_checkpoint_path=prompt_script_path,
@@ -547,6 +612,7 @@ class ComicPipeline:
         return {
             "raw_text": raw.model_dump(),
             "entities": entities.model_dump(),
+            "story_architecture": story_architecture.model_dump() if story_architecture is not None else None,
             "script": script.model_dump() if script is not None else None,
             "styled_script": styled_script.model_dump() if styled_script is not None else None,
             "page_prompt": {
@@ -588,14 +654,19 @@ async def _run_cli() -> None:
         help="Root directory for all campaign data (default: campaigns/)",
     )
     parser.add_argument(
+        "--architect-model",
+        default="qwen2.5:7b",
+        help="Ollama model name used for Phase 3 story architecture",
+    )
+    parser.add_argument(
         "--script-model",
         default="qwen2.5:7b",
-        help="Ollama model name used for Phase 3 scripting",
+        help="Ollama model name used for Phase 4 scripting",
     )
     parser.add_argument(
         "--style-model",
         default="qwen2.5:7b",
-        help="Ollama model name used for Phase 3.5 art style integration",
+        help="Ollama model name used for Phase 4.5 art style integration",
     )
     parser.add_argument(
         "--panel-count",
@@ -609,6 +680,24 @@ async def _run_cli() -> None:
         help=(
             "Explicit path to an art direction template JSON file. "
             f"If omitted, the pipeline looks for campaigns/<campaign>/{ART_DIRECTION_TEMPLATE_FILENAME}"
+        ),
+    )
+    parser.add_argument(
+        "--story-architect-system-prompt",
+        default=None,
+        help=(
+            "Explicit path to the story architect system prompt template. "
+            f"If omitted, the pipeline uses campaigns/<campaign>/{STORY_ARCHITECT_SYSTEM_PROMPT_FILENAME} "
+            "and bootstraps it from prompts/ on first use."
+        ),
+    )
+    parser.add_argument(
+        "--story-architect-user-prompt",
+        default=None,
+        help=(
+            "Explicit path to the story architect user prompt template. "
+            f"If omitted, the pipeline uses campaigns/<campaign>/{STORY_ARCHITECT_USER_PROMPT_FILENAME} "
+            "and bootstraps it from prompts/ on first use."
         ),
     )
     parser.add_argument(
@@ -658,12 +747,12 @@ async def _run_cli() -> None:
     )
     parser.add_argument(
         "--rerun-from",
-        choices=["scrape", "entities", "script", "style", "prompt", "analyze"],
+        choices=["scrape", "entities", "architect", "script", "style", "prompt", "analyze"],
         default=None,
         help=(
             "Invalidate checkpoints from this phase onward and rerun. "
             "Prior phases are cloned from the last version. "
-            "Options: scrape, entities, script, style, prompt (analyze accepted as legacy alias)"
+            "Options: scrape, entities, architect, script, style, prompt (analyze accepted as legacy alias)"
         ),
     )
     parser.add_argument(
@@ -693,10 +782,17 @@ async def _run_cli() -> None:
         url=args.url,
         campaign=args.campaign,
         campaigns_root=Path(args.campaigns_root),
+        architect_model=args.architect_model,
         script_model=args.script_model,
         style_model=args.style_model,
         panel_count=args.panel_count,
         art_style_template=Path(args.art_style_template) if args.art_style_template else None,
+        story_architect_system_prompt=Path(args.story_architect_system_prompt)
+        if args.story_architect_system_prompt
+        else None,
+        story_architect_user_prompt=Path(args.story_architect_user_prompt)
+        if args.story_architect_user_prompt
+        else None,
         scriptwriter_system_prompt=Path(args.scriptwriter_system_prompt)
         if args.scriptwriter_system_prompt
         else None,
@@ -717,7 +813,14 @@ async def _run_cli() -> None:
         skip_style=args.skip_style,
     )
     result = await pipeline.run()
-    checkpoint_keys = ("raw_text", "entities", "script", "styled_script", "page_prompt")
+    checkpoint_keys = (
+        "raw_text",
+        "entities",
+        "story_architecture",
+        "script",
+        "styled_script",
+        "page_prompt",
+    )
     failed = [key for key in checkpoint_keys if result.get(key) is None]
     status_blob = {
         "status": "partial" if failed else "ok",
@@ -730,7 +833,7 @@ async def _run_cli() -> None:
     }
     status_json = json.dumps(status_blob, indent=2)
     print(status_json)
-    run_status_path = Path(result["version_dir"]) / "run_status.json"
+    run_status_path = Path(cast(str, result["version_dir"])) / "run_status.json"
     run_status_path.write_text(status_json, encoding="utf-8")
 
 

@@ -1,0 +1,36 @@
+Story title: {title}
+
+Build a panel architecture for this story.
+
+Target panel count: {panel_count}
+
+For each panel, output:
+- beat_indices
+- beat_summary
+- story_purpose
+- panel_scale
+- panel_shape
+- setting_brief
+- character_focus
+- must_include
+- dialogue_goals
+- continuity_notes
+
+Rules:
+- Keep panels in strict chronological order.
+- Cover the major beats; each beat should appear in at least one panel.
+- Use panel_scale and panel_shape to express pacing and emphasis.
+- beat_summary must be a one-sentence summary of the selected beat_indices for that panel.
+- Keep setting_brief concise and structural, not fully scripted.
+- Keep dialogue_goals as intent, not final dialogue lines.
+- Use must_include for visual facts the scriptwriter must preserve.
+- Keep must_include panel-local: include only details that are central to this panel's assigned beat(s).
+- Keep must_include concise and specific (target 1-3 concrete items).
+- Preserve distinctive recap details (named artifacts, unique creatures, named locations, and specific discoveries) in must_include.
+- Use continuity_notes for state that should persist across adjacent panels.
+
+Entity data:
+{entities_context}
+
+Story text:
+{story_text}

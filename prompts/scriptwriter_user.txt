@@ -2,9 +2,9 @@ Story title: {title}
 
 Create a high-energy, action-packed comic book script optimized for the visual medium. Prioritize dynamic, cinematic panel compositions with dramatic angles, intense motion, impactful poses, and clear visual storytelling that conveys excitement, tension, and momentum. Show action through movement, effects, and expressions rather than narration. Build suspense between panels with strong page-turn energy.
 
-Follow beats as pacing anchors and keep events in strict chronological order.
-Use roughly one panel per beat when possible, but allow dynamic panel counts for high-action sequences (e.g., rapid cuts or splash-style emphasis).
-Aim for {minimum_panel_target} to an absolute maximum of {maximum_panel_target} story panels.
+Follow the provided story architecture exactly.
+Keep events in strict chronological order.
+Write exactly {panel_count} story panels.
 
 Each panel must include: 
 - panel_scale (one of: small, medium, large, splash)
@@ -15,7 +15,11 @@ Each panel must include:
 - held_items_before
 - held_items_after
 
-Use panel_scale + panel_shape to communicate panel importance and composition clearly to the artist. Reserve splash panels for major story beats and use irregular or inset shapes only when they add clear storytelling impact.
+Preserve the architect-selected panel_scale + panel_shape for each panel. Do not invent alternative layout metadata.
+Use the architecture's setting_brief, must_include items, dialogue_goals, and continuity_notes as hard constraints when writing each panel.
+Treat beat_summary as the primary narrative anchor for each panel.
+Each must_include item must appear in the resulting panel content (setting or visual_action) with exact wording or very light inflection.
+Do not replace distinctive nouns from architecture with generic substitutes.
 
 Continuity rule: held items must persist from panel N held_items_after to panel N+1 held_items_before for each named character unless a panel explicitly depicts the item being dropped or transferred.
 
@@ -28,6 +32,9 @@ Put character actions in the visual_action section, and keep dialogue_overlay ex
 
 Entity data:
 {entities_context}
+
+Story architecture:
+{story_architecture}
 
 Story text:
 {story_text}

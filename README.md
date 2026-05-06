@@ -21,6 +21,8 @@ playwright install chromium
 
 Each campaign has its own folder under `campaigns/`. On the first pipeline run, the campaign folder is bootstrapped automatically with reusable defaults for:
 
+- `story_architect_system.txt`
+- `story_architect_user.txt`
 - `art_direction_template.json`
 - `scriptwriter_system.txt`
 - `scriptwriter_user.txt`
@@ -35,6 +37,8 @@ If you want to pre-seed defaults manually, copy them the same way:
 ```bash
 mkdir -p campaigns/dreadmarsh
 cp prompts/art_direction_template.json campaigns/dreadmarsh/art_direction_template.json
+cp prompts/story_architect_system.txt campaigns/dreadmarsh/story_architect_system.txt
+cp prompts/story_architect_user.txt campaigns/dreadmarsh/story_architect_user.txt
 cp prompts/scriptwriter_system.txt campaigns/dreadmarsh/scriptwriter_system.txt
 cp prompts/scriptwriter_user.txt campaigns/dreadmarsh/scriptwriter_user.txt
 cp prompts/style_integrator_system.txt campaigns/dreadmarsh/style_integrator_system.txt
@@ -72,7 +76,10 @@ python src/pipeline.py dreadmarsh https://scrybequill.com/share/...
 # Select a different recap variant from cached scrape data
 python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --recap-version short
 
-# Update art style integration only — creates v003/, clones v002/, re-runs Phase 3.5 and Phase 4
+# Update story architecture and everything downstream
+python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --rerun-from architect
+
+# Update art style integration only — creates v003/, clones v002/, re-runs Phase 4.5 and Phase 5
 python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --rerun-from style
 
 # Rebuild only the final page prompt from the styled script
@@ -101,10 +108,15 @@ python src/pipeline.py belowdown https://scrybequill.com/share/...
 
 ```
 --campaigns-root PATH        default: campaigns/
+--architect-model NAME       default: qwen2.5:7b
 --script-model NAME          default: qwen2.5:7b
 --style-model NAME           default: qwen2.5:7b
---panel-count N              default: 6 (soft target; final script may be N ± 1)
+--panel-count N              default: 6 (target panel count for the story architect)
 --art-style-template PATH    Override campaign-level template for this run only
+--story-architect-system-prompt PATH
+                             Override the story architect system prompt template for this run only
+--story-architect-user-prompt PATH
+                             Override the story architect user prompt template for this run only
 --scriptwriter-system-prompt PATH
                              Override the system prompt template for this run only
 --scriptwriter-user-prompt PATH
@@ -114,16 +126,23 @@ python src/pipeline.py belowdown https://scrybequill.com/share/...
 --style-integrator-user-prompt PATH
                              Override the style integrator user prompt template for this run only
 --page-prompt-template PATH  Override the page prompt template for this run only
---rerun-from PHASE           scrape | entities | script | style | prompt (legacy analyze alias accepted)
+--rerun-from PHASE           scrape | entities | architect | script | style | prompt (legacy analyze alias accepted)
 --recap-version VERSION      short | standard | alternate/alt | long
---skip-style                 Skip Phase 3.5 and generate Phase 4 prompt from 03_script.json
+--skip-style                 Skip Phase 4.5 and generate Phase 5 prompt from 03_script.json
 ```
+
+### Stage responsibilities
+
+- Phase 2 extracts entities and canonical beats from the scraped recap.
+- Phase 3 story architect maps beats to a panel plan and owns `panel_scale` + `panel_shape`.
+- Phase 4 scriptwriter realizes the architect plan into final panel prose, dialogue, and continuity state.
+- Phase 4.5 style integrator rewrites only `setting` and `visual_action`.
+- Phase 5 page prompt generation still consumes the script checkpoint.
 
 ### Script generation behavior
 
-- `--panel-count` is a soft target, not a hard exact count.
-- Scriptwriter accepts a final panel count in `[N-1, N+1]` (minimum panel count is always 1).
-- If the number of story beats is within that range, beat count is preferred for pacing.
+- `--panel-count` now targets the story architect stage.
+- Scriptwriter follows the architect checkpoint rather than deciding pacing from beats directly.
 - Scraped quotes are included in model context as reference dialogue and used when scene-appropriate.
 
 ## Directory layout
@@ -133,6 +152,8 @@ campaigns/
   index.json                        # global lookup: campaign+URL → episode folder
   dreadmarsh/
     art_direction_template.json     # campaign-level art direction
+    story_architect_system.txt      # campaign-level story architect system prompt
+    story_architect_user.txt        # campaign-level story architect user prompt
     scriptwriter_system.txt         # campaign-level scriptwriter system prompt
     scriptwriter_user.txt           # campaign-level scriptwriter user prompt
     style_integrator_system.txt     # campaign-level style integrator system prompt
@@ -143,10 +164,13 @@ campaigns/
       v001/
         01_raw_text.json
         02_entities.json
+        02_5_story_architecture.json
         03_script.json
         03_5_styled_script.json
         04_page_prompt.txt
         art_direction_template.json
+        story_architect_system.txt
+        story_architect_user.txt
         scriptwriter_system.txt
         scriptwriter_user.txt
         style_integrator_system.txt
@@ -166,7 +190,7 @@ campaigns/
 - The previous version's files are cloned as a baseline so only phases invalidated by `--rerun-from` are re-computed.
 - The effective art direction and prompt template files are copied into every version folder for reproducibility.
 - Episode identity is canonical by URL — if the story title changes on the source site, the same episode folder is reused.
-- When `--skip-style` is set, Phase 3.5 is skipped and Phase 4 consumes `03_script.json` directly.
+- When `--skip-style` is set, Phase 4.5 is skipped and Phase 5 consumes `03_script.json` directly.
 
 ## Running individual phases
 
@@ -182,15 +206,25 @@ python src/scraper.py <URL> --checkpoint campaigns/dreadmarsh/<episode>/v001/01_
 python -c "from pathlib import Path; from entities import build_entities_from_raw; build_entities_from_raw(Path('campaigns/dreadmarsh/<episode>/v001/01_raw_text.json'), Path('campaigns/dreadmarsh/<episode>/v001/02_entities.json'))"
 ```
 
-**Phase 3 — Script**
+**Phase 3 — Story Architect**
+```bash
+python src/story_architect.py \
+  --raw-input campaigns/dreadmarsh/<episode>/v001/01_raw_text.json \
+  --entities-input campaigns/dreadmarsh/<episode>/v001/02_entities.json \
+  --output campaigns/dreadmarsh/<episode>/v001/02_5_story_architecture.json \
+  --panel-count 6
+```
+
+**Phase 4 — Script**
 ```bash
 python src/scriptwriter.py \
   --raw-input campaigns/dreadmarsh/<episode>/v001/01_raw_text.json \
   --entities-input campaigns/dreadmarsh/<episode>/v001/02_entities.json \
+  --story-architecture-input campaigns/dreadmarsh/<episode>/v001/02_5_story_architecture.json \
   --output campaigns/dreadmarsh/<episode>/v001/03_script.json
 ```
 
-**Phase 3.5 — Style Integration**
+**Phase 4.5 — Style Integration**
 ```bash
 python src/style_integrator.py \
   --script-input campaigns/dreadmarsh/<episode>/v001/03_script.json \
@@ -198,7 +232,7 @@ python src/style_integrator.py \
   --output campaigns/dreadmarsh/<episode>/v001/03_5_styled_script.json
 ```
 
-**Phase 4 — Prompt**
+**Phase 5 — Prompt**
 ```bash
 # Standard flow (after style integration):
 python src/prompter.py \
