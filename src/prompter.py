@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 
 from entities import WorldStateCheckpoint
@@ -29,10 +30,28 @@ def _default_art_direction_template_json() -> str:
     return DEFAULT_ART_DIRECTION_TEMPLATE_PATH.read_text(encoding="utf-8").strip()
 
 
-def _format_character_details(world: WorldStateCheckpoint) -> str:
+def _collect_panel_text(script: ScriptCheckpoint) -> str:
+    parts: list[str] = []
+    for panel in script.panels:
+        parts.append(panel.setting)
+        parts.append(panel.visual_action)
+        parts.extend(panel.dialogue_overlay)
+        parts.extend(panel.held_items_before.keys())
+        parts.extend(panel.held_items_after.keys())
+    return " ".join(parts)
+
+
+def _character_is_referenced(name: str, panel_text: str) -> bool:
+    pattern = r"(?<!\\w)" + re.escape(name) + r"(?!\\w)"
+    return re.search(pattern, panel_text, flags=re.IGNORECASE) is not None
+
+
+def _format_character_details(world: WorldStateCheckpoint, script: ScriptCheckpoint) -> str:
+    panel_text = _collect_panel_text(script)
     details = [
         f"{character.name}: {character.description}"
         for character in world.characters
+        if _character_is_referenced(character.name, panel_text)
     ]
     return " | ".join(details)
 
@@ -130,7 +149,7 @@ def generate_page_prompt(
     )
 
     art_direction_template = _load_art_template(art_style_template_path)
-    character_details = _format_character_details(world)
+    character_details = _format_character_details(world, script)
     panel_block = _format_panel_block(script)
 
     prompt_text = render_prompt_template(

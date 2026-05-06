@@ -24,6 +24,10 @@ def _write_inputs(tmp_path: Path) -> tuple[Path, Path, Path]:
                 "name": "Vendetta",
                 "description": "A wary vampire scout",
             },
+            {
+                "name": "Offscreen NPC",
+                "description": "A merchant who is not present in this scene",
+            },
         ],
         "locations": [
             {
@@ -121,6 +125,8 @@ def test_generate_page_prompt_contains_interpolated_fields(tmp_path):
     assert "Panel 1:" in prompt_text
     assert "Panel 2:" in prompt_text
     assert "Del: A druid in mossy robes" in prompt_text
+    assert "Vendetta: A wary vampire scout" in prompt_text
+    assert "Offscreen NPC: A merchant who is not present in this scene" not in prompt_text
 
 
 def test_generate_page_prompt_fails_when_template_missing(tmp_path):
