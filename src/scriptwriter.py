@@ -76,19 +76,10 @@ def _format_entities_for_prompt(world: WorldStateInput) -> str:
     locations_blob = "\n".join(
         f"- {location.name}: {location.appearance}" for location in world.locations
     )
-    beats_parts: list[str] = []
-    for beat in world.beats:
-        beat_str = f"- Beat {beat.index}: {beat.beat}"
-        if beat.highlights:
-            highlights_str = ", ".join(beat.highlights)
-            beat_str += f" ({highlights_str})"
-        beats_parts.append(beat_str)
-    beats_blob = "\n".join(beats_parts)
 
     return (
         f"Characters:\n{characters_blob or '- none'}\n\n"
-        f"Locations:\n{locations_blob or '- none'}\n\n"
-        f"Story beats:\n{beats_blob or '- none'}"
+        f"Locations:\n{locations_blob or '- none'}"
     )
 
 

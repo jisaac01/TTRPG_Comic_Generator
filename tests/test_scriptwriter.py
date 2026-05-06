@@ -342,7 +342,7 @@ def test_format_entities_for_prompt_excludes_reference_quotes():
 
     prompt_blob = scriptwriter._format_entities_for_prompt(world)
 
-    assert "Story beats:" in prompt_blob
+    assert "Story beats:" not in prompt_blob
     assert "Reference quotes:" not in prompt_blob
 
 
