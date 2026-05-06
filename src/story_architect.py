@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from entities import StoryBeat, WorldStateCheckpoint
 from prompt_templates import (
@@ -21,7 +21,15 @@ from scraper import RawTextCheckpoint
 class NotableQuote(BaseModel):
     text: str = Field(min_length=1)
     speaker: str = Field(min_length=1)
-    attribution_context: str = Field(min_length=1)
+    attribution_context: str = ""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _remap_quote_field(cls, data: object) -> object:
+        if isinstance(data, dict) and "text" not in data and "quote" in data:
+            data = dict(data)
+            data["text"] = data.pop("quote")
+        return data
 
 
 class ArchitecturePanel(BaseModel):
@@ -94,15 +102,19 @@ def _normalize_quote_text(text: str) -> str:
 
 
 def _format_entities_for_prompt(world: WorldStateCheckpoint) -> str:
-    character_lines = "\n".join(
-        f"- {character.name}: {character.description}" for character in world.characters
+    pc_lines = "\n".join(
+        f"- {character.name}: {character.description}" for character in world.player_characters
+    )
+    npc_lines = "\n".join(
+        f"- {character.name}: {character.description}" for character in world.npcs
     )
     location_lines = "\n".join(
         f"- {location.name}: {location.appearance}" for location in world.locations
     )
     beats_blob = _format_beats_for_prompt(world.beats)
     return (
-        f"Characters:\n{character_lines or '- none'}\n\n"
+        f"Player Characters:\n{pc_lines or '- none'}\n\n"
+        f"NPCs:\n{npc_lines or '- none'}\n\n"
         f"Locations:\n{location_lines or '- none'}\n\n"
         f"Story beats:\n{beats_blob}"
     )

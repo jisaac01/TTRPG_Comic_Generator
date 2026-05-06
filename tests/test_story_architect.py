@@ -27,7 +27,7 @@ def _write_input_checkpoints(tmp_path: Path) -> tuple[Path, Path]:
         "title": "Swamp Trouble",
         "author": "GM",
         "model": "qwen2.5:7b",
-        "characters": [
+        "player_characters": [
             {
                 "name": "Del",
                 "description": "A druid in mossy robes",
@@ -37,6 +37,7 @@ def _write_input_checkpoints(tmp_path: Path) -> tuple[Path, Path]:
                 "description": "A wary vampire scout",
             },
         ],
+        "npcs": [],
         "locations": [
             {
                 "name": "Marsh trail",

@@ -12,7 +12,8 @@ from entities import (
     StoryBeat,
     WorldStateCheckpoint,
     _build_beats,
-    _build_characters,
+    _build_npcs,
+    _build_player_characters,
     _build_locations,
     _dedupe_by_name,
     build_entities_from_raw,
@@ -73,70 +74,97 @@ def test_dedupe_drops_empty_names():
 
 
 # ---------------------------------------------------------------------------
-# _build_characters
+# _build_player_characters
 # ---------------------------------------------------------------------------
 
 
-def test_build_characters_merges_player_characters_and_npcs():
+def test_build_player_characters_returns_only_pcs():
     raw = _make_raw(
         player_characters=[ScrapedEntity(name="Del", description="druid")],
         npcs=[ScrapedEntity(name="Merelda", description="witch")],
     )
-    chars = _build_characters(raw)
-    assert [c.name for c in chars] == ["Del", "Merelda"]
+    chars = _build_player_characters(raw)
+    assert [c.name for c in chars] == ["Del"]
 
 
-def test_build_characters_player_characters_listed_first():
+def test_build_player_characters_deduplicates():
     raw = _make_raw(
-        player_characters=[ScrapedEntity(name="Orion", description="bard")],
-        npcs=[ScrapedEntity(name="Merelda", description="witch")],
+        player_characters=[
+            ScrapedEntity(name="Del", description="first"),
+            ScrapedEntity(name="del", description="duplicate"),
+        ],
     )
-    chars = _build_characters(raw)
-    assert chars[0].name == "Orion"
-    assert chars[1].name == "Merelda"
-
-
-def test_build_characters_deduplicates_across_lists():
-    raw = _make_raw(
-        player_characters=[ScrapedEntity(name="Del", description="PC description")],
-        npcs=[ScrapedEntity(name="del", description="NPC description")],
-    )
-    chars = _build_characters(raw)
+    chars = _build_player_characters(raw)
     assert len(chars) == 1
-    assert chars[0].name == "Del"
-    assert chars[0].description == "PC description"
+    assert chars[0].description == "first"
 
 
-def test_build_characters_fallback_description_when_none():
+def test_build_player_characters_fallback_description_when_none():
     raw = _make_raw(
         player_characters=[ScrapedEntity(name="Del", description=None)],
     )
-    chars = _build_characters(raw)
+    chars = _build_player_characters(raw)
     assert chars[0].description == "No source description provided."
 
 
-def test_build_characters_fallback_description_when_whitespace_only():
+def test_build_player_characters_fallback_description_when_whitespace_only():
     raw = _make_raw(
         player_characters=[ScrapedEntity(name="Del", description="   ")],
     )
-    chars = _build_characters(raw)
+    chars = _build_player_characters(raw)
     assert chars[0].description == "No source description provided."
 
 
-def test_build_characters_has_only_name_and_description_fields():
+def test_build_player_characters_has_only_name_and_description_fields():
     raw = _make_raw(
         player_characters=[ScrapedEntity(name="Del", description="A druid")]
     )
-    chars = _build_characters(raw)
+    chars = _build_player_characters(raw)
     assert chars[0].model_dump() == {
         "name": "Del",
         "description": "A druid",
     }
 
 
-def test_build_characters_empty_when_no_entities():
+def test_build_player_characters_empty_when_no_entities():
     raw = _make_raw()
-    assert _build_characters(raw) == []
+    assert _build_player_characters(raw) == []
+
+
+# ---------------------------------------------------------------------------
+# _build_npcs
+# ---------------------------------------------------------------------------
+
+
+def test_build_npcs_returns_only_npcs():
+    raw = _make_raw(
+        player_characters=[ScrapedEntity(name="Del", description="druid")],
+        npcs=[ScrapedEntity(name="Merelda", description="witch")],
+    )
+    npcs = _build_npcs(raw, set())
+    assert [c.name for c in npcs] == ["Merelda"]
+
+
+def test_build_npcs_skips_names_already_in_pc_names():
+    raw = _make_raw(
+        player_characters=[ScrapedEntity(name="Del", description="PC description")],
+        npcs=[ScrapedEntity(name="del", description="NPC description")],
+    )
+    npcs = _build_npcs(raw, {"del"})
+    assert npcs == []
+
+
+def test_build_npcs_fallback_description_when_none():
+    raw = _make_raw(
+        npcs=[ScrapedEntity(name="Merelda", description=None)],
+    )
+    npcs = _build_npcs(raw, set())
+    assert npcs[0].description == "No source description provided."
+
+
+def test_build_npcs_empty_when_no_entities():
+    raw = _make_raw()
+    assert _build_npcs(raw, set()) == []
 
 
 # ---------------------------------------------------------------------------
@@ -274,8 +302,8 @@ def test_build_entities_from_raw_writes_valid_checkpoint(tmp_path):
     assert checkpoint.model == "scraper-direct"
     assert checkpoint.url == "https://example.test/story"
     assert checkpoint.title == "Test Story"
-    assert len(checkpoint.characters) == 1
-    assert checkpoint.characters[0].name == "Del"
+    assert len(checkpoint.player_characters) == 1
+    assert checkpoint.player_characters[0].name == "Del"
     assert len(checkpoint.locations) == 1
     assert checkpoint.locations[0].name == "Marsh"
     assert len(checkpoint.beats) == 1
@@ -293,7 +321,7 @@ def test_build_entities_from_raw_checkpoint_json_is_valid(tmp_path):
 
     payload = json.loads(output_path.read_text(encoding="utf-8"))
     loaded = WorldStateCheckpoint.model_validate(payload)
-    assert loaded.characters[0].name == "Del"
+    assert loaded.player_characters[0].name == "Del"
 
 
 def test_build_entities_from_raw_beats_have_no_quotes_field(tmp_path):

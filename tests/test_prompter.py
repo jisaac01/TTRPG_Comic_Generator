@@ -15,7 +15,7 @@ def _write_inputs(tmp_path: Path) -> tuple[Path, Path, Path]:
         "title": "Swamp Trouble",
         "author": "GM",
         "model": "qwen2.5:7b",
-        "characters": [
+        "player_characters": [
             {
                 "name": "Del",
                 "description": "A druid in mossy robes",
@@ -24,6 +24,8 @@ def _write_inputs(tmp_path: Path) -> tuple[Path, Path, Path]:
                 "name": "Vendetta",
                 "description": "A wary vampire scout",
             },
+        ],
+        "npcs": [
             {
                 "name": "Offscreen NPC",
                 "description": "A merchant who is not present in this scene",

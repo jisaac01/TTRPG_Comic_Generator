@@ -24,7 +24,8 @@ class WorldStateInput(BaseModel):
     title: str | None = None
     author: str | None = None
     model: str
-    characters: list[Character]
+    player_characters: list[Character]
+    npcs: list[Character]
     locations: list[Location]
     beats: list[StoryBeat]
     analyzed_at: str
@@ -70,15 +71,19 @@ def _build_instructor_client():
 
 
 def _format_entities_for_prompt(world: WorldStateInput) -> str:
-    characters_blob = "\n".join(
-        f"- {char.name}: {char.description}" for char in world.characters
+    pc_blob = "\n".join(
+        f"- {char.name}: {char.description}" for char in world.player_characters
+    )
+    npc_blob = "\n".join(
+        f"- {char.name}: {char.description}" for char in world.npcs
     )
     locations_blob = "\n".join(
         f"- {location.name}: {location.appearance}" for location in world.locations
     )
 
     return (
-        f"Characters:\n{characters_blob or '- none'}\n\n"
+        f"Player Characters:\n{pc_blob or '- none'}\n\n"
+        f"NPCs:\n{npc_blob or '- none'}\n\n"
         f"Locations:\n{locations_blob or '- none'}"
     )
 

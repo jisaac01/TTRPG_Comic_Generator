@@ -405,6 +405,7 @@ class ComicPipeline:
         shutil.copy2(DEFAULT_ART_DIRECTION_TEMPLATE_PATH, campaign_template)
 
     async def run(self) -> dict[str, object]:
+        self._version_dir: Path | None = None
         # Phase 1: scrape first so we have the title for episode resolution.
         # We need a temporary path to store the raw checkpoint before the episode
         # directory is resolved (title comes from the scrape).
@@ -430,6 +431,7 @@ class ComicPipeline:
                 self.campaigns_root, self.campaign, self.url, raw.title
             )
             version_dir, version_name = _create_version_dir(episode_dir, self.rerun_from)
+            self._version_dir = version_dir
             print(f"      episode: {episode_dir.name}/{version_name}")
 
             raw_path = version_dir / "01_raw_text.json"
@@ -442,6 +444,7 @@ class ComicPipeline:
         else:
             episode_dir = _episode_dir(self.campaigns_root, self.campaign, existing_episode)
             version_dir, version_name = _create_version_dir(episode_dir, self.rerun_from)
+            self._version_dir = version_dir
             print(f"      episode: {episode_dir.name}/{version_name}")
             raw_path = version_dir / "01_raw_text.json"
 
@@ -540,7 +543,7 @@ class ComicPipeline:
                     user_prompt_path=prompt_template_paths[STORY_ARCHITECT_USER_PROMPT_FILENAME],
                 )
                 print("      ...done")
-            except (ValueError, RuntimeError) as exc:
+            except Exception as exc:
                 errors.append(f"story_architecture: {exc}")
                 print(
                     "      ...ERROR (story architecture generation failed — skipping phases 4 & 5): "
@@ -579,7 +582,7 @@ class ComicPipeline:
                 )
                 script_generated_this_run = True
                 print("      ...done")
-            except (ValueError, RuntimeError) as exc:
+            except Exception as exc:
                 errors.append(f"script: {exc}")
                 print(f"      ...ERROR (script generation failed — skipping phases 3 & 4): {exc}")
 
@@ -873,9 +876,21 @@ async def _run_cli() -> None:
         recap_version=args.recap_version,
         skip_style=args.skip_style,
     )
-    result = await pipeline.run()
+    try:
+        result = await pipeline.run()
+    except Exception as exc:
+        status_blob = {
+            "status": "failed",
+            "campaign": args.campaign,
+            "errors": [str(exc)],
+        }
+        status_json = json.dumps(status_blob, indent=2)
+        print(status_json)
+        if pipeline._version_dir is not None:
+            (pipeline._version_dir / "run_status.json").write_text(status_json, encoding="utf-8")
+        raise
+
     checkpoint_keys = (
-        "raw_text",
         "entities",
         "story_architecture",
         "script",

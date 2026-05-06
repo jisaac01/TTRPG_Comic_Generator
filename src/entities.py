@@ -35,7 +35,8 @@ class WorldStateCheckpoint(BaseModel):
     title: str | None = None
     author: str | None = None
     model: str
-    characters: list[Character]
+    player_characters: list[Character]
+    npcs: list[Character]
     locations: list[Location]
     beats: list[StoryBeat]
     analyzed_at: str
@@ -64,21 +65,12 @@ def _dedupe_by_name(
     return deduped
 
 
-def _build_characters(raw: RawTextCheckpoint) -> list[Character]:
-    """Merge player_characters and npcs into a deduplicated Character list.
-
-    Player characters are listed first. Duplicates are resolved by keeping
-    the first occurrence (case-insensitive name match). Missing descriptions
-    receive a placeholder so the downstream validator always sees a non-empty
-    string.
-    """
-    candidates: list[tuple[str, str | None]] = [
-        (item.name, item.description) for item in raw.player_characters
-    ]
-    candidates.extend((item.name, item.description) for item in raw.npcs)
-
+def _build_player_characters(raw: RawTextCheckpoint) -> list[Character]:
+    """Build a deduplicated list of player characters from scraped data."""
     characters: list[Character] = []
-    for name, description in _dedupe_by_name(candidates):
+    for name, description in _dedupe_by_name(
+        [(item.name, item.description) for item in raw.player_characters]
+    ):
         characters.append(
             Character(
                 name=name,
@@ -86,6 +78,26 @@ def _build_characters(raw: RawTextCheckpoint) -> list[Character]:
             )
         )
     return characters
+
+
+def _build_npcs(
+    raw: RawTextCheckpoint,
+    pc_names: set[str],
+) -> list[Character]:
+    """Build a deduplicated NPC list, skipping any name already in pc_names."""
+    npcs: list[Character] = []
+    for name, description in _dedupe_by_name(
+        [(item.name, item.description) for item in raw.npcs]
+    ):
+        if _normalize_name(name) in pc_names:
+            continue
+        npcs.append(
+            Character(
+                name=name,
+                description=(description or "").strip() or "No source description provided.",
+            )
+        )
+    return npcs
 
 
 def _build_locations(raw: RawTextCheckpoint) -> list[Location]:
@@ -152,8 +164,8 @@ def build_entities_from_raw(
 ) -> WorldStateCheckpoint:
     """Build a WorldStateCheckpoint deterministically from scraped structured data.
 
-    Merges player_characters and npcs into a unified characters list (deduped
-    by name), and maps locations and outline entries to beats.
+    Keeps player_characters and npcs as separate lists (PCs take priority when
+    the same name appears in both). Maps locations and outline entries to beats.
 
     No LLM is involved. All data comes directly from the fields already
     extracted by the scraper.
@@ -162,7 +174,9 @@ def build_entities_from_raw(
         raw_checkpoint_path.read_text(encoding="utf-8")
     )
 
-    characters = _build_characters(raw)
+    player_characters = _build_player_characters(raw)
+    pc_names = {_normalize_name(c.name) for c in player_characters}
+    npcs = _build_npcs(raw, pc_names)
     locations = _build_locations(raw)
     beats = _build_beats(raw)
 
@@ -171,7 +185,8 @@ def build_entities_from_raw(
         title=raw.title,
         author=raw.author,
         model=model_label,
-        characters=characters,
+        player_characters=player_characters,
+        npcs=npcs,
         locations=locations,
         beats=beats,
         analyzed_at=datetime.now(timezone.utc).isoformat(),

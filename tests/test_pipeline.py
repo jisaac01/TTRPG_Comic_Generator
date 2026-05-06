@@ -61,12 +61,13 @@ _WORLD_CHECKPOINT = entities.WorldStateCheckpoint(
     title="Dreadmarsh Crossing",
     author="GM",
     model="qwen2.5:7b",
-    characters=[
+    player_characters=[
         entities.Character(
             name="Del",
             description="A druid in mossy robes",
         )
     ],
+    npcs=[],
     locations=[
         entities.Location(
             name="Dreadmarsh",

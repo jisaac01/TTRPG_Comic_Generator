@@ -22,7 +22,7 @@ def _write_input_checkpoints(tmp_path: Path) -> tuple[Path, Path, Path]:
         "title": "Swamp Trouble",
         "author": "GM",
         "model": "qwen2.5:7b",
-        "characters": [
+        "player_characters": [
             {
                 "name": "Del",
                 "description": "A druid in mossy robes",
@@ -32,6 +32,7 @@ def _write_input_checkpoints(tmp_path: Path) -> tuple[Path, Path, Path]:
                 "description": "A wary vampire scout",
             },
         ],
+        "npcs": [],
         "locations": [
             {
                 "name": "Marsh trail",
@@ -328,7 +329,8 @@ def test_format_entities_for_prompt_excludes_reference_quotes():
         title="Swamp Trouble",
         author="GM",
         model="qwen2.5:7b",
-        characters=[],
+        player_characters=[],
+        npcs=[],
         locations=[],
         beats=[
             scriptwriter.StoryBeat(
