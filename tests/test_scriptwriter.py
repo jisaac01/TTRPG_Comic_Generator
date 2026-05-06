@@ -151,8 +151,7 @@ def test_write_script_writes_checkpoint_and_normalizes_panel_indices(tmp_path):
     raw_path, entities_path, architecture_path = _write_input_checkpoints(tmp_path)
     output_path = tmp_path / "03_script.json"
 
-    def fake_generator(content, world, architecture, model):
-        assert "torch" in content
+    def fake_generator(world, architecture, model):
         assert world.title == "Swamp Trouble"
         assert architecture.target_panel_count == 3
         assert model == "qwen2.5:7b"
@@ -181,7 +180,7 @@ def test_write_script_writes_checkpoint_and_normalizes_panel_indices(tmp_path):
 def test_write_script_accepts_any_panel_count_without_error(tmp_path):
     raw_path, entities_path, architecture_path = _write_input_checkpoints(tmp_path)
 
-    def fake_generator(_content, _world, _architecture, _model):
+    def fake_generator(_world, _architecture, _model):
         return scriptwriter.ScriptPayload(panels=_valid_payload().panels[:1])
 
     checkpoint = scriptwriter.write_script(
@@ -200,7 +199,7 @@ def test_write_script_accepts_any_panel_count_without_error(tmp_path):
 def test_write_script_logs_continuity_error_and_keeps_output(tmp_path):
     raw_path, entities_path, architecture_path = _write_input_checkpoints(tmp_path)
 
-    def fake_generator(_content, _world, _architecture, _model):
+    def fake_generator(_world, _architecture, _model):
         broken = _valid_payload()
         broken.panels[1].held_items_before["Del"] = []
         return broken
@@ -221,7 +220,7 @@ def test_write_script_logs_continuity_error_and_keeps_output(tmp_path):
 def test_write_script_allows_added_items_between_panels(tmp_path):
     raw_path, entities_path, architecture_path = _write_input_checkpoints(tmp_path)
 
-    def fake_generator(_content, _world, _architecture, _model):
+    def fake_generator(_world, _architecture, _model):
         payload = _valid_payload()
         payload.panels[1].held_items_before["Del"] = ["torch", "amulet"]
         return payload
@@ -240,7 +239,7 @@ def test_write_script_allows_added_items_between_panels(tmp_path):
 def test_write_script_allows_missing_character_when_inventory_empty(tmp_path):
     raw_path, entities_path, architecture_path = _write_input_checkpoints(tmp_path)
 
-    def fake_generator(_content, _world, _architecture, _model):
+    def fake_generator(_world, _architecture, _model):
         payload = _valid_payload()
         payload.panels[0].held_items_after["Vendetta"] = []
         payload.panels[1].held_items_before.pop("Vendetta", None)
@@ -260,7 +259,7 @@ def test_write_script_allows_missing_character_when_inventory_empty(tmp_path):
 def test_write_script_logs_when_missing_character_with_items(tmp_path):
     raw_path, entities_path, architecture_path = _write_input_checkpoints(tmp_path)
 
-    def fake_generator(_content, _world, _architecture, _model):
+    def fake_generator(_world, _architecture, _model):
         payload = _valid_payload()
         payload.panels[0].held_items_after["Del"] = ["torch"]
         payload.panels[1].held_items_before.pop("Del", None)
@@ -281,7 +280,7 @@ def test_write_script_logs_when_missing_character_with_items(tmp_path):
 def test_write_script_preserves_architect_selected_layout_fields(tmp_path):
     raw_path, entities_path, architecture_path = _write_input_checkpoints(tmp_path)
 
-    def fake_generator(_content, _world, _architecture, _model):
+    def fake_generator(_world, _architecture, _model):
         payload = _valid_payload()
         payload.panels[0].panel_scale = "small"
         payload.panels[0].panel_shape = "irregular"

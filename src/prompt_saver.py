@@ -91,7 +91,6 @@ def prepare_scriptwriter_prompts(
     version_dir: Path,
     world: WorldStateInput,
     architecture: StoryArchitectureCheckpoint,
-    content: str,
     raw_quotes: list[tuple[str, str | None]],
     system_prompt_path: Path | None = None,
     user_prompt_path: Path | None = None,
@@ -122,7 +121,6 @@ def prepare_scriptwriter_prompts(
         panel_count=len(architecture.panels),
         entities_context=entities_context,
         story_architecture=_format_story_architecture_for_prompt(architecture),
-        story_text=content,
     )
 
     (prompts_dir / f"{SCRIPTWRITER_SYSTEM_PROMPT_FILENAME.replace('.txt', '')}_FINAL.txt").write_text(

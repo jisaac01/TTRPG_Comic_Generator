@@ -56,7 +56,7 @@ class ScriptCheckpoint(BaseModel):
     scripted_at: str
 
 
-ScriptGenerator = Callable[[str, WorldStateInput, StoryArchitectureCheckpoint, str], ScriptPayload]
+ScriptGenerator = Callable[[WorldStateInput, StoryArchitectureCheckpoint, str], ScriptPayload]
 
 
 def _build_instructor_client():
@@ -131,7 +131,6 @@ def _format_story_architecture_for_prompt(architecture: StoryArchitectureCheckpo
 
 
 def _generate_with_instructor_ollama(
-    content: str,
     world: WorldStateInput,
     architecture: StoryArchitectureCheckpoint,
     raw_quotes: list[tuple[str, str | None]],
@@ -155,7 +154,6 @@ def _generate_with_instructor_ollama(
         panel_count=len(architecture.panels),
         entities_context=entities_context,
         story_architecture=_format_story_architecture_for_prompt(architecture),
-        story_text=content,
     )
 
     return client.chat.completions.create(
@@ -244,7 +242,6 @@ def write_script(
     try:
         if generate_fn is None:
             payload = _generate_with_instructor_ollama(
-                raw.content,
                 world,
                 architecture,
                 [(quote.text, quote.attribution) for quote in raw.quotes],
@@ -253,7 +250,7 @@ def write_script(
                 user_prompt_path=user_prompt_path,
             )
         else:
-            payload = generate_fn(raw.content, world, architecture, model)
+            payload = generate_fn(world, architecture, model)
     except Exception as exc:
         raise RuntimeError(f"Generation failed before validation: {exc}") from exc
 

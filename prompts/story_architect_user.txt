@@ -28,6 +28,8 @@ Rules:
 - Keep must_include concise and specific (target 1-3 concrete items).
 - Preserve distinctive recap details (named artifacts, unique creatures, named locations, and specific discoveries) in must_include.
 - Use continuity_notes for state that should persist across adjacent panels.
+- Fully consume the story text for downstream writing: capture all plot-critical details in the panel fields above because the scriptwriter will not receive raw story text.
+- Do not leave essential story information only in your private reasoning; encode it explicitly in beat_summary, must_include, dialogue_goals, and continuity_notes.
 
 Entity data:
 {entities_context}

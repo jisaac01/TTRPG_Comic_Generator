@@ -558,7 +558,6 @@ class ComicPipeline:
                     version_dir=version_dir,
                     world=cast(WorldStateInput, entities),
                     architecture=story_architecture,
-                    content=raw.content,
                     raw_quotes=[(quote.text, quote.attribution) for quote in raw.quotes],
                     system_prompt_path=prompt_template_paths[SCRIPTWRITER_SYSTEM_PROMPT_FILENAME],
                     user_prompt_path=prompt_template_paths[SCRIPTWRITER_USER_PROMPT_FILENAME],

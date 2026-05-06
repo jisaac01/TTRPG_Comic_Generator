@@ -18,6 +18,7 @@ Each panel must include:
 Preserve the architect-selected panel_scale + panel_shape for each panel. Do not invent alternative layout metadata.
 Use the architecture's setting_brief, must_include items, dialogue_goals, and continuity_notes as hard constraints when writing each panel.
 Treat beat_summary as the primary narrative anchor for each panel.
+Raw story prose is intentionally not provided in this stage. Use architecture + entities + reference quotes as the complete narrative source of truth.
 Each must_include item must appear in the resulting panel content (setting or visual_action) with exact wording or very light inflection.
 Do not replace distinctive nouns from architecture with generic substitutes.
 
@@ -35,6 +36,3 @@ Entity data:
 
 Story architecture:
 {story_architecture}
-
-Story text:
-{story_text}
