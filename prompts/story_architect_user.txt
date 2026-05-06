@@ -1,6 +1,11 @@
 Story title: {title}
 
-Build a panel architecture for this story.
+Before building the panel architecture, think through the following in order:
+1. What is the single most visually spectacular or climactic moment in this story? Which panel should it anchor?
+2. What is the funniest or most character-defining spoken line? Which panel does it belong to?
+3. What should the final panel's hook be — what image or revelation will leave the reader wanting more?
+
+Then build a panel architecture for this story.
 
 Target panel count: {panel_count}
 
@@ -19,15 +24,16 @@ For each panel, output:
 Rules:
 - Keep panels in strict chronological order.
 - Cover the major beats; each beat should appear in at least one panel.
-- Use panel_scale and panel_shape to express pacing and emphasis.
+- Use panel_scale and panel_shape to express pacing and emphasis. The climax gets the largest panel.
 - beat_summary must be a one-sentence summary of the selected beat_indices for that panel.
 - Keep setting_brief concise and structural, not fully scripted.
-- Keep dialogue_goals as intent, not final dialogue lines.
+- dialogue_goals must express what a character would say or the emotional register of the line — not a description of their action. If a memorable spoken line exists in the story text, quote it directly in dialogue_goals.
 - Use must_include for visual facts the scriptwriter must preserve.
 - Keep must_include panel-local: include only details that are central to this panel's assigned beat(s).
 - Keep must_include concise and specific (target 1-3 concrete items).
 - Preserve distinctive recap details (named artifacts, unique creatures, named locations, and specific discoveries) in must_include.
 - Use continuity_notes for state that should persist across adjacent panels.
+- The final panel must end on the most compelling hook available: wonder, dread, discovery, or unresolved tension.
 - Fully consume the story text for downstream writing: capture all plot-critical details in the panel fields above because the scriptwriter will not receive raw story text.
 - Do not leave essential story information only in your private reasoning; encode it explicitly in beat_summary, must_include, dialogue_goals, and continuity_notes.
 

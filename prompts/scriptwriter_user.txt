@@ -24,7 +24,11 @@ Do not replace distinctive nouns from architecture with generic substitutes.
 
 Continuity rule: held items must persist from panel N held_items_after to panel N+1 held_items_before for each named character unless a panel explicitly depicts the item being dropped or transferred.
 
-When provided reference quotes fit a scene, use them verbatim or with only light edits for balloon clarity and impact.
+Reference quote rule: Before writing each panel, scan ALL reference quotes. If any quote matches the panel's beat or setting, you MUST use it verbatim (or with only minimal balloon-clarity edits) in dialogue_overlay. Do not paraphrase or invent substitute lines when a real quote fits.
+
+Dialogue quality rule: Every dialogue_overlay line must sound like natural speech — how the character would actually say something in that moment. Reject any line that merely describes what the character is doing, states a plan generically, or could belong to any character. Dialogue must reveal personality.
+
+After drafting all panels, review your dialogue_overlay lines. For each line, ask: would a reader remember this? Does it sound like a real person in this situation? Replace any line that fails this check with something more specific, surprising, or characterful.
 
 Use concise, visually clear, high-impact prose that excites the artist and brings the action to life. 
 Focus on kinetic energy, emotional intensity, and comic-book dynamism in every description.
