@@ -166,8 +166,11 @@ def _create_version_dir(
     """
     Create the next version directory.
 
-    If a previous version exists, clone its checkpoints as the baseline so
-    that stages prior to *rerun_from* are preserved without re-running.
+    If a previous version exists, copy only the specific checkpoint files
+    that should be preserved (those prior to *rerun_from*). Prompt template files
+    and art direction templates are always regenerated during the run and are not copied.
+    
+    If rerun_from is None, all checkpoint files are preserved from the previous version.
 
     Returns (version_dir, version_name).
     """
@@ -185,25 +188,25 @@ def _create_version_dir(
     )
     if existing:
         prev_dir = existing[-1]
-        # Copy all checkpoint files from previous version as baseline.
-        for src in prev_dir.iterdir():
-            if src.is_file():
-                shutil.copy2(src, version_dir / src.name)
-
-        # Always clear the previous run status so a partial write can't be mistaken for a fresh result.
-        (version_dir / "run_status.json").unlink(missing_ok=True)
-
-        # Delete forward from the requested rerun point.
-        _PHASE_FILES: dict[RerunFrom, list[str]] = {
-            "scrape": ["01_raw_text.json", "02_entities.json", "03_script.json", "03_5_styled_script.json", "04_page_prompt.txt"],
-            "entities": ["02_entities.json", "03_script.json", "03_5_styled_script.json", "04_page_prompt.txt"],
-            "script": ["03_script.json", "03_5_styled_script.json", "04_page_prompt.txt"],
-            "style": ["03_5_styled_script.json", "04_page_prompt.txt"],
-            "prompt": ["04_page_prompt.txt"],
+        
+        # Map each rerun point to the checkpoint files that should be preserved.
+        # Prompt template files and art_direction_template are resolved fresh during run()
+        # via _capture_prompt_templates_for_version and _capture_art_template_for_version,
+        # so they are never copied from the previous version.
+        _CHECKPOINTS_TO_COPY: dict[RerunFrom | None, list[str]] = {
+            None: ["01_raw_text.json", "02_entities.json", "03_script.json", "03_5_styled_script.json", "04_page_prompt.txt"],
+            "scrape": [],
+            "entities": ["01_raw_text.json"],
+            "script": ["01_raw_text.json", "02_entities.json"],
+            "style": ["01_raw_text.json", "02_entities.json", "03_script.json"],
+            "prompt": ["01_raw_text.json", "02_entities.json", "03_script.json", "03_5_styled_script.json"],
         }
-        if rerun_from:
-            for fname in _PHASE_FILES[rerun_from]:
-                (version_dir / fname).unlink(missing_ok=True)
+        files_to_copy = _CHECKPOINTS_TO_COPY.get(rerun_from, [])
+        
+        for fname in files_to_copy:
+            src = prev_dir / fname
+            if src.exists():
+                shutil.copy2(src, version_dir / fname)
 
     return version_dir, version_name
 
