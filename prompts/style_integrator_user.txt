@@ -1,9 +1,18 @@
 Art direction:
 {art_direction}
 
-You are given a comic script. Rewrite the setting and visual_action fields of each panel so the descriptions reflect the art style above. The story events, dialogue, held items, panel scale, panel shape, and panel order must remain exactly the same; only the visual language should change to match the art style.
+You are given a comic script. Rewrite the setting and visual_action fields of each panel so the descriptions clearly and consistently express the art direction above.
 
-For example: if the art style is "sketchy, hand-drawn with wobbly lines", and a panel says "A knight charges forward", rewrite it as "A scratchy, wobbly-lined knight lurches forward in a burst of uneven motion".
+Hard constraints:
+- Preserve story events, dialogue, held items, panel scale, panel shape, and panel order exactly.
+- Rewrite only setting and visual_action.
+- Every panel must be visibly rewritten.
+- Every panel must include explicit style expression in both fields:
+	- setting must include concrete rendering context (for example: lighting treatment, texture treatment, composition/framing, environmental density, or palette behavior).
+	- visual_action must include concrete rendering behavior (for example: line quality, motion depiction, material treatment, atmospheric interaction, or contrast handling).
+- Keep style intensity consistent across all panels, not concentrated in only one panel.
+- Do not introduce style language that is not inferable from the provided art direction.
+- Do not add new events or characters.
 
 Return one rewritten panel object for every source panel, in the same order, using the same panel index. Every panel must be visibly rewritten; do not leave any panel's setting and visual_action unchanged.
 
@@ -17,8 +26,6 @@ Return only JSON with this shape:
 		}}
 	]
 }}
-
-Keep rewrites concise. Do not add new events or characters.
 
 Panels:
 {panels_context}

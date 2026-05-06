@@ -1,5 +1,7 @@
 {art_direction}
 
+Style enforcement: Apply the provided art direction uniformly across every panel; do not let any panel drift into a generic default rendering style.
+
 Output goal: one single comic page image containing all panels below in order.
 Character details (apply to every panel): {character_details}
 
