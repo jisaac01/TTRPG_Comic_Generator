@@ -4,6 +4,10 @@ Before building the panel architecture, think through the following in order:
 1. What is the single most visually spectacular or climactic moment in this story? Which panel should it anchor?
 2. What is the funniest or most character-defining spoken line? Which panel does it belong to?
 3. What should the final panel's hook be — what image or revelation will leave the reader wanting more?
+4. Quote mapping (mandatory):
+   - List every Reference quote and its correct beat_index.
+   - Only place it in a panel whose beat_indices include that beat.
+   - If no perfect panel match, omit the quote rather than force it into the wrong panel.
 
 Then build a panel architecture for this story.
 
@@ -29,6 +33,7 @@ Rules:
 - beat_summary must be a one-sentence summary of the selected beat_indices for that panel.
 - Keep setting_brief concise and structural, not fully scripted.
 - If a memorable spoken line exists in Reference quotes and it is actually meaningful, place it in notable_quotes for the panel where it is spoken.
+- notable_quotes must be a list of objects... Only use lines from the provided Reference quotes list. Assign to the precise chronological panel. Never duplicate across panels.
 - Each notable_quotes entry must be an object with keys: text, speaker, attribution_context.
 - notable_quotes.text must exactly match a line from Reference quotes (no paraphrases).
 - notable_quotes.speaker must name who says the line.

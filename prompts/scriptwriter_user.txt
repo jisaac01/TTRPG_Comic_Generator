@@ -6,14 +6,15 @@ Follow the provided story architecture exactly.
 Keep events in strict chronological order.
 Write exactly {panel_count} story panels.
 
-Each panel must include: 
+Each panel must include:
 - panel_scale (one of: small, medium, large, splash)
 - panel_shape (one of: standard, wide, tall, inset, irregular)
 - setting (vivid, atmospheric description)
-- visual_action (exciting, detailed action description with motion, camera angle suggestions, and dramatic flair)
+- visual_action (exciting, detailed action description with motion and cinematic framing)
 - dialogue_overlay (punchy, natural comic-style dialogue suited for speech balloons)
 - held_items_before
 - held_items_after
+- Held items should form a chain: panel N+1 held_items_before should match panel N held_items_after for each character unless a panel explicitly shows dropping, transferring, or acquiring an item.
 
 Preserve the architect-selected panel_scale + panel_shape for each panel. Do not invent alternative layout metadata.
 Use the architecture's setting_brief, notable_set_dressing items, notable_quotes, dialogue_goals, and continuity_notes as hard constraints when writing each panel.
@@ -24,7 +25,9 @@ Do not replace distinctive nouns from architecture with generic substitutes.
 
 Continuity rule: held items must persist from panel N held_items_after to panel N+1 held_items_before for each named character unless a panel explicitly depicts the item being dropped or transferred.
 
-Notable quote rule: Before writing each panel, inspect that panel's notable_quotes objects. If any are present, you MUST use notable_quotes.text verbatim (or with only minimal balloon-clarity edits) in dialogue_overlay for that same panel, with the matching notable_quotes.speaker. Use notable_quotes.attribution_context to keep intent and scene reference aligned. Do not move notable quotes to other panels, paraphrase them away, or invent substitute lines when a notable quote already fits.
+Notable quote rule: Before writing each panel, inspect that panel's notable_quotes list.
+If present, include notable_quotes.text in dialogue_overlay for that same panel with the matching speaker, allowing only minimal clarity edits.
+Do not move, reattribute, or paraphrase notable quotes across panels.
 
 Dialogue quality rule: Every dialogue_overlay line must sound like natural speech — how the character would actually say something in that moment. Reject any line that merely describes what the character is doing, states a plan generically, or could belong to any character. Dialogue must reveal personality.
 
@@ -90,3 +93,9 @@ Entity data:
 
 Story architecture:
 {story_architecture}
+
+FINAL SELF-REVIEW:
+1. Output exactly {panel_count} panels.
+2. Keep each notable quote in its assigned panel with matching speaker.
+3. Keep held items coherent from panel to panel.
+4. Ensure visual progression and rising tension across the full sequence.
