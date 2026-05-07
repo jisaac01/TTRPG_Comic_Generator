@@ -20,7 +20,6 @@ from scraper import RawTextCheckpoint
 
 class NotableQuote(BaseModel):
     text: str = Field(min_length=1)
-    speaker: str = Field(min_length=1)
     attribution_context: str = ""
 
     @model_validator(mode="before")
@@ -29,7 +28,6 @@ class NotableQuote(BaseModel):
         if isinstance(data, str):
             return {
                 "text": data,
-                "speaker": "Unknown",
                 "attribution_context": "",
             }
 
@@ -37,8 +35,6 @@ class NotableQuote(BaseModel):
             data = dict(data)
             if "text" not in data and "quote" in data:
                 data["text"] = data.pop("quote")
-            if not data.get("speaker"):
-                data["speaker"] = "Unknown"
             if "attribution_context" not in data or data["attribution_context"] is None:
                 data["attribution_context"] = ""
         return data
@@ -207,7 +203,6 @@ def _normalize_panels(
             normalized_notable_quotes.append(
                 NotableQuote(
                     text=normalized_text,
-                    speaker=notable_quote.speaker,
                     attribution_context=canonical_attribution,
                 )
             )

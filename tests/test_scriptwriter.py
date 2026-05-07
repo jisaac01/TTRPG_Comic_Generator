@@ -76,7 +76,6 @@ def _write_input_checkpoints(tmp_path: Path) -> tuple[Path, Path, Path]:
                         "notable_quotes": [
                             {
                                 "text": "Stay close to me.",
-                                "speaker": "Del",
                                 "attribution_context": "Del warns the party as they enter the marsh.",
                             }
                         ],
@@ -110,7 +109,6 @@ def _write_input_checkpoints(tmp_path: Path) -> tuple[Path, Path, Path]:
                         "notable_quotes": [
                             {
                                 "text": "We hold here.",
-                                "speaker": "Del",
                                 "attribution_context": "Del calls for the party to hold position.",
                             }
                         ],
@@ -371,7 +369,7 @@ def test_format_story_architecture_for_prompt_includes_notable_quotes(tmp_path):
 
     assert '"notable_quotes": [' in prompt_blob
     assert '"text": "Stay close to me."' in prompt_blob
-    assert '"speaker": "Del"' in prompt_blob
+    assert '"attribution_context": "Del warns the party as they enter the marsh."' in prompt_blob
 
 
 def test_optional_text_layers_preserved_in_checkpoint(tmp_path):

@@ -37,13 +37,12 @@ class Panel(BaseModel):
     panel_shape: Literal["standard", "wide", "tall", "inset", "irregular"]
     setting: str = Field(min_length=1)
     visual_action: str = Field(min_length=1)
-    dialogue_overlay: list[str] = Field(default_factory=list)
+    dialogue_overlay: list[str] = Field(default_factory=list, description="format: 'Character: text'")
     held_items_before: dict[str, list[str]] = Field(default_factory=dict)
     held_items_after: dict[str, list[str]] = Field(default_factory=dict)
-    # Optional text layers (all fields are optional and should be generated only when they add narrative value)
-    caption: str | None = Field(default=None, description="Narrative text in box; use only when exposition adds value beyond visuals+dialogue")
-    voiceover: str | None = Field(default=None, description="Off-panel character speech; format: 'Character (V.O.): text'")
-    chyron: str | None = Field(default=None, description="Location/time overlay text; keep minimal (e.g., 'London, 1821')")
+    caption: str = Field(description="Narrative text in box; use for explanatory narration and context")
+    voiceover: str = Field(description="Off-panel character speech; format: 'Character (V.O.): text'")
+    chyron: str = Field(description="Location/time overlay text; keep minimal (e.g., 'London, 1821')")
     sound_effects: list[str] = Field(default_factory=list, description="SFX labels/bursts; use sparingly (e.g., ['CRASH!', 'WHOOSH'])")
 
 

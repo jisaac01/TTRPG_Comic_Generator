@@ -82,7 +82,6 @@ def _valid_payload() -> story_architect.StoryArchitecturePayload:
                 notable_quotes=[
                     story_architect.NotableQuote(
                         text="Stay close to me.",
-                        speaker="Del",
                         attribution_context="Del warns the party as they enter the marsh.",
                     )
                 ],
@@ -132,7 +131,6 @@ def test_architect_story_writes_checkpoint_and_normalizes_indices(tmp_path):
     assert len(checkpoint.panels) == 2
     assert [panel.index for panel in checkpoint.panels] == [1, 2]
     assert checkpoint.panels[0].notable_quotes[0].text == "Stay close to me."
-    assert checkpoint.panels[0].notable_quotes[0].speaker == "Del"
     assert checkpoint.generation_errors == []
 
 
@@ -144,7 +142,6 @@ def test_architect_story_rejects_unreferenced_notable_quote_text(tmp_path):
         payload.panels[0].notable_quotes = [
             story_architect.NotableQuote(
                 text="Payment",
-                speaker="Bufo",
                 attribution_context="Bufo reads an inscription in the vault.",
             )
         ]
@@ -200,19 +197,17 @@ def test_architect_story_rejects_invalid_panel_count(tmp_path):
         raise AssertionError("Expected ValueError for invalid panel count")
 
 
-def test_notable_quote_accepts_string_and_defaults_speaker():
+def test_notable_quote_accepts_string_and_defaults_context():
     quote = story_architect.NotableQuote.model_validate("Why are you speaking common, Guvral?")
 
     assert quote.text == "Why are you speaking common, Guvral?"
-    assert quote.speaker == "Unknown"
     assert quote.attribution_context == ""
 
 
-def test_notable_quote_defaults_missing_speaker_and_context():
+def test_notable_quote_defaults_missing_context():
     quote = story_architect.NotableQuote.model_validate({"text": "The horse is mine."})
 
     assert quote.text == "The horse is mine."
-    assert quote.speaker == "Unknown"
     assert quote.attribution_context == ""
 
 

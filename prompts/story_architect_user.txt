@@ -4,9 +4,11 @@ Before building the panel architecture, think through the following in order:
 1. What is the single most visually spectacular or climactic moment in this story? Which panel should it anchor?
 2. What is the funniest or most character-defining spoken line? Which panel does it belong to?
 3. What should the final panel's hook be — what image or revelation will leave the reader wanting more?
-4. Quote mapping (mandatory):
+4. Overall narrative arc: How do these panels together create rising action, page-turn energy, and a satisfying mini-story? Write a one-sentence "story spine" in your reasoning that the panel sequence must follow.
+5. Quote mapping (mandatory):
    - List every Reference quote and its correct beat_index.
    - Only place it in a panel whose beat_indices include that beat.
+   - Assign to exactly ONE panel.
    - If no perfect panel match, omit the quote rather than force it into the wrong panel.
 
 Then build a panel architecture for this story.
@@ -22,7 +24,7 @@ For each panel, output:
 - setting_brief
 - character_focus
 - notable_set_dressing
-- notable_quotes (list of objects: text, speaker, attribution_context)
+- notable_quotes (list of objects: text, attribution_context)
 - dialogue_goals
 - continuity_notes
 
@@ -33,10 +35,8 @@ Rules:
 - beat_summary must be a one-sentence summary of the selected beat_indices for that panel.
 - Keep setting_brief concise and structural, not fully scripted.
 - If a memorable spoken line exists in Reference quotes and it is actually meaningful, place it in notable_quotes for the panel where it is spoken.
-- notable_quotes must be a list of objects... Only use lines from the provided Reference quotes list. Assign to the precise chronological panel. Never duplicate across panels.
-- Each notable_quotes entry must be an object with keys: text, speaker, attribution_context.
+- Each notable_quotes entry must be an object with keys: text, attribution_context.
 - notable_quotes.text must exactly match a line from Reference quotes (no paraphrases).
-- notable_quotes.speaker must name who says the line.
 - notable_quotes.attribution_context must describe what the line refers to in this scene.
 - Do not place non-spoken labels (for example, inscription text like "Payment") in notable_quotes unless that exact line appears in Reference quotes as spoken dialogue.
 - Omit weak, throwaway, or contextless lines from notable_quotes.
@@ -45,7 +45,7 @@ Rules:
 - Keep notable_set_dressing panel-local: include only details that are central to this panel's assigned beat(s).
 - Keep notable_set_dressing concise and specific (target 1-3 concrete items).
 - Preserve distinctive recap details (named artifacts, unique creatures, named locations, and specific discoveries) in notable_set_dressing.
-- Use continuity_notes for state that should persist across adjacent panels.
+- Use continuity_notes for state that should persist across adjacent panels. Never include spoilers of future events.
 - The final panel must end on the most compelling hook available: wonder, dread, discovery, or unresolved tension.
 - Fully consume the story text for downstream writing: capture all plot-critical details in the panel fields above because the scriptwriter will not receive raw story text.
 - Do not leave essential story information only in your private reasoning; encode it explicitly in beat_summary, notable_set_dressing, notable_quotes, dialogue_goals, and continuity_notes.

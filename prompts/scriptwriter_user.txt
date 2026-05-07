@@ -1,101 +1,14 @@
 Story title: {title}
 
-Create a high-energy, action-packed comic book script optimized for the visual medium. Prioritize dynamic, cinematic panel compositions with dramatic angles, intense motion, impactful poses, and clear visual storytelling that conveys excitement, tension, and momentum. Show action through movement, effects, and expressions rather than narration. Build suspense between panels with strong page-turn energy.
-
-Follow the provided story architecture exactly.
-Keep events in strict chronological order.
 Write exactly {panel_count} story panels.
 
-Each panel must include:
-- panel_scale (one of: small, medium, large, splash)
-- panel_shape (one of: standard, wide, tall, inset, irregular)
-- setting (vivid, atmospheric description)
-- visual_action (exciting, detailed action description with motion and cinematic framing)
-- dialogue_overlay (punchy, natural comic-style dialogue suited for speech balloons)
-- held_items_before
-- held_items_after
-- Held items should form a chain: panel N+1 held_items_before should match panel N held_items_after for each character unless a panel explicitly shows dropping, transferring, or acquiring an item.
+Important: Story architecture is a junk drawer. It's up to you to craft it into a narrative.
+Sometimes (not every panel!) use captions to add narration and chyrons to signify placenames or transitions. 
 
-Preserve the architect-selected panel_scale + panel_shape for each panel. Do not invent alternative layout metadata.
-Use the architecture's setting_brief, notable_set_dressing items, notable_quotes, dialogue_goals, and continuity_notes as hard constraints when writing each panel.
-Treat beat_summary as the primary narrative anchor for each panel.
-Raw story prose is intentionally not provided in this stage. Use architecture + entities as the complete narrative source of truth.
-Each notable_set_dressing item must appear in the resulting panel content (setting or visual_action) with exact wording or very light inflection.
-Do not replace distinctive nouns from architecture with generic substitutes.
+Add dialog that's missing; throw away notable_quotes that are duplicate or don't add to the story.
 
-Continuity rule: held items must persist from panel N held_items_after to panel N+1 held_items_before for each named character unless a panel explicitly depicts the item being dropped or transferred.
-
-Notable quote rule: Before writing each panel, inspect that panel's notable_quotes list.
-If present, include notable_quotes.text in dialogue_overlay for that same panel with the matching speaker, allowing only minimal clarity edits.
-Do not move, reattribute, or paraphrase notable quotes across panels.
-
-Dialogue quality rule: Every dialogue_overlay line must sound like natural speech — how the character would actually say something in that moment. Reject any line that merely describes what the character is doing, states a plan generically, or could belong to any character. Dialogue must reveal personality.
-
-After drafting all panels, review your dialogue_overlay lines. For each line, ask: would a reader remember this? Does it sound like a real person in this situation? Replace any line that fails this check with something more specific, surprising, or characterful.
-
----
-
-OPTIONAL TEXT LAYERS (Use sparingly and only when they add narrative value):
-
-You may generate up to FOUR additional optional text fields per panel. ALL ARE OPTIONAL — do not add them to every panel. Add only when narratively necessary.
-
-1. CAPTION (caption field)
-   - Non-dialogue narrative text rendered in a box overlay
-   - Use ONLY for: exposition that visuals alone cannot convey, time/location context shifts, thematic narration
-   - NEVER use for: restating dialogue, describing visible action, summarizing visual_action prose
-   - Quality check: "Does removing this caption hurt the reader's understanding?" If no, omit it.
-   - Example: "Three days had passed since the encounter." or "Deep within the Underdark..."
-
-2. VOICEOVER (voiceover field)
-   - Character speech from off-panel, flashback, or internal narrative
-   - Format REQUIRED: "Character (V.O.): text" — the speaker must be explicitly named
-   - Use ONLY for: narration from a specific character, flashback memories, internal monologue of an off-panel character
-   - NEVER use for: dialogue that should be in speech balloons; generic narration with no speaker
-   - Example: "Orion (V.O.): I knew we'd never escape that place." or "Ancient voice (V.O.): Beware the shadow..."
-
-3. CHYRON (chyron field)
-   - Location/time overlay text rendered as a bar or label
-   - MUST be minimal — typically 3–6 words maximum (e.g., "London, Three Days Later", "The Tower Chamber", "Midnight")
-   - Use ONLY for: establishing scene location shifts, time jumps, significant location reveals
-   - NEVER use for: full sentences, dialogue, detailed description
-   - Example: "The Forbidden Forest", "Day 7 — Dusk", "Throne Room — Present Day"
-
-4. SOUND EFFECTS (sound_effects field — list of strings)
-   - Onomatopoeia and SFX labels rendered as bursts or impact text
-   - Each entry is typically 1–3 words (e.g., "CRASH!", "WHOOSH", "SPLASH")
-   - Use ONLY for: significant auditory impacts, combat noises, environmental sounds that enhance immersion
-   - NEVER use for: excessive SFX on every panel; redundant with visual_action prose
-   - Examples: ["CLANG!", "ROAR"], ["SNAP!", "SILENCE"], ["BOOM!", "CRACKLE"]
-
----
-
-DELIVERY STYLE ANNOTATIONS (Applied within dialogue_overlay):
-
-Character dialogue may include delivery-style parenthetical annotations to indicate tone/manner. Use sparingly:
-   - "Character (whispered): text" — hushed, urgent, secretive
-   - "Character (shouted): text" — loud, emphatic (alternative: use sound_effects list for "SHOUT!")
-   - "Character (internal): text" — internal monologue, thoughts
-   - "Character (V.O.): text" — see voiceover rules above
-
-Examples in dialogue_overlay:
-   - ["Vendetta (whispered): Stay silent.", "Del: I see movement ahead."]
-   - ["Orion: We need to find that artifact.", "Cad (shouted): RUN!"]
-
----
-
-Use concise, visually clear, high-impact prose that excites the artist and brings the action to life. 
-Focus on kinetic energy, emotional intensity, and comic-book dynamism in every description.
-Important: keep panels focused on key details and characters, keeping descriptions concise.
-Put character actions in the visual_action section, and keep dialogue_overlay exclusively for dialogue and written text
-
-Entity data:
+Character and Location information:
 {entities_context}
 
 Story architecture:
 {story_architecture}
-
-FINAL SELF-REVIEW:
-1. Output exactly {panel_count} panels.
-2. Keep each notable quote in its assigned panel with matching speaker.
-3. Keep held items coherent from panel to panel.
-4. Ensure visual progression and rising tension across the full sequence.
