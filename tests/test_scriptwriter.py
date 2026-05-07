@@ -138,6 +138,10 @@ def _valid_payload() -> scriptwriter.ScriptPayload:
                 dialogue_overlay=["Del: Stay close."],
                 held_items_before={"Del": [], "Vendetta": []},
                 held_items_after={"Del": ["torch"], "Vendetta": []},
+                caption=None,
+                voiceover=None,
+                chyron="Marsh Edge, Dusk",
+                sound_effects=["WHOOSH"],
             ),
             scriptwriter.Panel(
                 index=17,
@@ -148,6 +152,10 @@ def _valid_payload() -> scriptwriter.ScriptPayload:
                 dialogue_overlay=["Vendetta: Fresh tracks."],
                 held_items_before={"Del": ["torch"], "Vendetta": []},
                 held_items_after={"Del": ["torch"], "Vendetta": ["map"]},
+                caption="An hour later, the marsh deepens.",
+                voiceover="Del (V.O.): I felt something watching us.",
+                chyron=None,
+                sound_effects=[],
             ),
             scriptwriter.Panel(
                 index=3,
@@ -158,6 +166,10 @@ def _valid_payload() -> scriptwriter.ScriptPayload:
                 dialogue_overlay=["Del: We hold here."],
                 held_items_before={"Del": ["torch"], "Vendetta": ["map"]},
                 held_items_after={"Del": ["torch"], "Vendetta": ["map"]},
+                caption=None,
+                voiceover=None,
+                chyron=None,
+                sound_effects=["CRACKLE", "SPLASH"],
             ),
         ]
     )
@@ -360,3 +372,62 @@ def test_format_story_architecture_for_prompt_includes_notable_quotes(tmp_path):
     assert '"notable_quotes": [' in prompt_blob
     assert '"text": "Stay close to me."' in prompt_blob
     assert '"speaker": "Del"' in prompt_blob
+
+
+def test_optional_text_layers_preserved_in_checkpoint(tmp_path):
+    """Verify that optional text layers (caption, voiceover, chyron, sound_effects) are preserved."""
+    raw_path, entities_path, architecture_path = _write_input_checkpoints(tmp_path)
+
+    def fake_generator(_world, _architecture, _model):
+        return _valid_payload()
+
+    checkpoint = scriptwriter.write_script(
+        raw_checkpoint_path=raw_path,
+        entities_checkpoint_path=entities_path,
+        story_architecture_checkpoint_path=architecture_path,
+        output_path=tmp_path / "03_script.json",
+        generator=fake_generator,
+    )
+
+    # Panel 1 has chyron and sound_effects
+    assert checkpoint.panels[0].chyron == "Marsh Edge, Dusk"
+    assert checkpoint.panels[0].sound_effects == ["WHOOSH"]
+    assert checkpoint.panels[0].caption is None
+    assert checkpoint.panels[0].voiceover is None
+
+    # Panel 2 has caption and voiceover
+    assert checkpoint.panels[1].caption == "An hour later, the marsh deepens."
+    assert checkpoint.panels[1].voiceover == "Del (V.O.): I felt something watching us."
+    assert checkpoint.panels[1].chyron is None
+    assert checkpoint.panels[1].sound_effects == []
+
+    # Panel 3 has sound_effects only
+    assert checkpoint.panels[2].sound_effects == ["CRACKLE", "SPLASH"]
+    assert checkpoint.panels[2].caption is None
+    assert checkpoint.panels[2].voiceover is None
+    assert checkpoint.panels[2].chyron is None
+
+
+def test_optional_text_layers_serialized_in_json(tmp_path):
+    """Verify that optional text layers are correctly serialized to JSON."""
+    raw_path, entities_path, architecture_path = _write_input_checkpoints(tmp_path)
+    output_path = tmp_path / "03_script.json"
+
+    def fake_generator(_world, _architecture, _model):
+        return _valid_payload()
+
+    scriptwriter.write_script(
+        raw_checkpoint_path=raw_path,
+        entities_checkpoint_path=entities_path,
+        story_architecture_checkpoint_path=architecture_path,
+        output_path=output_path,
+        generator=fake_generator,
+    )
+
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    
+    assert payload["panels"][0]["chyron"] == "Marsh Edge, Dusk"
+    assert payload["panels"][0]["sound_effects"] == ["WHOOSH"]
+    assert payload["panels"][1]["caption"] == "An hour later, the marsh deepens."
+    assert payload["panels"][1]["voiceover"] == "Del (V.O.): I felt something watching us."
+    assert payload["panels"][2]["sound_effects"] == ["CRACKLE", "SPLASH"]

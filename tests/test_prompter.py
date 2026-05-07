@@ -83,6 +83,7 @@ def _write_inputs(tmp_path: Path) -> tuple[Path, Path, Path]:
         "color_palette": "Acidic neon pinks, greens, and oranges.",
         "layout_and_composition": "Single comic page with two stacked panels and rough gutters.",
         "lettering_and_dialog": "Jagged handwritten captions with frantic energy.",
+        "text_rendering_guide": "Dialogue: jagged speech bubbles. Captions: rough boxes. V.O.: faded text. Chyrons: neon text. SFX: electric bursts.",
     }
 
     entities_path = tmp_path / "02_entities.json"

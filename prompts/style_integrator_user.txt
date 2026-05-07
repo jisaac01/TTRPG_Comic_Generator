@@ -5,6 +5,7 @@ You are given a comic script. Rewrite the setting and visual_action fields of ea
 
 Hard constraints:
 - Preserve story events, dialogue, held items, panel scale, panel shape, and panel order exactly.
+- Preserve optional text layers exactly: caption, voiceover, chyron, sound_effects (these may be null/empty, which is fine).
 - Rewrite only setting and visual_action.
 - Every panel must be visibly rewritten.
 - Every panel must include explicit style expression in both fields:

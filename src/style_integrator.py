@@ -54,6 +54,10 @@ def _format_panels_for_prompt(script: ScriptCheckpoint) -> str:
                 "dialogue_overlay": panel.dialogue_overlay,
                 "held_items_before": panel.held_items_before,
                 "held_items_after": panel.held_items_after,
+                "caption": panel.caption,
+                "voiceover": panel.voiceover,
+                "chyron": panel.chyron,
+                "sound_effects": panel.sound_effects,
             }
         )
     return json.dumps(panel_payload, indent=2, ensure_ascii=False)
@@ -147,6 +151,10 @@ def _normalize_panels_from_source(
                 dialogue_overlay=source.dialogue_overlay,
                 held_items_before=source.held_items_before,
                 held_items_after=source.held_items_after,
+                caption=source.caption,
+                voiceover=source.voiceover,
+                chyron=source.chyron,
+                sound_effects=source.sound_effects,
             )
         )
     return normalized

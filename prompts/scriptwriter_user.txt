@@ -30,6 +30,56 @@ Dialogue quality rule: Every dialogue_overlay line must sound like natural speec
 
 After drafting all panels, review your dialogue_overlay lines. For each line, ask: would a reader remember this? Does it sound like a real person in this situation? Replace any line that fails this check with something more specific, surprising, or characterful.
 
+---
+
+OPTIONAL TEXT LAYERS (Use sparingly and only when they add narrative value):
+
+You may generate up to FOUR additional optional text fields per panel. ALL ARE OPTIONAL — do not add them to every panel. Add only when narratively necessary.
+
+1. CAPTION (caption field)
+   - Non-dialogue narrative text rendered in a box overlay
+   - Use ONLY for: exposition that visuals alone cannot convey, time/location context shifts, thematic narration
+   - NEVER use for: restating dialogue, describing visible action, summarizing visual_action prose
+   - Quality check: "Does removing this caption hurt the reader's understanding?" If no, omit it.
+   - Example: "Three days had passed since the encounter." or "Deep within the Underdark..."
+
+2. VOICEOVER (voiceover field)
+   - Character speech from off-panel, flashback, or internal narrative
+   - Format REQUIRED: "Character (V.O.): text" — the speaker must be explicitly named
+   - Use ONLY for: narration from a specific character, flashback memories, internal monologue of an off-panel character
+   - NEVER use for: dialogue that should be in speech balloons; generic narration with no speaker
+   - Example: "Orion (V.O.): I knew we'd never escape that place." or "Ancient voice (V.O.): Beware the shadow..."
+
+3. CHYRON (chyron field)
+   - Location/time overlay text rendered as a bar or label
+   - MUST be minimal — typically 3–6 words maximum (e.g., "London, Three Days Later", "The Tower Chamber", "Midnight")
+   - Use ONLY for: establishing scene location shifts, time jumps, significant location reveals
+   - NEVER use for: full sentences, dialogue, detailed description
+   - Example: "The Forbidden Forest", "Day 7 — Dusk", "Throne Room — Present Day"
+
+4. SOUND EFFECTS (sound_effects field — list of strings)
+   - Onomatopoeia and SFX labels rendered as bursts or impact text
+   - Each entry is typically 1–3 words (e.g., "CRASH!", "WHOOSH", "SPLASH")
+   - Use ONLY for: significant auditory impacts, combat noises, environmental sounds that enhance immersion
+   - NEVER use for: excessive SFX on every panel; redundant with visual_action prose
+   - Examples: ["CLANG!", "ROAR"], ["SNAP!", "SILENCE"], ["BOOM!", "CRACKLE"]
+
+---
+
+DELIVERY STYLE ANNOTATIONS (Applied within dialogue_overlay):
+
+Character dialogue may include delivery-style parenthetical annotations to indicate tone/manner. Use sparingly:
+   - "Character (whispered): text" — hushed, urgent, secretive
+   - "Character (shouted): text" — loud, emphatic (alternative: use sound_effects list for "SHOUT!")
+   - "Character (internal): text" — internal monologue, thoughts
+   - "Character (V.O.): text" — see voiceover rules above
+
+Examples in dialogue_overlay:
+   - ["Vendetta (whispered): Stay silent.", "Del: I see movement ahead."]
+   - ["Orion: We need to find that artifact.", "Cad (shouted): RUN!"]
+
+---
+
 Use concise, visually clear, high-impact prose that excites the artist and brings the action to life. 
 Focus on kinetic energy, emotional intensity, and comic-book dynamism in every description.
 Important: keep panels focused on key details and characters, keeping descriptions concise.

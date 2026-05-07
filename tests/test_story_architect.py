@@ -198,3 +198,40 @@ def test_architect_story_rejects_invalid_panel_count(tmp_path):
         assert str(exc) == "panel_count must be >= 1"
     else:
         raise AssertionError("Expected ValueError for invalid panel count")
+
+
+def test_notable_quote_accepts_string_and_defaults_speaker():
+    quote = story_architect.NotableQuote.model_validate("Why are you speaking common, Guvral?")
+
+    assert quote.text == "Why are you speaking common, Guvral?"
+    assert quote.speaker == "Unknown"
+    assert quote.attribution_context == ""
+
+
+def test_notable_quote_defaults_missing_speaker_and_context():
+    quote = story_architect.NotableQuote.model_validate({"text": "The horse is mine."})
+
+    assert quote.text == "The horse is mine."
+    assert quote.speaker == "Unknown"
+    assert quote.attribution_context == ""
+
+
+def test_architecture_panel_maps_known_shape_aliases():
+    panel = story_architect.ArchitecturePanel.model_validate(
+        {
+            "index": 1,
+            "beat_indices": [1],
+            "beat_summary": "The party is cornered on a narrow stair.",
+            "story_purpose": "Show constrained defensive position.",
+            "panel_scale": "medium",
+            "panel_shape": "bottleneck",
+            "setting_brief": "A narrow stone stairwell.",
+            "character_focus": ["Paddock"],
+            "notable_set_dressing": ["oil trap ignition"],
+            "notable_quotes": [],
+            "dialogue_goals": ["Urgent defensive callouts."],
+            "continuity_notes": ["Party holds upper step."],
+        }
+    )
+
+    assert panel.panel_shape == "tall"

@@ -26,9 +26,21 @@ class NotableQuote(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _remap_quote_field(cls, data: object) -> object:
-        if isinstance(data, dict) and "text" not in data and "quote" in data:
+        if isinstance(data, str):
+            return {
+                "text": data,
+                "speaker": "Unknown",
+                "attribution_context": "",
+            }
+
+        if isinstance(data, dict):
             data = dict(data)
-            data["text"] = data.pop("quote")
+            if "text" not in data and "quote" in data:
+                data["text"] = data.pop("quote")
+            if not data.get("speaker"):
+                data["speaker"] = "Unknown"
+            if "attribution_context" not in data or data["attribution_context"] is None:
+                data["attribution_context"] = ""
         return data
 
 
@@ -45,6 +57,25 @@ class ArchitecturePanel(BaseModel):
     notable_quotes: list[NotableQuote] = Field(default_factory=list)
     dialogue_goals: list[str] = Field(default_factory=list)
     continuity_notes: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_panel_shape_aliases(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+
+        payload = dict(data)
+        panel_shape = payload.get("panel_shape")
+        alias_map = {
+            "bottleneck": "tall",
+            "cornered": "inset",
+            "chokepoint": "tall",
+        }
+        if isinstance(panel_shape, str):
+            normalized_key = panel_shape.strip().lower()
+            if normalized_key in alias_map:
+                payload["panel_shape"] = alias_map[normalized_key]
+        return payload
 
 
 class StoryArchitecturePayload(BaseModel):
