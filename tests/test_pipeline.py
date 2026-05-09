@@ -192,6 +192,8 @@ _STYLED_SCRIPT_CHECKPOINT = scriptwriter.ScriptCheckpoint(
 
 def _write_version_checkpoints(version_dir: Path) -> None:
     """Write all checkpoints into a version directory."""
+    prompts_dir = version_dir / "prompts"
+    prompts_dir.mkdir(parents=True, exist_ok=True)
     (version_dir / "01_raw_text.json").write_text(
         _RAW_CHECKPOINT.model_dump_json(), encoding="utf-8"
     )
@@ -448,7 +450,7 @@ async def test_first_run_bootstraps_campaign_prompt_templates_and_copies_version
     version_dir = _version_dir_from_result(result)
     for filename in PROMPT_TEMPLATE_FILENAMES:
         campaign_prompt = tmp_path / "dreadmarsh" / filename
-        version_prompt = version_dir / filename
+        version_prompt = version_dir / "prompts" / filename
         assert campaign_prompt.exists()
         assert version_prompt.exists()
         assert campaign_prompt.read_text(encoding="utf-8") == (
@@ -457,19 +459,19 @@ async def test_first_run_bootstraps_campaign_prompt_templates_and_copies_version
         assert version_prompt.read_text(encoding="utf-8") == campaign_prompt.read_text(encoding="utf-8")
 
     _, architect_kwargs = mock_architect.call_args
-    assert architect_kwargs["system_prompt_path"] == version_dir / MASTER_BEATER_SYSTEM_PROMPT_FILENAME
-    assert architect_kwargs["user_prompt_path"] == version_dir / MASTER_BEATER_USER_PROMPT_FILENAME
+    assert architect_kwargs["system_prompt_path"] == version_dir / "prompts" / MASTER_BEATER_SYSTEM_PROMPT_FILENAME
+    assert architect_kwargs["user_prompt_path"] == version_dir / "prompts" / MASTER_BEATER_USER_PROMPT_FILENAME
 
     _, script_kwargs = mock_script.call_args
-    assert script_kwargs["system_prompt_path"] == version_dir / SCRIPTWRITER_SYSTEM_PROMPT_FILENAME
-    assert script_kwargs["user_prompt_path"] == version_dir / SCRIPTWRITER_USER_PROMPT_FILENAME
+    assert script_kwargs["system_prompt_path"] == version_dir / "prompts" / SCRIPTWRITER_SYSTEM_PROMPT_FILENAME
+    assert script_kwargs["user_prompt_path"] == version_dir / "prompts" / SCRIPTWRITER_USER_PROMPT_FILENAME
 
     _, style_kwargs = mock_integrate.call_args
-    assert style_kwargs["system_prompt_path"] == version_dir / STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME
-    assert style_kwargs["user_prompt_path"] == version_dir / STYLE_INTEGRATOR_USER_PROMPT_FILENAME
+    assert style_kwargs["system_prompt_path"] == version_dir / "prompts" / STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME
+    assert style_kwargs["user_prompt_path"] == version_dir / "prompts" / STYLE_INTEGRATOR_USER_PROMPT_FILENAME
 
     _, prompt_kwargs = mock_prompts.call_args
-    assert prompt_kwargs["page_prompt_template_path"] == version_dir / PAGE_PROMPT_TEMPLATE_FILENAME
+    assert prompt_kwargs["page_prompt_template_path"] == version_dir / "prompts" / PAGE_PROMPT_TEMPLATE_FILENAME
 
 
 @pytest.mark.asyncio
@@ -514,28 +516,29 @@ async def test_explicit_prompt_overrides_are_copied_into_version(tmp_path):
         result = await pipeline.run()
 
     version_dir = _version_dir_from_result(result)
-    assert (version_dir / MASTER_BEATER_SYSTEM_PROMPT_FILENAME).read_text(encoding="utf-8") == "ARCHITECT SYSTEM OVERRIDE"
-    assert (version_dir / MASTER_BEATER_USER_PROMPT_FILENAME).read_text(encoding="utf-8") == "ARCHITECT USER OVERRIDE"
-    assert (version_dir / SCRIPTWRITER_SYSTEM_PROMPT_FILENAME).read_text(encoding="utf-8") == "SYSTEM OVERRIDE"
-    assert (version_dir / SCRIPTWRITER_USER_PROMPT_FILENAME).read_text(encoding="utf-8") == "USER OVERRIDE"
-    assert (version_dir / STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME).read_text(encoding="utf-8") == "STYLE SYSTEM OVERRIDE"
-    assert (version_dir / STYLE_INTEGRATOR_USER_PROMPT_FILENAME).read_text(encoding="utf-8") == "STYLE USER OVERRIDE"
-    assert (version_dir / PAGE_PROMPT_TEMPLATE_FILENAME).read_text(encoding="utf-8") == "CUSTOM PAGE PROMPT: {panel_count}"
+    prompts_dir = version_dir / "prompts"
+    assert (prompts_dir / MASTER_BEATER_SYSTEM_PROMPT_FILENAME).read_text(encoding="utf-8") == "ARCHITECT SYSTEM OVERRIDE"
+    assert (prompts_dir / MASTER_BEATER_USER_PROMPT_FILENAME).read_text(encoding="utf-8") == "ARCHITECT USER OVERRIDE"
+    assert (prompts_dir / SCRIPTWRITER_SYSTEM_PROMPT_FILENAME).read_text(encoding="utf-8") == "SYSTEM OVERRIDE"
+    assert (prompts_dir / SCRIPTWRITER_USER_PROMPT_FILENAME).read_text(encoding="utf-8") == "USER OVERRIDE"
+    assert (prompts_dir / STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME).read_text(encoding="utf-8") == "STYLE SYSTEM OVERRIDE"
+    assert (prompts_dir / STYLE_INTEGRATOR_USER_PROMPT_FILENAME).read_text(encoding="utf-8") == "STYLE USER OVERRIDE"
+    assert (prompts_dir / PAGE_PROMPT_TEMPLATE_FILENAME).read_text(encoding="utf-8") == "CUSTOM PAGE PROMPT: {panel_count}"
 
     _, architect_kwargs = mock_architect.call_args
-    assert architect_kwargs["system_prompt_path"] == version_dir / MASTER_BEATER_SYSTEM_PROMPT_FILENAME
-    assert architect_kwargs["user_prompt_path"] == version_dir / MASTER_BEATER_USER_PROMPT_FILENAME
+    assert architect_kwargs["system_prompt_path"] == version_dir / "prompts" / MASTER_BEATER_SYSTEM_PROMPT_FILENAME
+    assert architect_kwargs["user_prompt_path"] == version_dir / "prompts" / MASTER_BEATER_USER_PROMPT_FILENAME
 
     _, script_kwargs = mock_script.call_args
-    assert script_kwargs["system_prompt_path"] == version_dir / SCRIPTWRITER_SYSTEM_PROMPT_FILENAME
-    assert script_kwargs["user_prompt_path"] == version_dir / SCRIPTWRITER_USER_PROMPT_FILENAME
+    assert script_kwargs["system_prompt_path"] == version_dir / "prompts" / SCRIPTWRITER_SYSTEM_PROMPT_FILENAME
+    assert script_kwargs["user_prompt_path"] == version_dir / "prompts" / SCRIPTWRITER_USER_PROMPT_FILENAME
 
     _, style_kwargs = mock_integrate.call_args
-    assert style_kwargs["system_prompt_path"] == version_dir / STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME
-    assert style_kwargs["user_prompt_path"] == version_dir / STYLE_INTEGRATOR_USER_PROMPT_FILENAME
+    assert style_kwargs["system_prompt_path"] == version_dir / "prompts" / STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME
+    assert style_kwargs["user_prompt_path"] == version_dir / "prompts" / STYLE_INTEGRATOR_USER_PROMPT_FILENAME
 
     _, prompt_kwargs = mock_prompts.call_args
-    assert prompt_kwargs["page_prompt_template_path"] == version_dir / PAGE_PROMPT_TEMPLATE_FILENAME
+    assert prompt_kwargs["page_prompt_template_path"] == version_dir / "prompts" / PAGE_PROMPT_TEMPLATE_FILENAME
 
 
 @pytest.mark.asyncio

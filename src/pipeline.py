@@ -51,6 +51,7 @@ from master_beater import StoryBibleCheckpoint, create_story_bible
 CAMPAIGNS_ROOT = Path("campaigns")
 INDEX_FILENAME = "index.json"
 EPISODE_META_FILENAME = "episode_meta.json"
+PROMPTS_SUBDIR_NAME = "prompts"
 
 RerunFrom = Literal["scrape", "entities", "beater", "script", "style", "prompt"]
 RerunFromArg = Literal["scrape", "entities", "beater", "script", "style", "prompt"]
@@ -235,6 +236,11 @@ def _create_version_dir(
             if src.exists():
                 shutil.copy2(src, version_dir / fname)
 
+        if rerun_from is None:
+            prev_prompts_dir = prev_dir / PROMPTS_SUBDIR_NAME
+            if prev_prompts_dir.exists():
+                shutil.copytree(prev_prompts_dir, version_dir / PROMPTS_SUBDIR_NAME)
+
     return version_dir, version_name
 
 
@@ -359,6 +365,8 @@ class ComicPipeline:
         version_dir: Path,
     ) -> dict[str, Path]:
         """Copy prompt templates into the version directory and return their version-local paths."""
+        prompts_dir = version_dir / PROMPTS_SUBDIR_NAME
+        prompts_dir.mkdir(parents=True, exist_ok=True)
         captured_paths: dict[str, Path] = {}
         for filename, source_path in prompt_paths.items():
             if not source_path.exists():
@@ -366,7 +374,7 @@ class ComicPipeline:
                     f"Prompt template file not found at {source_path}."
                 )
 
-            version_prompt_path = version_dir / filename
+            version_prompt_path = prompts_dir / filename
             if source_path != version_prompt_path:
                 shutil.copy2(source_path, version_prompt_path)
             captured_paths[filename] = version_prompt_path
@@ -462,6 +470,7 @@ class ComicPipeline:
                     script_path.unlink(missing_ok=True)
                     styled_script_path.unlink(missing_ok=True)
                     prompts_path.unlink(missing_ok=True)
+                    shutil.rmtree(version_dir / PROMPTS_SUBDIR_NAME, ignore_errors=True)
                 else:
                     print(f"[1/5] Scraping...skipped (checkpoint exists, recap: {self.recap_version})")
             else:
