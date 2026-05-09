@@ -51,77 +51,30 @@ def _write_input_checkpoints(tmp_path: Path) -> tuple[Path, Path, Path]:
 
     raw_path = tmp_path / "01_raw_text.json"
     entities_path = tmp_path / "02_entities.json"
-    architecture_path = tmp_path / "02_5_story_architecture.json"
+    story_bible_path = tmp_path / "02_5_story_bible.json"
+    
     raw_path.write_text(json.dumps(raw_input), encoding="utf-8")
     entities_path.write_text(json.dumps(entities_input), encoding="utf-8")
-    architecture_path.write_text(
-        json.dumps(
-            {
-                "url": "https://example.test/story",
-                "title": "Swamp Trouble",
-                "author": "GM",
-                "model": "qwen3:8b",
-                "target_panel_count": 3,
-                "panels": [
-                    {
-                        "index": 1,
-                        "beat_indices": [1],
-                        "beat_summary": "The party enters the marsh at dusk.",
-                        "story_purpose": "Establish the party entering the marsh.",
-                        "panel_scale": "large",
-                        "panel_shape": "wide",
-                        "setting_brief": "Marsh edge at dusk",
-                        "character_focus": ["Del", "Vendetta"],
-                        "notable_set_dressing": ["The marsh entry"],
-                        "notable_quotes": [
-                            {
-                                "text": "Stay close to me.",
-                                "attribution_context": "Del warns the party as they enter the marsh.",
-                            }
-                        ],
-                        "dialogue_goals": ["Caution"],
-                        "continuity_notes": ["Nobody holds the torch yet"],
-                    },
-                    {
-                        "index": 2,
-                        "beat_indices": [1],
-                        "beat_summary": "The group pushes deeper into the marsh.",
-                        "story_purpose": "Move the party deeper into the marsh.",
-                        "panel_scale": "medium",
-                        "panel_shape": "standard",
-                        "setting_brief": "Narrow marsh path",
-                        "character_focus": ["Del", "Vendetta"],
-                        "notable_set_dressing": ["Del carrying the torch"],
-                        "notable_quotes": [],
-                        "dialogue_goals": ["Urgency"],
-                        "continuity_notes": ["Del keeps the torch lit"],
-                    },
-                    {
-                        "index": 3,
-                        "beat_indices": [1],
-                        "beat_summary": "They pause at the ruin gate to reassess.",
-                        "story_purpose": "Pause at the ruin gate.",
-                        "panel_scale": "small",
-                        "panel_shape": "inset",
-                        "setting_brief": "Collapsed ruin gate",
-                        "character_focus": ["Del", "Vendetta"],
-                        "notable_set_dressing": ["Ruin gate"],
-                        "notable_quotes": [
-                            {
-                                "text": "We hold here.",
-                                "attribution_context": "Del calls for the party to hold position.",
-                            }
-                        ],
-                        "dialogue_goals": ["Hold position"],
-                        "continuity_notes": ["Del still holds the torch"],
-                    },
-                ],
-                "architected_at": "2026-05-04T00:00:00+00:00",
-            }
-        ),
-        encoding="utf-8",
+    
+    story_bible_checkpoint = master_beater.StoryBibleCheckpoint(
+        url="https://example.test/story",
+        title="Swamp Trouble",
+        author="GM",
+        model="qwen3:8b",
+        scene_count=3,
+        story_bible="""Scene 1:
+The party enters the marsh at dusk. Del grabs a torch and leads the group into the murky waters. The reeds tower overhead, their silhouettes ghostly in the fading light. Del warns urgently, "Stay close to me." Nobody holds the torch yet except Del.
+
+Scene 2:
+The group pushes deeper into the marsh. The narrow path winds between walls of reeds that seem to press closer with each step. Del holds the torch aloft, casting dancing shadows. Urgency fills the air as they move forward, Del keeping the torch lit against the growing darkness.
+
+Scene 3:
+They pause at a collapsed ruin gate to reassess. The ancient structure looms before them, half-buried in the marsh. Del calls out, "We hold here." as the party takes shelter behind the crumbling stones. Del still holds the torch, the flame casting eerie shadows on the ruins.""",
+        generation_errors=[],
+        created_at="2026-05-04T00:00:00+00:00",
     )
-    return raw_path, entities_path, architecture_path
+    story_bible_path.write_text(story_bible_checkpoint.model_dump_json(), encoding="utf-8")
+    return raw_path, entities_path, story_bible_path
 
 
 def _valid_payload() -> scriptwriter.ScriptPayload:
