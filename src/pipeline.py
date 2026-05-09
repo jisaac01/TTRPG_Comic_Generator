@@ -14,6 +14,7 @@ from entities import (
     WorldStateCheckpoint,
     build_entities_from_raw,
 )
+from model_defaults import DEFAULT_OLLAMA_MODEL
 from prompter import (
     ART_DIRECTION_TEMPLATE_FILENAME,
     DEFAULT_ART_DIRECTION_TEMPLATE_PATH,
@@ -248,10 +249,10 @@ class ComicPipeline:
         url: str,
         campaign: str,
         campaigns_root: Path = CAMPAIGNS_ROOT,
-        analysis_model: str = "qwen3:8b",
-        beater_model: str = "qwen3:8b",
-        script_model: str = "qwen3:8b",
-        style_model: str = "qwen3:8b",
+        analysis_model: str = DEFAULT_OLLAMA_MODEL,
+        beater_model: str = DEFAULT_OLLAMA_MODEL,
+        script_model: str = DEFAULT_OLLAMA_MODEL,
+        style_model: str = DEFAULT_OLLAMA_MODEL,
         panel_count: int = 6,
         art_style_template: Path | None = None,
         master_beater_system_prompt: Path | None = None,
@@ -713,17 +714,17 @@ async def _run_cli() -> None:
     )
     parser.add_argument(
         "--beater-model",
-        default="qwen3:8b",
+        default=DEFAULT_OLLAMA_MODEL,
         help="Ollama model name used for Phase 3 story bible creation",
     )
     parser.add_argument(
         "--script-model",
-        default="qwen3:8b",
+        default=DEFAULT_OLLAMA_MODEL,
         help="Ollama model name used for Phase 4 scripting",
     )
     parser.add_argument(
         "--style-model",
-        default="qwen3:8b",
+        default=DEFAULT_OLLAMA_MODEL,
         help="Ollama model name used for Phase 4.5 art style integration",
     )
     parser.add_argument(

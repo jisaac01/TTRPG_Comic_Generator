@@ -7,7 +7,7 @@ Each run is isolated in its own version folder. Prior runs are never overwritten
 ## Requirements
 
 - Python 3.12+
-- [Ollama](https://ollama.com) running locally with `qwen3:8b` pulled
+- [Ollama](https://ollama.com) running locally with the model configured in `src/model_defaults.py` pulled
 
 ## Setup
 
@@ -108,9 +108,9 @@ python src/pipeline.py belowdown https://scrybequill.com/share/...
 
 ```
 --campaigns-root PATH        default: campaigns/
---beater-model NAME          default: qwen3:8b
---script-model NAME          default: qwen3:8b
---style-model NAME           default: qwen3:8b
+--beater-model NAME          default: DEFAULT_OLLAMA_MODEL (src/model_defaults.py)
+--script-model NAME          default: DEFAULT_OLLAMA_MODEL (src/model_defaults.py)
+--style-model NAME           default: DEFAULT_OLLAMA_MODEL (src/model_defaults.py)
 --scene-count N              default: 6 (target scene count for the story bible)
 --art-style-template PATH    Override campaign-level template for this run only
 --master-beater-system-prompt PATH

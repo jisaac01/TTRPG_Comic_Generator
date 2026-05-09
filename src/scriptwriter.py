@@ -10,6 +10,7 @@ from typing import Callable, Literal, cast
 from pydantic import BaseModel, Field
 
 from entities import Character, Location, StoryBeat
+from model_defaults import DEFAULT_OLLAMA_MODEL
 from prompt_templates import (
     SCRIPTWRITER_SYSTEM_PROMPT_FILENAME,
     SCRIPTWRITER_USER_PROMPT_FILENAME,
@@ -190,7 +191,7 @@ def write_script(
         "campaigns/<campaign>/<episode>/v001/02_5_story_bible.json"
     ),
     output_path: Path = Path("campaigns/<campaign>/<episode>/v001/03_script.json"),
-    model: str = "qwen3:8b",
+    model: str = DEFAULT_OLLAMA_MODEL,
     system_prompt_path: Path | None = None,
     user_prompt_path: Path | None = None,
     generator: ScriptGenerator | None = None,
@@ -280,7 +281,7 @@ def _run_cli() -> None:
     )
     parser.add_argument(
         "--model",
-        default="qwen3:8b",
+        default=DEFAULT_OLLAMA_MODEL,
         help="Ollama model name",
     )
     args = parser.parse_args()

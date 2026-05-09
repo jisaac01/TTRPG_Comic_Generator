@@ -5,6 +5,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
 import master_beater
+from model_defaults import DEFAULT_OLLAMA_MODEL
 
 
 def _write_input_checkpoints(tmp_path: Path) -> tuple[Path, Path]:
@@ -26,7 +27,7 @@ def _write_input_checkpoints(tmp_path: Path) -> tuple[Path, Path]:
         "url": "https://example.test/story",
         "title": "Swamp Trouble",
         "author": "GM",
-        "model": "qwen3:8b",
+        "model": DEFAULT_OLLAMA_MODEL,
         "player_characters": [
             {
                 "name": "Del",
@@ -74,7 +75,7 @@ def test_create_story_bible_writes_checkpoint_with_text_content(tmp_path):
         assert "torch" in raw_content
         assert world.title == "Swamp Trouble"
         assert scene_count == 2
-        assert model == "qwen3:8b"
+        assert model == DEFAULT_OLLAMA_MODEL
         # Return a simple text-based story bible
         return """Scene 1:
 The party enters the marsh at dusk. Del leads them through the foggy trail lined with reeds, warning "Stay close to me." The atmosphere is tense as darkness falls and unknown dangers lurk in the mist.
@@ -86,7 +87,7 @@ Del lights a torch to guide the group through the narrow marsh path. The firelig
         raw_checkpoint_path=raw_path,
         entities_checkpoint_path=entities_path,
         output_path=output_path,
-        model="qwen3:8b",
+        model=DEFAULT_OLLAMA_MODEL,
         scene_count=2,
         generator=fake_generator,
     )
@@ -118,7 +119,7 @@ Continuation scene."""
         raw_checkpoint_path=raw_path,
         entities_checkpoint_path=entities_path,
         output_path=output_path,
-        model="qwen3:8b",
+        model=DEFAULT_OLLAMA_MODEL,
         scene_count=2,
         generator=fake_generator,
     )
@@ -152,7 +153,7 @@ def test_story_bible_checkpoint_validates_text_field(tmp_path):
         url="https://example.test/story",
         title="Test Story",
         author="Test Author",
-        model="qwen3:8b",
+        model=DEFAULT_OLLAMA_MODEL,
         scene_count=2,
         story_bible="Scene 1:\nText\n\nScene 2:\nMore text",
         generation_errors=[],

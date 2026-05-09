@@ -9,6 +9,7 @@ from typing import Callable
 
 from pydantic import BaseModel, Field
 
+from model_defaults import DEFAULT_OLLAMA_MODEL
 from prompter import (
     ART_DIRECTION_TEMPLATE_FIELDS,
     _format_art_direction,
@@ -164,7 +165,7 @@ def integrate_style(
     script_checkpoint_path: Path = Path("campaigns/<campaign>/<episode>/v001/03_script.json"),
     art_style_template_path: Path = Path("campaigns/<campaign>/art_direction_template.json"),
     output_path: Path = Path("campaigns/<campaign>/<episode>/v001/03_5_styled_script.json"),
-    model: str = "qwen3:8b",
+    model: str = DEFAULT_OLLAMA_MODEL,
     system_prompt_path: Path | None = None,
     user_prompt_path: Path | None = None,
     generator: StyleGenerator | None = None,
@@ -252,7 +253,7 @@ def _run_cli() -> None:
     )
     parser.add_argument(
         "--model",
-        default="qwen3:8b",
+        default=DEFAULT_OLLAMA_MODEL,
         help="Ollama model name",
     )
 

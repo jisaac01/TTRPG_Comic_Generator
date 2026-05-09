@@ -10,6 +10,7 @@ from typing import Callable
 from pydantic import BaseModel, Field
 
 from entities import StoryBeat, WorldStateCheckpoint
+from model_defaults import DEFAULT_OLLAMA_MODEL
 from prompt_templates import (
     MASTER_BEATER_SYSTEM_PROMPT_FILENAME,
     MASTER_BEATER_USER_PROMPT_FILENAME,
@@ -130,7 +131,7 @@ def create_story_bible(
     raw_checkpoint_path: Path = Path("campaigns/<campaign>/<episode>/v001/01_raw_text.json"),
     entities_checkpoint_path: Path = Path("campaigns/<campaign>/<episode>/v001/02_entities.json"),
     output_path: Path = Path("campaigns/<campaign>/<episode>/v001/02_5_story_bible.txt"),
-    model: str = "qwen3:8b",
+    model: str = DEFAULT_OLLAMA_MODEL,
     scene_count: int = 6,
     system_prompt_path: Path | None = None,
     user_prompt_path: Path | None = None,
@@ -230,7 +231,7 @@ def _run_cli() -> None:
     )
     parser.add_argument(
         "--model",
-        default="qwen3:8b",
+        default=DEFAULT_OLLAMA_MODEL,
         help="Ollama model name",
     )
     parser.add_argument(

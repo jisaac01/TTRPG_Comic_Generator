@@ -7,6 +7,7 @@ import pytest
 sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
 import style_integrator
+from model_defaults import DEFAULT_OLLAMA_MODEL
 from scriptwriter import Panel, ScriptCheckpoint
 
 
@@ -30,7 +31,7 @@ def _write_script_checkpoint(tmp_path: Path) -> Path:
         url="https://example.test/story",
         title="Swamp Trouble",
         author="GM",
-        model="qwen3:8b",
+        model=DEFAULT_OLLAMA_MODEL,
         panel_count=2,
         panels=[
             Panel(

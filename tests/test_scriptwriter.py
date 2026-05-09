@@ -6,6 +6,7 @@ sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
 import scriptwriter
 import master_beater
+from model_defaults import DEFAULT_OLLAMA_MODEL
 
 
 def _write_input_checkpoints(tmp_path: Path) -> tuple[Path, Path, Path]:
@@ -21,7 +22,7 @@ def _write_input_checkpoints(tmp_path: Path) -> tuple[Path, Path, Path]:
         "url": "https://example.test/story",
         "title": "Swamp Trouble",
         "author": "GM",
-        "model": "qwen3:8b",
+        "model": DEFAULT_OLLAMA_MODEL,
         "player_characters": [
             {
                 "name": "Del",
@@ -60,7 +61,7 @@ def _write_input_checkpoints(tmp_path: Path) -> tuple[Path, Path, Path]:
         url="https://example.test/story",
         title="Swamp Trouble",
         author="GM",
-        model="qwen3:8b",
+        model=DEFAULT_OLLAMA_MODEL,
         scene_count=3,
         story_bible="""Scene 1:
 The party enters the marsh at dusk. Del grabs a torch and leads the group into the murky waters. The reeds tower overhead, their silhouettes ghostly in the fading light. Del warns urgently, "Stay close to me." Nobody holds the torch yet except Del.
@@ -133,7 +134,7 @@ def test_write_script_writes_checkpoint_and_normalizes_panel_indices(tmp_path):
     def fake_generator(world, story_bible, model):
         assert world.title == "Swamp Trouble"
         assert story_bible.scene_count == 3
-        assert model == "qwen3:8b"
+        assert model == DEFAULT_OLLAMA_MODEL
         return _valid_payload()
 
     checkpoint = scriptwriter.write_script(
@@ -141,7 +142,7 @@ def test_write_script_writes_checkpoint_and_normalizes_panel_indices(tmp_path):
         entities_checkpoint_path=entities_path,
         story_bible_checkpoint_path=architecture_path,
         output_path=output_path,
-        model="qwen3:8b",
+        model=DEFAULT_OLLAMA_MODEL,
         generator=fake_generator,
     )
 
@@ -287,7 +288,7 @@ def test_format_entities_for_prompt_excludes_reference_quotes():
         url="https://example.test/story",
         title="Swamp Trouble",
         author="GM",
-        model="qwen3:8b",
+        model=DEFAULT_OLLAMA_MODEL,
         player_characters=[],
         npcs=[],
         locations=[],
