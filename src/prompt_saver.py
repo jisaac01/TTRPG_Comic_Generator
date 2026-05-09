@@ -127,7 +127,7 @@ def prepare_scriptwriter_prompts(
         title=title,
         panel_count=story_bible.scene_count,
         entities_context=entities_context,
-        story_architecture=_format_story_bible_for_prompt(story_bible),
+        story_bible=_format_story_bible_for_prompt(story_bible),
     )
 
     (prompts_dir / f"{SCRIPTWRITER_SYSTEM_PROMPT_FILENAME.replace('.txt', '')}_FINAL.txt").write_text(

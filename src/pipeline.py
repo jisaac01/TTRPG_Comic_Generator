@@ -455,12 +455,10 @@ class ComicPipeline:
                 if content_changed:
                     print(f"[1/5] Recap variant changed to {self.recap_version!r} - invalidating downstream checkpoints")
                     entities_path = version_dir / "02_entities.json"
-                    story_architecture_path = version_dir / "02_5_story_architecture.json"
                     script_path = version_dir / "03_script.json"
                     styled_script_path = version_dir / "03_5_styled_script.json"
                     prompts_path = version_dir / "04_page_prompt.txt"
                     entities_path.unlink(missing_ok=True)
-                    story_architecture_path.unlink(missing_ok=True)
                     script_path.unlink(missing_ok=True)
                     styled_script_path.unlink(missing_ok=True)
                     prompts_path.unlink(missing_ok=True)

@@ -1161,7 +1161,7 @@ async def test_script_failure_does_not_crash_pipeline(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_story_architect_failure_does_not_crash_pipeline(tmp_path):
+async def test_story_bible_failure_does_not_crash_pipeline(tmp_path):
     pipeline = ComicPipeline(
         url="https://example.test/story",
         campaign="dreadmarsh",

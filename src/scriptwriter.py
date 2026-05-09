@@ -120,7 +120,7 @@ def _generate_with_instructor_ollama(
         title=title,
         panel_count=story_bible.scene_count,
         entities_context=entities_context,
-        story_architecture=_format_story_bible_for_prompt(story_bible),
+        story_bible=_format_story_bible_for_prompt(story_bible),
     )
 
     return client.chat.completions.create(

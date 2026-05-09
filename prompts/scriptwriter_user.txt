@@ -10,5 +10,5 @@ Add dialog that's missing; throw away notable_quotes that are duplicate or don't
 Character and Location information:
 {entities_context}
 
-Story architecture:
-{story_architecture}
+Story bible:
+{story_bible}
