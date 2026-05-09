@@ -16,7 +16,7 @@ from prompt_templates import (
     render_prompt_template,
 )
 from scraper import RawTextCheckpoint
-from story_architect import StoryArchitectureCheckpoint
+from master_beater import StoryBibleCheckpoint
 
 
 class WorldStateInput(BaseModel):
@@ -61,7 +61,7 @@ class ScriptCheckpoint(BaseModel):
     scripted_at: str
 
 
-ScriptGenerator = Callable[[WorldStateInput, StoryArchitectureCheckpoint, str], ScriptPayload]
+ScriptGenerator = Callable[[WorldStateInput, StoryBibleCheckpoint, str], ScriptPayload]
 
 
 def _build_instructor_client():
@@ -92,31 +92,14 @@ def _format_entities_for_prompt(world: WorldStateInput) -> str:
     )
 
 
-def _format_story_architecture_for_prompt(architecture: StoryArchitectureCheckpoint) -> str:
-    panel_payload: list[dict[str, object]] = []
-    for panel in architecture.panels:
-        panel_payload.append(
-            {
-                "index": panel.index,
-                "beat_indices": panel.beat_indices,
-                "beat_summary": panel.beat_summary,
-                "story_purpose": panel.story_purpose,
-                "panel_scale": panel.panel_scale,
-                "panel_shape": panel.panel_shape,
-                "setting_brief": panel.setting_brief,
-                "character_focus": panel.character_focus,
-                "notable_set_dressing": panel.notable_set_dressing,
-                "notable_quotes": [quote.model_dump() for quote in panel.notable_quotes],
-                "dialogue_goals": panel.dialogue_goals,
-                "continuity_notes": panel.continuity_notes,
-            }
-        )
-    return json.dumps(panel_payload, indent=2, ensure_ascii=False)
+def _format_story_bible_for_prompt(story_bible: StoryBibleCheckpoint) -> str:
+    """Format the story bible text for inclusion in the scriptwriter prompt."""
+    return story_bible.story_bible
 
 
 def _generate_with_instructor_ollama(
     world: WorldStateInput,
-    architecture: StoryArchitectureCheckpoint,
+    story_bible: StoryBibleCheckpoint,
     model: str,
     system_prompt_path: Path | None = None,
     user_prompt_path: Path | None = None,
@@ -134,9 +117,9 @@ def _generate_with_instructor_ollama(
         SCRIPTWRITER_USER_PROMPT_FILENAME,
         template_path=user_prompt_path,
         title=title,
-        panel_count=len(architecture.panels),
+        panel_count=story_bible.scene_count,
         entities_context=entities_context,
-        story_architecture=_format_story_architecture_for_prompt(architecture),
+        story_architecture=_format_story_bible_for_prompt(story_bible),
     )
 
     return client.chat.completions.create(
@@ -152,20 +135,18 @@ def _generate_with_instructor_ollama(
 
 def _normalize_panels(
     panels: list[Panel],
-    architecture: StoryArchitectureCheckpoint,
+    story_bible: StoryBibleCheckpoint,
 ) -> list[Panel]:
     normalized: list[Panel] = []
     for idx, panel in enumerate(panels, start=1):
-        architecture_panel = architecture.panels[idx - 1] if idx <= len(architecture.panels) else None
+        # With story_bible (text-only), we don't have per-panel metadata like panel_scale/shape.
+        # The LLM generates these values based on the narrative context.
+        # We just normalize the panel indices to ensure consistency.
         normalized.append(
             Panel(
                 index=idx,
-                panel_scale=(
-                    architecture_panel.panel_scale if architecture_panel is not None else panel.panel_scale
-                ),
-                panel_shape=(
-                    architecture_panel.panel_shape if architecture_panel is not None else panel.panel_shape
-                ),
+                panel_scale=panel.panel_scale,
+                panel_shape=panel.panel_shape,
                 setting=panel.setting,
                 visual_action=panel.visual_action,
                 dialogue_overlay=panel.dialogue_overlay,
@@ -205,8 +186,8 @@ def _validate_item_continuity(panels: list[Panel]) -> None:
 def write_script(
     raw_checkpoint_path: Path = Path("campaigns/<campaign>/<episode>/v001/01_raw_text.json"),
     entities_checkpoint_path: Path = Path("campaigns/<campaign>/<episode>/v001/02_entities.json"),
-    story_architecture_checkpoint_path: Path = Path(
-        "campaigns/<campaign>/<episode>/v001/02_5_story_architecture.json"
+    story_bible_checkpoint_path: Path = Path(
+        "campaigns/<campaign>/<episode>/v001/02_5_story_bible.json"
     ),
     output_path: Path = Path("campaigns/<campaign>/<episode>/v001/03_script.json"),
     model: str = "qwen3:8b",
@@ -216,8 +197,8 @@ def write_script(
 ) -> ScriptCheckpoint:
     raw = RawTextCheckpoint.model_validate_json(raw_checkpoint_path.read_text(encoding="utf-8"))
     world = WorldStateInput.model_validate_json(entities_checkpoint_path.read_text(encoding="utf-8"))
-    architecture = StoryArchitectureCheckpoint.model_validate_json(
-        story_architecture_checkpoint_path.read_text(encoding="utf-8")
+    story_bible = StoryBibleCheckpoint.model_validate_json(
+        story_bible_checkpoint_path.read_text(encoding="utf-8")
     )
     generation_errors: list[str] = []
 
@@ -230,22 +211,22 @@ def write_script(
         if generate_fn is None:
             payload = _generate_with_instructor_ollama(
                 world,
-                architecture,
+                story_bible,
                 model,
                 system_prompt_path=system_prompt_path,
                 user_prompt_path=user_prompt_path,
             )
         else:
-            payload = generate_fn(world, architecture, model)
+            payload = generate_fn(world, story_bible, model)
     except Exception as exc:
         raise RuntimeError(f"Generation failed before validation: {exc}") from exc
 
-    panels = _normalize_panels(payload.panels, architecture)
-    expected_panel_count = len(architecture.panels)
+    panels = _normalize_panels(payload.panels, story_bible)
+    expected_panel_count = story_bible.scene_count
     if len(panels) != expected_panel_count:
         generation_errors.append(
-            "Architecture alignment failed: expected "
-            f"{expected_panel_count} panels from story architecture, received {len(panels)}. "
+            "Scene count alignment failed: expected "
+            f"{expected_panel_count} panels from story bible, received {len(panels)}. "
             "Accepting panel-count mismatch."
         )
     try:
@@ -285,11 +266,11 @@ def _run_cli() -> None:
         help="Input entities checkpoint path (e.g. campaigns/<campaign>/<episode>/v001/02_entities.json)",
     )
     parser.add_argument(
-        "--story-architecture-input",
+        "--story-bible-input",
         required=True,
         help=(
-            "Input story architecture checkpoint path "
-            "(e.g. campaigns/<campaign>/<episode>/v001/02_5_story_architecture.json)"
+            "Input story bible checkpoint path "
+            "(e.g. campaigns/<campaign>/<episode>/v001/02_5_story_bible.json)"
         ),
     )
     parser.add_argument(
@@ -306,7 +287,7 @@ def _run_cli() -> None:
     checkpoint = write_script(
         raw_checkpoint_path=Path(args.raw_input),
         entities_checkpoint_path=Path(args.entities_input),
-        story_architecture_checkpoint_path=Path(args.story_architecture_input),
+        story_bible_checkpoint_path=Path(args.story_bible_input),
         output_path=Path(args.output),
         model=args.model,
     )
