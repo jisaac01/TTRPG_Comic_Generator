@@ -39,13 +39,7 @@ def _collect_panel_text(script: ScriptCheckpoint) -> str:
         parts.extend(panel.dialogue_overlay)
         parts.extend(panel.held_items_before.keys())
         parts.extend(panel.held_items_after.keys())
-        if panel.caption:
-            parts.append(panel.caption)
-        if panel.voiceover:
-            parts.append(panel.voiceover)
-        if panel.chyron:
-            parts.append(panel.chyron)
-        parts.extend(panel.sound_effects)
+        parts.extend(panel.narrative_overlays_and_text_direction)
     return " ".join(parts)
 
 
@@ -133,17 +127,12 @@ def _format_panel_block(script: ScriptCheckpoint) -> str:
             f"- Visual Action: {panel.visual_action}",
             f"- Dialogue Overlay: {dialogue}",
         ]
-        
-        # Add optional text layers if present
-        if panel.caption:
-            panel_content.append(f"- Caption: {panel.caption}")
-        if panel.voiceover:
-            panel_content.append(f"- Voice Over: {panel.voiceover}")
-        if panel.chyron:
-            panel_content.append(f"- Chyron: {panel.chyron}")
-        if panel.sound_effects:
-            sfx_text = " | ".join(panel.sound_effects)
-            panel_content.append(f"- Sound Effects: {sfx_text}")
+
+        if panel.narrative_overlays_and_text_direction:
+            overlays_text = " | ".join(panel.narrative_overlays_and_text_direction)
+            panel_content.append(
+                f"- Narrative Overlays & Text Direction: {overlays_text}"
+            )
         
         panel_lines.append("\n".join(panel_content))
 

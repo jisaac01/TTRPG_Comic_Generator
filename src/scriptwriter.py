@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Literal, cast
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from entities import Character, Location, StoryBeat
 from model_defaults import DEFAULT_OLLAMA_MODEL
@@ -33,6 +33,8 @@ class WorldStateInput(BaseModel):
 
 
 class Panel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     index: int = Field(ge=1)
     panel_scale: Literal["small", "medium", "large", "splash"]
     panel_shape: Literal["standard", "wide", "tall", "inset", "irregular"]
@@ -41,10 +43,14 @@ class Panel(BaseModel):
     dialogue_overlay: list[str] = Field(default_factory=list, description="format: 'Character: text'")
     held_items_before: dict[str, list[str]] = Field(default_factory=dict)
     held_items_after: dict[str, list[str]] = Field(default_factory=dict)
-    caption: str | None = Field(default=None, description="Narrative text in box; use for explanatory narration and context")
-    voiceover: str | None = Field(default=None, description="Off-panel character speech; format: 'Character (V.O.): text'")
-    chyron: str | None = Field(default=None, description="Location/time overlay text; keep minimal (e.g., 'London, 1821')")
-    sound_effects: list[str] = Field(default_factory=list, description="SFX labels/bursts; use sparingly (e.g., ['CRASH!', 'WHOOSH'])")
+    narrative_overlays_and_text_direction: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Optional sparse list for captions/voiceover/chyron/sfx/text direction. "
+            "Use prefixed entries such as 'CAPTION: ...', 'V.O.: ...', "
+            "'CHYRON: ...', 'SFX: ...', or 'TEXT-DIRECTION: ...'."
+        ),
+    )
 
 
 class ScriptPayload(BaseModel):
@@ -153,10 +159,7 @@ def _normalize_panels(
                 dialogue_overlay=panel.dialogue_overlay,
                 held_items_before=panel.held_items_before,
                 held_items_after=panel.held_items_after,
-                caption=panel.caption,
-                voiceover=panel.voiceover,
-                chyron=panel.chyron,
-                sound_effects=panel.sound_effects,
+                narrative_overlays_and_text_direction=panel.narrative_overlays_and_text_direction,
             )
         )
     return normalized

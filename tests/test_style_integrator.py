@@ -43,10 +43,12 @@ def _write_script_checkpoint(tmp_path: Path) -> Path:
                 dialogue_overlay=["Del: What is that?"],
                 held_items_before={"Del": []},
                 held_items_after={"Del": []},
-                caption="The marsh was still.",
-                voiceover=None,
-                chyron="Swamp, Dusk",
-                sound_effects=["SPLASH", "FLOP"],
+                narrative_overlays_and_text_direction=[
+                    "CAPTION: The marsh was still.",
+                    "CHYRON: Swamp, Dusk",
+                    "SFX: SPLASH",
+                    "SFX: FLOP",
+                ],
             ),
             Panel(
                 index=2,
@@ -57,10 +59,10 @@ def _write_script_checkpoint(tmp_path: Path) -> Path:
                 dialogue_overlay=["Vendetta: It's still alive."],
                 held_items_before={"Vendetta": []},
                 held_items_after={"Vendetta": ["stick"]},
-                caption=None,
-                voiceover="Del (V.O.): Impossible creatures...",
-                chyron=None,
-                sound_effects=["POKE"],
+                narrative_overlays_and_text_direction=[
+                    "V.O.: Del (V.O.): Impossible creatures...",
+                    "SFX: POKE",
+                ],
             ),
         ],
         scripted_at="2026-05-04T00:00:00+00:00",
@@ -322,12 +324,12 @@ def test_integrate_style_raises_if_art_template_missing(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# integrate_style: optional text layers
+# integrate_style: narrative overlays
 # ---------------------------------------------------------------------------
 
 
-def test_integrate_style_preserves_optional_text_layers(tmp_path):
-    """Verify that optional text layers (caption, voiceover, chyron, sound_effects) are preserved through style integration."""
+def test_integrate_style_preserves_narrative_overlays(tmp_path):
+    """Verify narrative_overlays_and_text_direction is preserved through style integration."""
     script_path = _write_script_checkpoint(tmp_path)
     art_path = _write_art_template(tmp_path)
     output_path = tmp_path / "03_5_styled_script.json"
@@ -339,21 +341,20 @@ def test_integrate_style_preserves_optional_text_layers(tmp_path):
         generator=lambda _script, _art, _model: _styled_payload(),
     )
 
-    # Panel 1: caption, chyron, and sound_effects should be preserved
-    assert checkpoint.panels[0].caption == "The marsh was still."
-    assert checkpoint.panels[0].chyron == "Swamp, Dusk"
-    assert checkpoint.panels[0].sound_effects == ["SPLASH", "FLOP"]
-    assert checkpoint.panels[0].voiceover is None
+    assert checkpoint.panels[0].narrative_overlays_and_text_direction == [
+        "CAPTION: The marsh was still.",
+        "CHYRON: Swamp, Dusk",
+        "SFX: SPLASH",
+        "SFX: FLOP",
+    ]
+    assert checkpoint.panels[1].narrative_overlays_and_text_direction == [
+        "V.O.: Del (V.O.): Impossible creatures...",
+        "SFX: POKE",
+    ]
 
-    # Panel 2: voiceover and sound_effects should be preserved
-    assert checkpoint.panels[1].voiceover == "Del (V.O.): Impossible creatures..."
-    assert checkpoint.panels[1].sound_effects == ["POKE"]
-    assert checkpoint.panels[1].caption is None
-    assert checkpoint.panels[1].chyron is None
 
-
-def test_integrate_style_optional_text_layers_in_output_json(tmp_path):
-    """Verify that optional text layers are correctly serialized to output JSON."""
+def test_integrate_style_narrative_overlays_in_output_json(tmp_path):
+    """Verify narrative_overlays_and_text_direction is correctly serialized to output JSON."""
     script_path = _write_script_checkpoint(tmp_path)
     art_path = _write_art_template(tmp_path)
     output_path = tmp_path / "03_5_styled_script.json"
@@ -367,8 +368,13 @@ def test_integrate_style_optional_text_layers_in_output_json(tmp_path):
 
     payload = json.loads(output_path.read_text(encoding="utf-8"))
     
-    assert payload["panels"][0]["caption"] == "The marsh was still."
-    assert payload["panels"][0]["chyron"] == "Swamp, Dusk"
-    assert payload["panels"][0]["sound_effects"] == ["SPLASH", "FLOP"]
-    assert payload["panels"][1]["voiceover"] == "Del (V.O.): Impossible creatures..."
-    assert payload["panels"][1]["sound_effects"] == ["POKE"]
+    assert payload["panels"][0]["narrative_overlays_and_text_direction"] == [
+        "CAPTION: The marsh was still.",
+        "CHYRON: Swamp, Dusk",
+        "SFX: SPLASH",
+        "SFX: FLOP",
+    ]
+    assert payload["panels"][1]["narrative_overlays_and_text_direction"] == [
+        "V.O.: Del (V.O.): Impossible creatures...",
+        "SFX: POKE",
+    ]

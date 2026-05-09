@@ -3,7 +3,13 @@ Story title: {title}
 Write exactly {panel_count} story panels.
 
 Important: Story architecture is a junk drawer. It's up to you to craft it into a narrative.
-Sometimes (not every panel!) use captions to add narration and chyrons to signify placenames or transitions. 
+Use narrative_overlays_and_text_direction sparingly (often empty). Only include entries when they materially help storytelling or readability.
+When used, each entry should be a single prefixed string such as:
+- CAPTION: narrative context
+- V.O.: Character (V.O.): line
+- CHYRON: place/time marker
+- SFX: burst label
+- TEXT-DIRECTION: lettering/rendering instruction
 
 Add dialog that's missing; throw away notable_quotes that are duplicate or don't add to the story.
 
