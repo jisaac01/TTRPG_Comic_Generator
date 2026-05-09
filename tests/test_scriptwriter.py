@@ -130,9 +130,9 @@ def test_write_script_writes_checkpoint_and_normalizes_panel_indices(tmp_path):
     raw_path, entities_path, architecture_path = _write_input_checkpoints(tmp_path)
     output_path = tmp_path / "03_script.json"
 
-    def fake_generator(world, architecture, model):
+    def fake_generator(world, story_bible, model):
         assert world.title == "Swamp Trouble"
-        assert architecture.target_panel_count == 3
+        assert story_bible.scene_count == 3
         assert model == "qwen3:8b"
         return _valid_payload()
 
@@ -172,7 +172,7 @@ def test_write_script_accepts_any_panel_count_without_error(tmp_path):
 
     assert checkpoint.panel_count == 1
     assert len(checkpoint.generation_errors) == 1
-    assert "Architecture alignment failed" in checkpoint.generation_errors[0]
+    assert "Scene count alignment failed" in checkpoint.generation_errors[0]
 
 
 def test_write_script_logs_continuity_error_and_keeps_output(tmp_path):
@@ -256,7 +256,7 @@ def test_write_script_logs_when_missing_character_with_items(tmp_path):
     assert "missing held_items_before for Del" in checkpoint.generation_errors[0]
 
 
-def test_write_script_preserves_architect_selected_layout_fields(tmp_path):
+def test_write_script_preserves_story_bible_info(tmp_path):
     raw_path, entities_path, architecture_path = _write_input_checkpoints(tmp_path)
 
     def fake_generator(_world, _architecture, _model):
@@ -275,14 +275,10 @@ def test_write_script_preserves_architect_selected_layout_fields(tmp_path):
         generator=fake_generator,
     )
 
-    architecture = master_beater.StoryBibleCheckpoint.model_validate_json(
-        architecture_path.read_text(encoding="utf-8")
-    )
-
-    assert checkpoint.panels[0].panel_scale == architecture.panels[0].panel_scale
-    assert checkpoint.panels[0].panel_shape == architecture.panels[0].panel_shape
-    assert checkpoint.panels[1].panel_scale == architecture.panels[1].panel_scale
-    assert checkpoint.panels[1].panel_shape == architecture.panels[1].panel_shape
+    assert checkpoint.panels[0].panel_scale == "small"
+    assert checkpoint.panels[0].panel_shape == "irregular"
+    assert checkpoint.panels[1].panel_scale == "splash"
+    assert checkpoint.panels[1].panel_shape == "tall"
     assert checkpoint.panel_count == 3
 
 
@@ -311,18 +307,18 @@ def test_format_entities_for_prompt_excludes_reference_quotes():
     assert "Reference quotes:" not in prompt_blob
 
 
-def test_format_story_architecture_for_prompt_includes_notable_quotes(tmp_path):
+def test_format_story_bible_for_prompt_includes_entities(tmp_path):
     _, _, architecture_path = _write_input_checkpoints(tmp_path)
 
     architecture = master_beater.StoryBibleCheckpoint.model_validate_json(
         architecture_path.read_text(encoding="utf-8")
     )
 
-    prompt_blob = scriptwriter._format_story_architecture_for_prompt(architecture)
+    prompt_blob = scriptwriter._format_story_bible_for_prompt(architecture)
 
-    assert '"notable_quotes": [' in prompt_blob
-    assert '"text": "Stay close to me."' in prompt_blob
-    assert '"attribution_context": "Del warns the party as they enter the marsh."' in prompt_blob
+    assert "Scene 1:" in prompt_blob
+    assert "Stay close to me." in prompt_blob
+    assert "Scene 3:" in prompt_blob
 
 
 def test_optional_text_layers_preserved_in_checkpoint(tmp_path):

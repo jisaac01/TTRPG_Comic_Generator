@@ -411,7 +411,7 @@ async def test_first_run_creates_campaign_episode_version(tmp_path):
 
     assert "raw_text" in result
     assert "entities" in result
-    assert "story_architecture" in result
+    assert "story_bible" in result
     assert "script" in result
     assert "styled_script" in result
     assert "page_prompt" in result
@@ -485,8 +485,8 @@ async def test_explicit_prompt_overrides_are_copied_into_version(tmp_path):
         campaign="dreadmarsh",
         campaigns_root=tmp_path,
         panel_count=2,
-        story_architect_system_prompt=architect_system,
-        story_architect_user_prompt=architect_user,
+        master_beater_system_prompt=architect_system,
+        master_beater_user_prompt=architect_user,
         scriptwriter_system_prompt=system_prompt,
         scriptwriter_user_prompt=user_prompt,
         style_integrator_system_prompt=style_system,
@@ -551,7 +551,7 @@ async def test_first_run_result_contains_model_dump_dicts(tmp_path):
 
     assert isinstance(result["raw_text"], dict)
     assert isinstance(result["entities"], dict)
-    assert isinstance(result["story_architecture"], dict)
+    assert isinstance(result["story_bible"], dict)
     assert isinstance(result["script"], dict)
     assert isinstance(result["styled_script"], dict)
     assert isinstance(result["page_prompt"], dict)
@@ -644,7 +644,7 @@ async def test_cached_raw_recap_switch_updates_content_and_reruns_downstream(tmp
 
     mock_scrape.assert_not_awaited()
     mock_entities.assert_called_once()
-    mock_architect.assert_called_once()
+    mock_architect.assert_not_called()
     mock_script.assert_called_once()
     mock_prompts.assert_called_once()
 
@@ -695,7 +695,7 @@ async def test_rerun_from_architect_reruns_architect_and_downstream(tmp_path):
         campaign="dreadmarsh",
         campaigns_root=tmp_path,
         panel_count=2,
-        rerun_from="architect",
+        rerun_from="beater",
     )
 
     with (
@@ -1076,7 +1076,7 @@ async def test_script_model_and_panel_count_forwarded(tmp_path):
         url="https://example.test/story",
         campaign="dreadmarsh",
         campaigns_root=tmp_path,
-        architect_model="llama3.1:8b",
+        beater_model="llama3.1:8b",
         script_model="llama3.1:8b",
         panel_count=8,
     )
@@ -1093,7 +1093,7 @@ async def test_script_model_and_panel_count_forwarded(tmp_path):
 
     _, architect_kwargs = mock_architect.call_args
     assert architect_kwargs.get("model") == "llama3.1:8b"
-    assert architect_kwargs.get("panel_count") == 8
+    assert architect_kwargs.get("scene_count") == 8
 
     _, kwargs = mock_script.call_args
     assert kwargs.get("model") == "llama3.1:8b"
@@ -1156,7 +1156,7 @@ async def test_script_failure_does_not_crash_pipeline(tmp_path):
     mock_prompts.assert_not_called()
     assert result["raw_text"] is not None
     assert result["entities"] is not None
-    assert result["story_architecture"] is not None
+    assert result["story_bible"] is not None
 
 
 @pytest.mark.asyncio
@@ -1178,11 +1178,11 @@ async def test_story_architect_failure_does_not_crash_pipeline(tmp_path):
     ):
         result = await pipeline.run()
 
-    assert result["story_architecture"] is None
+    assert result["story_bible"] is None
     assert result["script"] is None
     assert result["styled_script"] is None
     assert result["page_prompt"] is None
-    assert result["errors"] == ["story_architecture: Beat coverage failed"]
+    assert result["errors"] == ["story_bible: Beat coverage failed"]
     mock_prompts.assert_not_called()
 
 
