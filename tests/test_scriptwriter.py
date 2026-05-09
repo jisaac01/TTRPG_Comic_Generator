@@ -5,7 +5,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
 import scriptwriter
-import story_architect
+import master_beater
 
 
 def _write_input_checkpoints(tmp_path: Path) -> tuple[Path, Path, Path]:
@@ -51,77 +51,30 @@ def _write_input_checkpoints(tmp_path: Path) -> tuple[Path, Path, Path]:
 
     raw_path = tmp_path / "01_raw_text.json"
     entities_path = tmp_path / "02_entities.json"
-    architecture_path = tmp_path / "02_5_story_architecture.json"
+    story_bible_path = tmp_path / "02_5_story_bible.json"
+    
     raw_path.write_text(json.dumps(raw_input), encoding="utf-8")
     entities_path.write_text(json.dumps(entities_input), encoding="utf-8")
-    architecture_path.write_text(
-        json.dumps(
-            {
-                "url": "https://example.test/story",
-                "title": "Swamp Trouble",
-                "author": "GM",
-                "model": "qwen3:8b",
-                "target_panel_count": 3,
-                "panels": [
-                    {
-                        "index": 1,
-                        "beat_indices": [1],
-                        "beat_summary": "The party enters the marsh at dusk.",
-                        "story_purpose": "Establish the party entering the marsh.",
-                        "panel_scale": "large",
-                        "panel_shape": "wide",
-                        "setting_brief": "Marsh edge at dusk",
-                        "character_focus": ["Del", "Vendetta"],
-                        "notable_set_dressing": ["The marsh entry"],
-                        "notable_quotes": [
-                            {
-                                "text": "Stay close to me.",
-                                "attribution_context": "Del warns the party as they enter the marsh.",
-                            }
-                        ],
-                        "dialogue_goals": ["Caution"],
-                        "continuity_notes": ["Nobody holds the torch yet"],
-                    },
-                    {
-                        "index": 2,
-                        "beat_indices": [1],
-                        "beat_summary": "The group pushes deeper into the marsh.",
-                        "story_purpose": "Move the party deeper into the marsh.",
-                        "panel_scale": "medium",
-                        "panel_shape": "standard",
-                        "setting_brief": "Narrow marsh path",
-                        "character_focus": ["Del", "Vendetta"],
-                        "notable_set_dressing": ["Del carrying the torch"],
-                        "notable_quotes": [],
-                        "dialogue_goals": ["Urgency"],
-                        "continuity_notes": ["Del keeps the torch lit"],
-                    },
-                    {
-                        "index": 3,
-                        "beat_indices": [1],
-                        "beat_summary": "They pause at the ruin gate to reassess.",
-                        "story_purpose": "Pause at the ruin gate.",
-                        "panel_scale": "small",
-                        "panel_shape": "inset",
-                        "setting_brief": "Collapsed ruin gate",
-                        "character_focus": ["Del", "Vendetta"],
-                        "notable_set_dressing": ["Ruin gate"],
-                        "notable_quotes": [
-                            {
-                                "text": "We hold here.",
-                                "attribution_context": "Del calls for the party to hold position.",
-                            }
-                        ],
-                        "dialogue_goals": ["Hold position"],
-                        "continuity_notes": ["Del still holds the torch"],
-                    },
-                ],
-                "architected_at": "2026-05-04T00:00:00+00:00",
-            }
-        ),
-        encoding="utf-8",
+    
+    story_bible_checkpoint = master_beater.StoryBibleCheckpoint(
+        url="https://example.test/story",
+        title="Swamp Trouble",
+        author="GM",
+        model="qwen3:8b",
+        scene_count=3,
+        story_bible="""Scene 1:
+The party enters the marsh at dusk. Del grabs a torch and leads the group into the murky waters. The reeds tower overhead, their silhouettes ghostly in the fading light. Del warns urgently, "Stay close to me." Nobody holds the torch yet except Del.
+
+Scene 2:
+The group pushes deeper into the marsh. The narrow path winds between walls of reeds that seem to press closer with each step. Del holds the torch aloft, casting dancing shadows. Urgency fills the air as they move forward, Del keeping the torch lit against the growing darkness.
+
+Scene 3:
+They pause at a collapsed ruin gate to reassess. The ancient structure looms before them, half-buried in the marsh. Del calls out, "We hold here." as the party takes shelter behind the crumbling stones. Del still holds the torch, the flame casting eerie shadows on the ruins.""",
+        generation_errors=[],
+        created_at="2026-05-04T00:00:00+00:00",
     )
-    return raw_path, entities_path, architecture_path
+    story_bible_path.write_text(story_bible_checkpoint.model_dump_json(), encoding="utf-8")
+    return raw_path, entities_path, story_bible_path
 
 
 def _valid_payload() -> scriptwriter.ScriptPayload:
@@ -177,16 +130,16 @@ def test_write_script_writes_checkpoint_and_normalizes_panel_indices(tmp_path):
     raw_path, entities_path, architecture_path = _write_input_checkpoints(tmp_path)
     output_path = tmp_path / "03_script.json"
 
-    def fake_generator(world, architecture, model):
+    def fake_generator(world, story_bible, model):
         assert world.title == "Swamp Trouble"
-        assert architecture.target_panel_count == 3
+        assert story_bible.scene_count == 3
         assert model == "qwen3:8b"
         return _valid_payload()
 
     checkpoint = scriptwriter.write_script(
         raw_checkpoint_path=raw_path,
         entities_checkpoint_path=entities_path,
-        story_architecture_checkpoint_path=architecture_path,
+        story_bible_checkpoint_path=architecture_path,
         output_path=output_path,
         model="qwen3:8b",
         generator=fake_generator,
@@ -212,14 +165,14 @@ def test_write_script_accepts_any_panel_count_without_error(tmp_path):
     checkpoint = scriptwriter.write_script(
         raw_checkpoint_path=raw_path,
         entities_checkpoint_path=entities_path,
-        story_architecture_checkpoint_path=architecture_path,
+        story_bible_checkpoint_path=architecture_path,
         output_path=tmp_path / "03_script.json",
         generator=fake_generator,
     )
 
     assert checkpoint.panel_count == 1
     assert len(checkpoint.generation_errors) == 1
-    assert "Architecture alignment failed" in checkpoint.generation_errors[0]
+    assert "Scene count alignment failed" in checkpoint.generation_errors[0]
 
 
 def test_write_script_logs_continuity_error_and_keeps_output(tmp_path):
@@ -233,7 +186,7 @@ def test_write_script_logs_continuity_error_and_keeps_output(tmp_path):
     checkpoint = scriptwriter.write_script(
         raw_checkpoint_path=raw_path,
         entities_checkpoint_path=entities_path,
-        story_architecture_checkpoint_path=architecture_path,
+        story_bible_checkpoint_path=architecture_path,
         output_path=tmp_path / "03_script.json",
         generator=fake_generator,
     )
@@ -254,7 +207,7 @@ def test_write_script_allows_added_items_between_panels(tmp_path):
     checkpoint = scriptwriter.write_script(
         raw_checkpoint_path=raw_path,
         entities_checkpoint_path=entities_path,
-        story_architecture_checkpoint_path=architecture_path,
+        story_bible_checkpoint_path=architecture_path,
         output_path=tmp_path / "03_script.json",
         generator=fake_generator,
     )
@@ -274,7 +227,7 @@ def test_write_script_allows_missing_character_when_inventory_empty(tmp_path):
     checkpoint = scriptwriter.write_script(
         raw_checkpoint_path=raw_path,
         entities_checkpoint_path=entities_path,
-        story_architecture_checkpoint_path=architecture_path,
+        story_bible_checkpoint_path=architecture_path,
         output_path=tmp_path / "03_script.json",
         generator=fake_generator,
     )
@@ -294,7 +247,7 @@ def test_write_script_logs_when_missing_character_with_items(tmp_path):
     checkpoint = scriptwriter.write_script(
         raw_checkpoint_path=raw_path,
         entities_checkpoint_path=entities_path,
-        story_architecture_checkpoint_path=architecture_path,
+        story_bible_checkpoint_path=architecture_path,
         output_path=tmp_path / "03_script.json",
         generator=fake_generator,
     )
@@ -303,7 +256,7 @@ def test_write_script_logs_when_missing_character_with_items(tmp_path):
     assert "missing held_items_before for Del" in checkpoint.generation_errors[0]
 
 
-def test_write_script_preserves_architect_selected_layout_fields(tmp_path):
+def test_write_script_preserves_story_bible_info(tmp_path):
     raw_path, entities_path, architecture_path = _write_input_checkpoints(tmp_path)
 
     def fake_generator(_world, _architecture, _model):
@@ -317,19 +270,15 @@ def test_write_script_preserves_architect_selected_layout_fields(tmp_path):
     checkpoint = scriptwriter.write_script(
         raw_checkpoint_path=raw_path,
         entities_checkpoint_path=entities_path,
-        story_architecture_checkpoint_path=architecture_path,
+        story_bible_checkpoint_path=architecture_path,
         output_path=tmp_path / "03_script.json",
         generator=fake_generator,
     )
 
-    architecture = story_architect.StoryArchitectureCheckpoint.model_validate_json(
-        architecture_path.read_text(encoding="utf-8")
-    )
-
-    assert checkpoint.panels[0].panel_scale == architecture.panels[0].panel_scale
-    assert checkpoint.panels[0].panel_shape == architecture.panels[0].panel_shape
-    assert checkpoint.panels[1].panel_scale == architecture.panels[1].panel_scale
-    assert checkpoint.panels[1].panel_shape == architecture.panels[1].panel_shape
+    assert checkpoint.panels[0].panel_scale == "small"
+    assert checkpoint.panels[0].panel_shape == "irregular"
+    assert checkpoint.panels[1].panel_scale == "splash"
+    assert checkpoint.panels[1].panel_shape == "tall"
     assert checkpoint.panel_count == 3
 
 
@@ -358,18 +307,18 @@ def test_format_entities_for_prompt_excludes_reference_quotes():
     assert "Reference quotes:" not in prompt_blob
 
 
-def test_format_story_architecture_for_prompt_includes_notable_quotes(tmp_path):
+def test_format_story_bible_for_prompt_includes_entities(tmp_path):
     _, _, architecture_path = _write_input_checkpoints(tmp_path)
 
-    architecture = story_architect.StoryArchitectureCheckpoint.model_validate_json(
+    architecture = master_beater.StoryBibleCheckpoint.model_validate_json(
         architecture_path.read_text(encoding="utf-8")
     )
 
-    prompt_blob = scriptwriter._format_story_architecture_for_prompt(architecture)
+    prompt_blob = scriptwriter._format_story_bible_for_prompt(architecture)
 
-    assert '"notable_quotes": [' in prompt_blob
-    assert '"text": "Stay close to me."' in prompt_blob
-    assert '"attribution_context": "Del warns the party as they enter the marsh."' in prompt_blob
+    assert "Scene 1:" in prompt_blob
+    assert "Stay close to me." in prompt_blob
+    assert "Scene 3:" in prompt_blob
 
 
 def test_optional_text_layers_preserved_in_checkpoint(tmp_path):
@@ -382,7 +331,7 @@ def test_optional_text_layers_preserved_in_checkpoint(tmp_path):
     checkpoint = scriptwriter.write_script(
         raw_checkpoint_path=raw_path,
         entities_checkpoint_path=entities_path,
-        story_architecture_checkpoint_path=architecture_path,
+        story_bible_checkpoint_path=architecture_path,
         output_path=tmp_path / "03_script.json",
         generator=fake_generator,
     )
@@ -417,7 +366,7 @@ def test_optional_text_layers_serialized_in_json(tmp_path):
     scriptwriter.write_script(
         raw_checkpoint_path=raw_path,
         entities_checkpoint_path=entities_path,
-        story_architecture_checkpoint_path=architecture_path,
+        story_bible_checkpoint_path=architecture_path,
         output_path=output_path,
         generator=fake_generator,
     )

@@ -9,14 +9,14 @@ from prompt_templates import (
     PAGE_PROMPT_TEMPLATE_FILENAME,
     SCRIPTWRITER_SYSTEM_PROMPT_FILENAME,
     SCRIPTWRITER_USER_PROMPT_FILENAME,
-    STORY_ARCHITECT_SYSTEM_PROMPT_FILENAME,
-    STORY_ARCHITECT_USER_PROMPT_FILENAME,
+    MASTER_BEATER_SYSTEM_PROMPT_FILENAME,
+    MASTER_BEATER_USER_PROMPT_FILENAME,
     STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME,
     STYLE_INTEGRATOR_USER_PROMPT_FILENAME,
     render_prompt_template,
 )
 from scriptwriter import ScriptCheckpoint, WorldStateInput
-from story_architect import StoryArchitectureCheckpoint
+from master_beater import StoryBibleCheckpoint
 
 
 PROMPTS_SUBDIR_NAME = "prompts"
@@ -43,46 +43,52 @@ def _save_prompt_template(
     target_path.write_text(template_path.read_text(encoding="utf-8"), encoding="utf-8")
 
 
-def prepare_architect_prompts(
+def prepare_beater_prompts(
     version_dir: Path,
     world: WorldStateCheckpoint,
-    panel_count: int,
+    scene_count: int,
     raw_quotes: list[dict[str, str | None]] | None = None,
     system_prompt_path: Path | None = None,
     user_prompt_path: Path | None = None,
 ) -> tuple[str, str]:
-    """Prepare and save story architect prompts before model call.
+    """Prepare and save master beater prompts before model call.
     
     Returns tuple of (system_prompt, user_prompt) ready to send to model.
     """
-    from story_architect import _format_entities_for_prompt, _format_quotes_for_prompt
+    from master_beater import _format_entities_for_prompt, _format_quotes_for_prompt
 
     prompts_dir = _ensure_prompts_dir(version_dir)
     
     # Save original templates
-    _save_prompt_template(prompts_dir, system_prompt_path, STORY_ARCHITECT_SYSTEM_PROMPT_FILENAME)
-    _save_prompt_template(prompts_dir, user_prompt_path, STORY_ARCHITECT_USER_PROMPT_FILENAME)
+    _save_prompt_template(prompts_dir, system_prompt_path, MASTER_BEATER_SYSTEM_PROMPT_FILENAME)
+    _save_prompt_template(prompts_dir, user_prompt_path, MASTER_BEATER_USER_PROMPT_FILENAME)
+
+    template_vars = {
+        "title": world.title or "Untitled story",
+        "panel_count": scene_count,
+        "scene_count": scene_count,
+        "entities_context": _format_entities_for_prompt(world),
+        "reference_quotes": _format_quotes_for_prompt(raw_quotes),
+        "story_text": "<story_text_omitted_for_brevity>",
+    }
 
     # Render prompts
     system_prompt = render_prompt_template(
-        STORY_ARCHITECT_SYSTEM_PROMPT_FILENAME,
+        MASTER_BEATER_SYSTEM_PROMPT_FILENAME,
         template_path=system_prompt_path,
+        **template_vars,
     )
     user_prompt = render_prompt_template(
-        STORY_ARCHITECT_USER_PROMPT_FILENAME,
+        MASTER_BEATER_USER_PROMPT_FILENAME,
         template_path=user_prompt_path,
-        title=world.title or "Untitled story",
-        panel_count=panel_count,
-        entities_context=_format_entities_for_prompt(world),
-        reference_quotes=_format_quotes_for_prompt(raw_quotes),
-        story_text="<story_text_omitted_for_brevity>",
+        **template_vars,
     )
 
     # Save interpolated versions
-    (prompts_dir / f"{STORY_ARCHITECT_SYSTEM_PROMPT_FILENAME.replace('.txt', '')}_FINAL.txt").write_text(
+    (prompts_dir / f"{MASTER_BEATER_SYSTEM_PROMPT_FILENAME.replace('.txt', '')}_FINAL.txt").write_text(
         system_prompt, encoding="utf-8"
     )
-    (prompts_dir / f"{STORY_ARCHITECT_USER_PROMPT_FILENAME.replace('.txt', '')}_FINAL.txt").write_text(
+    (prompts_dir / f"{MASTER_BEATER_USER_PROMPT_FILENAME.replace('.txt', '')}_FINAL.txt").write_text(
         user_prompt, encoding="utf-8"
     )
 
@@ -92,7 +98,7 @@ def prepare_architect_prompts(
 def prepare_scriptwriter_prompts(
     version_dir: Path,
     world: WorldStateInput,
-    architecture: StoryArchitectureCheckpoint,
+    story_bible: StoryBibleCheckpoint,
     system_prompt_path: Path | None = None,
     user_prompt_path: Path | None = None,
 ) -> tuple[str, str]:
@@ -100,7 +106,7 @@ def prepare_scriptwriter_prompts(
     
     Returns tuple of (system_prompt, user_prompt) ready to send to model.
     """
-    from scriptwriter import _format_entities_for_prompt, _format_story_architecture_for_prompt
+    from scriptwriter import _format_entities_for_prompt, _format_story_bible_for_prompt
 
     prompts_dir = _ensure_prompts_dir(version_dir)
     
@@ -119,9 +125,9 @@ def prepare_scriptwriter_prompts(
         SCRIPTWRITER_USER_PROMPT_FILENAME,
         template_path=user_prompt_path,
         title=title,
-        panel_count=len(architecture.panels),
+        panel_count=story_bible.scene_count,
         entities_context=entities_context,
-        story_architecture=_format_story_architecture_for_prompt(architecture),
+        story_architecture=_format_story_bible_for_prompt(story_bible),
     )
 
     (prompts_dir / f"{SCRIPTWRITER_SYSTEM_PROMPT_FILENAME.replace('.txt', '')}_FINAL.txt").write_text(
