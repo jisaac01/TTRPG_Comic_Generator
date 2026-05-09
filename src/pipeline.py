@@ -52,7 +52,7 @@ INDEX_FILENAME = "index.json"
 EPISODE_META_FILENAME = "episode_meta.json"
 
 RerunFrom = Literal["scrape", "entities", "beater", "script", "style", "prompt"]
-RerunFromArg = Literal["scrape", "entities", "beater", "script", "style", "prompt", "analyze"]
+RerunFromArg = Literal["scrape", "entities", "beater", "script", "style", "prompt"]
 
 # ---------------------------------------------------------------------------
 # Slug helpers
@@ -189,10 +189,6 @@ def _create_version_dir(
     version_dir = episode_dir / version_name
     version_dir.mkdir(parents=True, exist_ok=True)
 
-    # Backward compatibility for older callers that still pass "analyze".
-    if rerun_from == "analyze":
-        rerun_from = "entities"
-
     existing = sorted(
         p for p in episode_dir.iterdir() if p.is_dir() and re.fullmatch(r"v\d{3}", p.name)
         and p.name != version_name
@@ -269,8 +265,6 @@ class ComicPipeline:
         recap_version: str = "standard",
         skip_style: bool = False,
     ):
-        if rerun_from == "analyze":
-            rerun_from = "entities"
         self.url = url
         self.campaign = campaign
         self.campaigns_root = campaigns_root
@@ -811,12 +805,12 @@ async def _run_cli() -> None:
     )
     parser.add_argument(
         "--rerun-from",
-        choices=["scrape", "entities", "architect", "script", "style", "prompt", "analyze"],
+        choices=["scrape", "entities", "beater", "script", "style", "prompt"],
         default=None,
         help=(
             "Invalidate checkpoints from this phase onward and rerun. "
             "Prior phases are cloned from the last version. "
-            "Options: scrape, entities, architect, script, style, prompt (analyze accepted as legacy alias)"
+            "Options: scrape, entities, beater, script, style, prompt"
         ),
     )
     parser.add_argument(
@@ -839,14 +833,12 @@ async def _run_cli() -> None:
 
     args = parser.parse_args()
     rerun_from_arg = args.rerun_from
-    if rerun_from_arg == "analyze":
-        rerun_from_arg = "entities"
 
     pipeline = ComicPipeline(
         url=args.url,
         campaign=args.campaign,
         campaigns_root=Path(args.campaigns_root),
-        architect_model=args.architect_model,
+        beater_model=args.beater_model,
         script_model=args.script_model,
         style_model=args.style_model,
         panel_count=args.panel_count,

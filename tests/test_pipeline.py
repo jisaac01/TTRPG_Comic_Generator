@@ -316,16 +316,16 @@ def test_create_version_dir_rerun_from_prompt_deletes_only_prompt(tmp_path):
     assert not (version_dir / "04_page_prompt.txt").exists()
 
 
-def test_create_version_dir_rerun_from_analyze_deletes_analyze_onwards(tmp_path):
+def test_create_version_dir_rerun_from_beater_deletes_beater_onwards(tmp_path):
     episode_dir = tmp_path / "ep"
     v001 = episode_dir / "v001"
     v001.mkdir(parents=True)
     _write_version_checkpoints(v001)
 
-    version_dir, _ = _create_version_dir(episode_dir, rerun_from="analyze")
+    version_dir, _ = _create_version_dir(episode_dir, rerun_from="beater")
 
     assert (version_dir / "01_raw_text.json").exists()
-    assert not (version_dir / "02_entities.json").exists()
+    assert (version_dir / "02_entities.json").exists()
     assert not (version_dir / "02_5_story_bible.json").exists()
     assert not (version_dir / "03_script.json").exists()
     assert not (version_dir / "04_page_prompt.txt").exists()

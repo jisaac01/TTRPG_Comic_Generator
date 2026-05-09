@@ -74,13 +74,11 @@ def _format_quotes_for_prompt(quotes: list[dict[str, str | None]] | None = None)
 
 
 def _build_instructor_client():
-    import instructor
     from openai import OpenAI
 
     base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
     api_key = os.getenv("OLLAMA_API_KEY", "ollama")
-    openai_client = OpenAI(base_url=base_url, api_key=api_key)
-    return instructor.from_openai(openai_client, mode=instructor.Mode.JSON)
+    return OpenAI(base_url=base_url, api_key=api_key)
 
 
 def _generate_with_ollama(
@@ -95,21 +93,27 @@ def _generate_with_ollama(
     """Generate story bible via LLM. Returns the raw text output (not parsed)."""
     client = _build_instructor_client()
 
+    template_vars = {
+        "title": world.title or "Untitled story",
+        "panel_count": scene_count,
+        "scene_count": scene_count,
+        "entities_context": _format_entities_for_prompt(world),
+        "story_text": content,
+        "reference_quotes": _format_quotes_for_prompt(quotes),
+    }
+
     system_prompt = render_prompt_template(
         MASTER_BEATER_SYSTEM_PROMPT_FILENAME,
         template_path=system_prompt_path,
+        **template_vars,
     )
     user_prompt = render_prompt_template(
         MASTER_BEATER_USER_PROMPT_FILENAME,
         template_path=user_prompt_path,
-        title=world.title or "Untitled story",
-        panel_count=scene_count,
-        entities_context=_format_entities_for_prompt(world),
-        story_text=content,
-        reference_quotes=_format_quotes_for_prompt(quotes),
+        **template_vars,
     )
 
-    # Use raw text mode: request text completion directly without structured schema
+    # Request raw text completion directly; no structured response model is required.
     response = client.chat.completions.create(
         model=model,
         temperature=0.4,

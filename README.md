@@ -126,7 +126,7 @@ python src/pipeline.py belowdown https://scrybequill.com/share/...
 --style-integrator-user-prompt PATH
                              Override the style integrator user prompt template for this run only
 --page-prompt-template PATH  Override the page prompt template for this run only
---rerun-from PHASE           scrape | entities | beater | script | style | prompt (legacy analyze alias accepted)
+--rerun-from PHASE           scrape | entities | beater | script | style | prompt
 --recap-version VERSION      short | standard | alternate/alt | long
 --skip-style                 Skip Phase 4.5 and generate Phase 5 prompt from 03_script.json
 ```

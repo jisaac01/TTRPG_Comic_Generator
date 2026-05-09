@@ -63,19 +63,25 @@ def prepare_beater_prompts(
     _save_prompt_template(prompts_dir, system_prompt_path, MASTER_BEATER_SYSTEM_PROMPT_FILENAME)
     _save_prompt_template(prompts_dir, user_prompt_path, MASTER_BEATER_USER_PROMPT_FILENAME)
 
+    template_vars = {
+        "title": world.title or "Untitled story",
+        "panel_count": scene_count,
+        "scene_count": scene_count,
+        "entities_context": _format_entities_for_prompt(world),
+        "reference_quotes": _format_quotes_for_prompt(raw_quotes),
+        "story_text": "<story_text_omitted_for_brevity>",
+    }
+
     # Render prompts
     system_prompt = render_prompt_template(
         MASTER_BEATER_SYSTEM_PROMPT_FILENAME,
         template_path=system_prompt_path,
+        **template_vars,
     )
     user_prompt = render_prompt_template(
         MASTER_BEATER_USER_PROMPT_FILENAME,
         template_path=user_prompt_path,
-        title=world.title or "Untitled story",
-        panel_count=scene_count,
-        entities_context=_format_entities_for_prompt(world),
-        reference_quotes=_format_quotes_for_prompt(raw_quotes),
-        story_text="<story_text_omitted_for_brevity>",
+        **template_vars,
     )
 
     # Save interpolated versions
