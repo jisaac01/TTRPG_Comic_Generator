@@ -5,7 +5,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
 import scriptwriter
-import story_architect
+import master_beater
 
 
 def _write_input_checkpoints(tmp_path: Path) -> tuple[Path, Path, Path]:
@@ -186,7 +186,7 @@ def test_write_script_writes_checkpoint_and_normalizes_panel_indices(tmp_path):
     checkpoint = scriptwriter.write_script(
         raw_checkpoint_path=raw_path,
         entities_checkpoint_path=entities_path,
-        story_architecture_checkpoint_path=architecture_path,
+        story_bible_checkpoint_path=architecture_path,
         output_path=output_path,
         model="qwen3:8b",
         generator=fake_generator,
@@ -212,7 +212,7 @@ def test_write_script_accepts_any_panel_count_without_error(tmp_path):
     checkpoint = scriptwriter.write_script(
         raw_checkpoint_path=raw_path,
         entities_checkpoint_path=entities_path,
-        story_architecture_checkpoint_path=architecture_path,
+        story_bible_checkpoint_path=architecture_path,
         output_path=tmp_path / "03_script.json",
         generator=fake_generator,
     )
@@ -233,7 +233,7 @@ def test_write_script_logs_continuity_error_and_keeps_output(tmp_path):
     checkpoint = scriptwriter.write_script(
         raw_checkpoint_path=raw_path,
         entities_checkpoint_path=entities_path,
-        story_architecture_checkpoint_path=architecture_path,
+        story_bible_checkpoint_path=architecture_path,
         output_path=tmp_path / "03_script.json",
         generator=fake_generator,
     )
@@ -254,7 +254,7 @@ def test_write_script_allows_added_items_between_panels(tmp_path):
     checkpoint = scriptwriter.write_script(
         raw_checkpoint_path=raw_path,
         entities_checkpoint_path=entities_path,
-        story_architecture_checkpoint_path=architecture_path,
+        story_bible_checkpoint_path=architecture_path,
         output_path=tmp_path / "03_script.json",
         generator=fake_generator,
     )
@@ -274,7 +274,7 @@ def test_write_script_allows_missing_character_when_inventory_empty(tmp_path):
     checkpoint = scriptwriter.write_script(
         raw_checkpoint_path=raw_path,
         entities_checkpoint_path=entities_path,
-        story_architecture_checkpoint_path=architecture_path,
+        story_bible_checkpoint_path=architecture_path,
         output_path=tmp_path / "03_script.json",
         generator=fake_generator,
     )
@@ -294,7 +294,7 @@ def test_write_script_logs_when_missing_character_with_items(tmp_path):
     checkpoint = scriptwriter.write_script(
         raw_checkpoint_path=raw_path,
         entities_checkpoint_path=entities_path,
-        story_architecture_checkpoint_path=architecture_path,
+        story_bible_checkpoint_path=architecture_path,
         output_path=tmp_path / "03_script.json",
         generator=fake_generator,
     )
@@ -317,12 +317,12 @@ def test_write_script_preserves_architect_selected_layout_fields(tmp_path):
     checkpoint = scriptwriter.write_script(
         raw_checkpoint_path=raw_path,
         entities_checkpoint_path=entities_path,
-        story_architecture_checkpoint_path=architecture_path,
+        story_bible_checkpoint_path=architecture_path,
         output_path=tmp_path / "03_script.json",
         generator=fake_generator,
     )
 
-    architecture = story_architect.StoryArchitectureCheckpoint.model_validate_json(
+    architecture = master_beater.StoryBibleCheckpoint.model_validate_json(
         architecture_path.read_text(encoding="utf-8")
     )
 
@@ -361,7 +361,7 @@ def test_format_entities_for_prompt_excludes_reference_quotes():
 def test_format_story_architecture_for_prompt_includes_notable_quotes(tmp_path):
     _, _, architecture_path = _write_input_checkpoints(tmp_path)
 
-    architecture = story_architect.StoryArchitectureCheckpoint.model_validate_json(
+    architecture = master_beater.StoryBibleCheckpoint.model_validate_json(
         architecture_path.read_text(encoding="utf-8")
     )
 
@@ -382,7 +382,7 @@ def test_optional_text_layers_preserved_in_checkpoint(tmp_path):
     checkpoint = scriptwriter.write_script(
         raw_checkpoint_path=raw_path,
         entities_checkpoint_path=entities_path,
-        story_architecture_checkpoint_path=architecture_path,
+        story_bible_checkpoint_path=architecture_path,
         output_path=tmp_path / "03_script.json",
         generator=fake_generator,
     )
@@ -417,7 +417,7 @@ def test_optional_text_layers_serialized_in_json(tmp_path):
     scriptwriter.write_script(
         raw_checkpoint_path=raw_path,
         entities_checkpoint_path=entities_path,
-        story_architecture_checkpoint_path=architecture_path,
+        story_bible_checkpoint_path=architecture_path,
         output_path=output_path,
         generator=fake_generator,
     )

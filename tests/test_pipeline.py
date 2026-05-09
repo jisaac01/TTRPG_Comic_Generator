@@ -17,16 +17,16 @@ from prompt_templates import (
     DEFAULT_PROMPTS_DIR,
     PAGE_PROMPT_TEMPLATE_FILENAME,
     PROMPT_TEMPLATE_FILENAMES,
+    MASTER_BEATER_SYSTEM_PROMPT_FILENAME,
+    MASTER_BEATER_USER_PROMPT_FILENAME,
     SCRIPTWRITER_SYSTEM_PROMPT_FILENAME,
     SCRIPTWRITER_USER_PROMPT_FILENAME,
-    STORY_ARCHITECT_SYSTEM_PROMPT_FILENAME,
-    STORY_ARCHITECT_USER_PROMPT_FILENAME,
     STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME,
     STYLE_INTEGRATOR_USER_PROMPT_FILENAME,
 )
 import scraper
 import scriptwriter
-import story_architect
+import master_beater
 from style_integrator import StyleIntegrationPartialFailure
 from pipeline import (
     ComicPipeline,
@@ -115,41 +115,19 @@ _SCRIPT_CHECKPOINT = scriptwriter.ScriptCheckpoint(
     scripted_at="2026-05-04T00:00:00+00:00",
 )
 
-_ARCHITECTURE_CHECKPOINT = story_architect.StoryArchitectureCheckpoint(
+_STORY_BIBLE_CHECKPOINT = master_beater.StoryBibleCheckpoint(
     url="https://example.test/story",
     title="Dreadmarsh Crossing",
     author="GM",
     model="qwen3:8b",
-    target_panel_count=2,
-    panels=[
-        story_architect.ArchitecturePanel(
-            index=1,
-            beat_indices=[1],
-            beat_summary="The party regroups and prepares to push deeper.",
-            story_purpose="Establish the dangerous crossing.",
-            panel_scale="large",
-            panel_shape="wide",
-            setting_brief="Swamp edge at dusk",
-            character_focus=["Del", "Vendetta"],
-            notable_set_dressing=["Torchlight entering the marsh"],
-            dialogue_goals=["Set urgency"],
-            continuity_notes=["No torch in hand before the beat"],
-        ),
-        story_architect.ArchitecturePanel(
-            index=2,
-            beat_indices=[1],
-            beat_summary="They keep moving through the marsh with torchlight.",
-            story_purpose="Keep the party moving through the bog.",
-            panel_scale="medium",
-            panel_shape="standard",
-            setting_brief="Narrow marsh path",
-            character_focus=["Del", "Vendetta"],
-            notable_set_dressing=["Del carrying the torch"],
-            dialogue_goals=["Call out the next danger"],
-            continuity_notes=["Torch remains with Del"],
-        ),
-    ],
-    architected_at="2026-05-04T00:00:00+00:00",
+    scene_count=2,
+    story_bible="""Scene 1:
+Del the Druid raises her torch as she and Vendetta stand at the edge of Dreadmarsh. The path ahead winds through reeds taller than a person, their silhouettes ghostly in the dusk light. Del's voice is steady but urgent. \"Keep moving. We need to reach the far bank before full dark.\"
+
+Scene 2:
+Del moves forward with the torch held high, Vendetta at her shoulder. The ground is treacherous, mud sucking at their boots. Vendetta scans the reeds around them, looking for threats. \"Tracks ahead,\" she whispers. The marsh air is thick and cold.""",
+    generation_errors=[],
+    created_at="2026-05-04T00:00:00+00:00",
 )
 
 _PAGE_PROMPT = "Single-page comic prompt text"
@@ -199,8 +177,8 @@ def _write_version_checkpoints(version_dir: Path) -> None:
     (version_dir / "02_entities.json").write_text(
         _WORLD_CHECKPOINT.model_dump_json(), encoding="utf-8"
     )
-    (version_dir / "02_5_story_architecture.json").write_text(
-        _ARCHITECTURE_CHECKPOINT.model_dump_json(), encoding="utf-8"
+    (version_dir / "02_5_story_bible.json").write_text(
+        _STORY_BIBLE_CHECKPOINT.model_dump_json(), encoding="utf-8"
     )
     (version_dir / "03_script.json").write_text(
         _SCRIPT_CHECKPOINT.model_dump_json(), encoding="utf-8"
@@ -306,7 +284,7 @@ def test_create_version_dir_clones_previous_version(tmp_path):
     assert name == "v002"
     assert (version_dir / "01_raw_text.json").exists()
     assert (version_dir / "02_entities.json").exists()
-    assert (version_dir / "02_5_story_architecture.json").exists()
+    assert (version_dir / "02_5_story_bible.json").exists()
     assert (version_dir / "03_script.json").exists()
     assert (version_dir / "04_page_prompt.txt").exists()
 
@@ -321,7 +299,7 @@ def test_create_version_dir_rerun_from_prompt_deletes_only_prompt(tmp_path):
 
     assert (version_dir / "01_raw_text.json").exists()
     assert (version_dir / "02_entities.json").exists()
-    assert (version_dir / "02_5_story_architecture.json").exists()
+    assert (version_dir / "02_5_story_bible.json").exists()
     assert (version_dir / "03_script.json").exists()
     assert not (version_dir / "04_page_prompt.txt").exists()
 
@@ -336,7 +314,7 @@ def test_create_version_dir_rerun_from_analyze_deletes_analyze_onwards(tmp_path)
 
     assert (version_dir / "01_raw_text.json").exists()
     assert not (version_dir / "02_entities.json").exists()
-    assert not (version_dir / "02_5_story_architecture.json").exists()
+    assert not (version_dir / "02_5_story_bible.json").exists()
     assert not (version_dir / "03_script.json").exists()
     assert not (version_dir / "04_page_prompt.txt").exists()
 
@@ -396,7 +374,7 @@ async def test_first_run_creates_campaign_episode_version(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT) as mock_scrape,
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT) as mock_entities,
-        patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT) as mock_architect,
+        patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT) as mock_architect,
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT) as mock_script,
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
@@ -439,7 +417,7 @@ async def test_first_run_bootstraps_campaign_prompt_templates_and_copies_version
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
-        patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT) as mock_architect,
+        patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT) as mock_architect,
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT) as mock_script,
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT) as mock_integrate,
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
@@ -458,8 +436,8 @@ async def test_first_run_bootstraps_campaign_prompt_templates_and_copies_version
         assert version_prompt.read_text(encoding="utf-8") == campaign_prompt.read_text(encoding="utf-8")
 
     _, architect_kwargs = mock_architect.call_args
-    assert architect_kwargs["system_prompt_path"] == version_dir / STORY_ARCHITECT_SYSTEM_PROMPT_FILENAME
-    assert architect_kwargs["user_prompt_path"] == version_dir / STORY_ARCHITECT_USER_PROMPT_FILENAME
+    assert architect_kwargs["system_prompt_path"] == version_dir / MASTER_BEATER_SYSTEM_PROMPT_FILENAME
+    assert architect_kwargs["user_prompt_path"] == version_dir / MASTER_BEATER_USER_PROMPT_FILENAME
 
     _, script_kwargs = mock_script.call_args
     assert script_kwargs["system_prompt_path"] == version_dir / SCRIPTWRITER_SYSTEM_PROMPT_FILENAME
@@ -507,7 +485,7 @@ async def test_explicit_prompt_overrides_are_copied_into_version(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
-        patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT) as mock_architect,
+        patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT) as mock_architect,
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT) as mock_script,
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT) as mock_integrate,
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
@@ -515,8 +493,8 @@ async def test_explicit_prompt_overrides_are_copied_into_version(tmp_path):
         result = await pipeline.run()
 
     version_dir = _version_dir_from_result(result)
-    assert (version_dir / STORY_ARCHITECT_SYSTEM_PROMPT_FILENAME).read_text(encoding="utf-8") == "ARCHITECT SYSTEM OVERRIDE"
-    assert (version_dir / STORY_ARCHITECT_USER_PROMPT_FILENAME).read_text(encoding="utf-8") == "ARCHITECT USER OVERRIDE"
+    assert (version_dir / MASTER_BEATER_SYSTEM_PROMPT_FILENAME).read_text(encoding="utf-8") == "ARCHITECT SYSTEM OVERRIDE"
+    assert (version_dir / MASTER_BEATER_USER_PROMPT_FILENAME).read_text(encoding="utf-8") == "ARCHITECT USER OVERRIDE"
     assert (version_dir / SCRIPTWRITER_SYSTEM_PROMPT_FILENAME).read_text(encoding="utf-8") == "SYSTEM OVERRIDE"
     assert (version_dir / SCRIPTWRITER_USER_PROMPT_FILENAME).read_text(encoding="utf-8") == "USER OVERRIDE"
     assert (version_dir / STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME).read_text(encoding="utf-8") == "STYLE SYSTEM OVERRIDE"
@@ -524,8 +502,8 @@ async def test_explicit_prompt_overrides_are_copied_into_version(tmp_path):
     assert (version_dir / PAGE_PROMPT_TEMPLATE_FILENAME).read_text(encoding="utf-8") == "CUSTOM PAGE PROMPT: {panel_count}"
 
     _, architect_kwargs = mock_architect.call_args
-    assert architect_kwargs["system_prompt_path"] == version_dir / STORY_ARCHITECT_SYSTEM_PROMPT_FILENAME
-    assert architect_kwargs["user_prompt_path"] == version_dir / STORY_ARCHITECT_USER_PROMPT_FILENAME
+    assert architect_kwargs["system_prompt_path"] == version_dir / MASTER_BEATER_SYSTEM_PROMPT_FILENAME
+    assert architect_kwargs["user_prompt_path"] == version_dir / MASTER_BEATER_USER_PROMPT_FILENAME
 
     _, script_kwargs = mock_script.call_args
     assert script_kwargs["system_prompt_path"] == version_dir / SCRIPTWRITER_SYSTEM_PROMPT_FILENAME
@@ -552,7 +530,7 @@ async def test_first_run_result_contains_model_dump_dicts(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
-        patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT),
+        patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT),
@@ -583,7 +561,7 @@ async def test_first_run_forwards_explicit_recap_version_to_scraper(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT) as mock_scrape,
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
-        patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT),
+        patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT),
@@ -615,7 +593,7 @@ async def test_run_skips_all_phases_when_all_checkpoints_exist(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock) as mock_scrape,
         patch("pipeline.build_entities_from_raw") as mock_entities,
-        patch("pipeline.architect_story") as mock_architect,
+        patch("pipeline.create_story_bible") as mock_architect,
         patch("pipeline.write_script") as mock_script,
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt") as mock_prompts,
@@ -645,7 +623,7 @@ async def test_cached_raw_recap_switch_updates_content_and_reruns_downstream(tmp
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock) as mock_scrape,
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT) as mock_entities,
-        patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT) as mock_architect,
+        patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT) as mock_architect,
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT) as mock_script,
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
@@ -680,7 +658,7 @@ async def test_rerun_from_entities_skips_scraper_reruns_rest(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock) as mock_scrape,
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT) as mock_entities,
-        patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT) as mock_architect,
+        patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT) as mock_architect,
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT) as mock_script,
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT) as mock_integrate,
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
@@ -711,7 +689,7 @@ async def test_rerun_from_architect_reruns_architect_and_downstream(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock) as mock_scrape,
         patch("pipeline.build_entities_from_raw") as mock_entities,
-        patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT) as mock_architect,
+        patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT) as mock_architect,
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT) as mock_script,
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT) as mock_integrate,
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
@@ -743,7 +721,7 @@ async def test_rerun_from_style_only_reruns_style_and_prompt(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock) as mock_scrape,
         patch("pipeline.build_entities_from_raw") as mock_entities,
-        patch("pipeline.architect_story") as mock_architect,
+        patch("pipeline.create_story_bible") as mock_architect,
         patch("pipeline.write_script") as mock_script,
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT) as mock_integrate,
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
@@ -775,7 +753,7 @@ async def test_rerun_from_prompt_only_reruns_prompt(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock) as mock_scrape,
         patch("pipeline.build_entities_from_raw") as mock_entities,
-        patch("pipeline.architect_story") as mock_architect,
+        patch("pipeline.create_story_bible") as mock_architect,
         patch("pipeline.write_script") as mock_script,
         patch("pipeline.integrate_style") as mock_integrate,
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
@@ -804,7 +782,7 @@ async def test_skip_style_bypasses_integrator_and_prompts_from_script(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
-        patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT),
+        patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.integrate_style") as mock_integrate,
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
@@ -835,7 +813,7 @@ async def test_rerun_from_style_with_skip_style_reruns_prompt_only(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock) as mock_scrape,
         patch("pipeline.build_entities_from_raw") as mock_entities,
-        patch("pipeline.architect_story") as mock_architect,
+        patch("pipeline.create_story_bible") as mock_architect,
         patch("pipeline.write_script") as mock_script,
         patch("pipeline.integrate_style") as mock_integrate,
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
@@ -886,7 +864,7 @@ async def test_same_url_different_title_maps_to_existing_episode(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=changed_title_raw),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
-        patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT),
+        patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT),
@@ -921,7 +899,7 @@ async def test_two_campaigns_are_isolated(tmp_path):
         with (
             patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=raw),
             patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
-            patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT),
+            patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
             patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
             patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT),
         ):
@@ -964,7 +942,7 @@ async def test_campaign_level_art_template_is_used_by_default(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
-        patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT),
+        patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
@@ -992,7 +970,7 @@ async def test_campaign_art_template_is_created_on_first_run(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
-        patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT),
+        patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
@@ -1039,7 +1017,7 @@ async def test_explicit_art_template_overrides_campaign_default(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
-        patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT),
+        patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
@@ -1069,7 +1047,7 @@ async def test_entities_phase_uses_scraper_direct_label(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT) as mock_entities,
-        patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT),
+        patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT),
@@ -1094,7 +1072,7 @@ async def test_script_model_and_panel_count_forwarded(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
-        patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT) as mock_architect,
+        patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT) as mock_architect,
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT) as mock_script,
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT),
@@ -1107,7 +1085,7 @@ async def test_script_model_and_panel_count_forwarded(tmp_path):
 
     _, kwargs = mock_script.call_args
     assert kwargs.get("model") == "llama3.1:8b"
-    assert kwargs.get("story_architecture_checkpoint_path").name == "02_5_story_architecture.json"
+    assert kwargs.get("story_bible_checkpoint_path").name == "02_5_story_bible.json"
 
 
 @pytest.mark.asyncio
@@ -1123,7 +1101,7 @@ async def test_style_model_forwarded(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
-        patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT),
+        patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT) as mock_integrate,
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT),
@@ -1152,7 +1130,7 @@ async def test_script_failure_does_not_crash_pipeline(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
-        patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT),
+        patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
         patch("pipeline.write_script", side_effect=ValueError("Continuity break")),
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
@@ -1181,7 +1159,7 @@ async def test_story_architect_failure_does_not_crash_pipeline(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
-        patch("pipeline.architect_story", side_effect=ValueError("Beat coverage failed")),
+        patch("pipeline.create_story_bible", side_effect=ValueError("Beat coverage failed")),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
@@ -1208,7 +1186,7 @@ async def test_style_failure_does_not_crash_pipeline(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
-        patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT),
+        patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.integrate_style", side_effect=ValueError("Style rewrite failed")),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
@@ -1239,7 +1217,7 @@ async def test_partial_style_failure_records_error_and_continues_to_prompt(tmp_p
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
-        patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT),
+        patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.integrate_style", side_effect=partial_error),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
@@ -1277,7 +1255,7 @@ async def test_out_of_range_panel_count_records_error_but_continues(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
-        patch("pipeline.architect_story", return_value=_ARCHITECTURE_CHECKPOINT),
+        patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
         patch("pipeline.write_script", return_value=out_of_range_script),
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
