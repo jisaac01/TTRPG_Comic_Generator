@@ -70,8 +70,9 @@ def test_create_story_bible_writes_checkpoint_with_text_content(tmp_path):
     raw_path, entities_path = _write_input_checkpoints(tmp_path)
     output_path = tmp_path / "02_5_story_bible.json"
 
-    def fake_generator(entities_context, reference_quotes, scene_count, model):
-        assert "torch" in entities_context or "Swamp" in entities_context
+    def fake_generator(raw_content, world, model, scene_count):
+        assert "torch" in raw_content
+        assert world.title == "Swamp Trouble"
         assert scene_count == 2
         assert model == "qwen3:8b"
         # Return a simple text-based story bible
@@ -102,11 +103,11 @@ def test_create_story_bible_includes_reference_quotes(tmp_path):
     raw_path, entities_path = _write_input_checkpoints(tmp_path)
     output_path = tmp_path / "02_5_story_bible.json"
 
-    received_quotes = None
+    received_world = None
 
-    def fake_generator(entities_context, reference_quotes, scene_count, model):
-        nonlocal received_quotes
-        received_quotes = reference_quotes
+    def fake_generator(raw_content, world, model, scene_count):
+        nonlocal received_world
+        received_world = world
         return """Scene 1:
 Opening scene with reference to "Stay close to me."
 
@@ -122,8 +123,10 @@ Continuation scene."""
         generator=fake_generator,
     )
 
-    assert received_quotes is not None
-    assert "Stay close to me." in received_quotes
+    assert received_world is not None
+    # Verify world state contains entities and beats
+    assert hasattr(received_world, 'player_characters')
+    assert hasattr(received_world, 'beats')
 
 
 def test_create_story_bible_rejects_invalid_scene_count(tmp_path):
