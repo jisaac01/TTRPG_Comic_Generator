@@ -7,7 +7,7 @@ Each run is isolated in its own version folder. Prior runs are never overwritten
 ## Requirements
 
 - Python 3.12+
-- [Ollama](https://ollama.com) running locally with `qwen2.5:7b` pulled
+- [Ollama](https://ollama.com) running locally with `qwen3:8b` pulled
 
 ## Setup
 
@@ -108,9 +108,9 @@ python src/pipeline.py belowdown https://scrybequill.com/share/...
 
 ```
 --campaigns-root PATH        default: campaigns/
---architect-model NAME       default: qwen2.5:7b
---script-model NAME          default: qwen2.5:7b
---style-model NAME           default: qwen2.5:7b
+--architect-model NAME       default: qwen3:8b
+--script-model NAME          default: qwen3:8b
+--style-model NAME           default: qwen3:8b
 --panel-count N              default: 6 (target panel count for the story architect)
 --art-style-template PATH    Override campaign-level template for this run only
 --story-architect-system-prompt PATH

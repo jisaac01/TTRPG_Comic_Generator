@@ -164,7 +164,7 @@ def integrate_style(
     script_checkpoint_path: Path = Path("campaigns/<campaign>/<episode>/v001/03_script.json"),
     art_style_template_path: Path = Path("campaigns/<campaign>/art_direction_template.json"),
     output_path: Path = Path("campaigns/<campaign>/<episode>/v001/03_5_styled_script.json"),
-    model: str = "qwen2.5:7b",
+    model: str = "qwen3:8b",
     system_prompt_path: Path | None = None,
     user_prompt_path: Path | None = None,
     generator: StyleGenerator | None = None,
@@ -252,7 +252,7 @@ def _run_cli() -> None:
     )
     parser.add_argument(
         "--model",
-        default="qwen2.5:7b",
+        default="qwen3:8b",
         help="Ollama model name",
     )
 

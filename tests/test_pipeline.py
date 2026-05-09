@@ -60,7 +60,7 @@ _WORLD_CHECKPOINT = entities.WorldStateCheckpoint(
     url="https://example.test/story",
     title="Dreadmarsh Crossing",
     author="GM",
-    model="qwen2.5:7b",
+    model="qwen3:8b",
     player_characters=[
         entities.Character(
             name="Del",
@@ -88,7 +88,7 @@ _SCRIPT_CHECKPOINT = scriptwriter.ScriptCheckpoint(
     url="https://example.test/story",
     title="Dreadmarsh Crossing",
     author="GM",
-    model="qwen2.5:7b",
+    model="qwen3:8b",
     panel_count=2,
     panels=[
         scriptwriter.Panel(
@@ -119,7 +119,7 @@ _ARCHITECTURE_CHECKPOINT = story_architect.StoryArchitectureCheckpoint(
     url="https://example.test/story",
     title="Dreadmarsh Crossing",
     author="GM",
-    model="qwen2.5:7b",
+    model="qwen3:8b",
     target_panel_count=2,
     panels=[
         story_architect.ArchitecturePanel(
@@ -158,7 +158,7 @@ _STYLED_SCRIPT_CHECKPOINT = scriptwriter.ScriptCheckpoint(
     url="https://example.test/story",
     title="Dreadmarsh Crossing",
     author="GM",
-    model="qwen2.5:7b",
+    model="qwen3:8b",
     panel_count=2,
     panels=[
         scriptwriter.Panel(
@@ -567,7 +567,7 @@ async def test_first_run_result_contains_model_dump_dicts(tmp_path):
     assert isinstance(result["page_prompt"], dict)
     assert result["errors"] == []
     assert _checkpoint_dict(result, "raw_text")["url"] == "https://example.test/story"
-    assert _checkpoint_dict(result, "entities")["model"] == "qwen2.5:7b"
+    assert _checkpoint_dict(result, "entities")["model"] == "qwen3:8b"
 
 
 @pytest.mark.asyncio

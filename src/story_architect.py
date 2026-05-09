@@ -238,7 +238,7 @@ def architect_story(
     raw_checkpoint_path: Path = Path("campaigns/<campaign>/<episode>/v001/01_raw_text.json"),
     entities_checkpoint_path: Path = Path("campaigns/<campaign>/<episode>/v001/02_entities.json"),
     output_path: Path = Path("campaigns/<campaign>/<episode>/v001/02_5_story_architecture.json"),
-    model: str = "qwen2.5:7b",
+    model: str = "qwen3:8b",
     panel_count: int = 6,
     system_prompt_path: Path | None = None,
     user_prompt_path: Path | None = None,
@@ -325,7 +325,7 @@ def _run_cli() -> None:
     )
     parser.add_argument(
         "--model",
-        default="qwen2.5:7b",
+        default="qwen3:8b",
         help="Ollama model name",
     )
     parser.add_argument(

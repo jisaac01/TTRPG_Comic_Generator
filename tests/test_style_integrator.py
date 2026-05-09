@@ -30,7 +30,7 @@ def _write_script_checkpoint(tmp_path: Path) -> Path:
         url="https://example.test/story",
         title="Swamp Trouble",
         author="GM",
-        model="qwen2.5:7b",
+        model="qwen3:8b",
         panel_count=2,
         panels=[
             Panel(

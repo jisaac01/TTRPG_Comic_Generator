@@ -21,7 +21,7 @@ def _write_input_checkpoints(tmp_path: Path) -> tuple[Path, Path, Path]:
         "url": "https://example.test/story",
         "title": "Swamp Trouble",
         "author": "GM",
-        "model": "qwen2.5:7b",
+        "model": "qwen3:8b",
         "player_characters": [
             {
                 "name": "Del",
@@ -60,7 +60,7 @@ def _write_input_checkpoints(tmp_path: Path) -> tuple[Path, Path, Path]:
                 "url": "https://example.test/story",
                 "title": "Swamp Trouble",
                 "author": "GM",
-                "model": "qwen2.5:7b",
+                "model": "qwen3:8b",
                 "target_panel_count": 3,
                 "panels": [
                     {
@@ -180,7 +180,7 @@ def test_write_script_writes_checkpoint_and_normalizes_panel_indices(tmp_path):
     def fake_generator(world, architecture, model):
         assert world.title == "Swamp Trouble"
         assert architecture.target_panel_count == 3
-        assert model == "qwen2.5:7b"
+        assert model == "qwen3:8b"
         return _valid_payload()
 
     checkpoint = scriptwriter.write_script(
@@ -188,7 +188,7 @@ def test_write_script_writes_checkpoint_and_normalizes_panel_indices(tmp_path):
         entities_checkpoint_path=entities_path,
         story_architecture_checkpoint_path=architecture_path,
         output_path=output_path,
-        model="qwen2.5:7b",
+        model="qwen3:8b",
         generator=fake_generator,
     )
 
@@ -338,7 +338,7 @@ def test_format_entities_for_prompt_excludes_reference_quotes():
         url="https://example.test/story",
         title="Swamp Trouble",
         author="GM",
-        model="qwen2.5:7b",
+        model="qwen3:8b",
         player_characters=[],
         npcs=[],
         locations=[],

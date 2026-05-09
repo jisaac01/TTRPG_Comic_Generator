@@ -26,7 +26,7 @@ def _write_input_checkpoints(tmp_path: Path) -> tuple[Path, Path]:
         "url": "https://example.test/story",
         "title": "Swamp Trouble",
         "author": "GM",
-        "model": "qwen2.5:7b",
+        "model": "qwen3:8b",
         "player_characters": [
             {
                 "name": "Del",
@@ -113,7 +113,7 @@ def test_architect_story_writes_checkpoint_and_normalizes_indices(tmp_path):
     def fake_generator(content, world, model, panel_count):
         assert "torch" in content
         assert world.title == "Swamp Trouble"
-        assert model == "qwen2.5:7b"
+        assert model == "qwen3:8b"
         assert panel_count == 2
         return _valid_payload()
 
@@ -121,7 +121,7 @@ def test_architect_story_writes_checkpoint_and_normalizes_indices(tmp_path):
         raw_checkpoint_path=raw_path,
         entities_checkpoint_path=entities_path,
         output_path=output_path,
-        model="qwen2.5:7b",
+        model="qwen3:8b",
         panel_count=2,
         generator=fake_generator,
     )
@@ -134,7 +134,7 @@ def test_architect_story_writes_checkpoint_and_normalizes_indices(tmp_path):
     assert checkpoint.generation_errors == []
 
 
-def test_architect_story_rejects_unreferenced_notable_quote_text(tmp_path):
+def test_architect_story_backfills_reference_quotes_when_model_quotes_are_invalid(tmp_path):
     raw_path, entities_path = _write_input_checkpoints(tmp_path)
 
     def fake_generator(_content, _world, _model, _panel_count):
@@ -155,8 +155,9 @@ def test_architect_story_rejects_unreferenced_notable_quote_text(tmp_path):
         generator=fake_generator,
     )
 
-    assert checkpoint.panels[0].notable_quotes == []
-    assert any("quote text not found in reference quotes" in err for err in checkpoint.generation_errors)
+    assert len(checkpoint.panels[0].notable_quotes) == 1
+    assert checkpoint.panels[0].notable_quotes[0].text == "Stay close to me."
+    assert any("fallback applied" in err for err in checkpoint.generation_errors)
 
 
 def test_architect_story_logs_uncovered_beats_and_keeps_output(tmp_path):

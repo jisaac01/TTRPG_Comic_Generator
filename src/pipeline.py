@@ -252,10 +252,10 @@ class ComicPipeline:
         url: str,
         campaign: str,
         campaigns_root: Path = CAMPAIGNS_ROOT,
-        analysis_model: str = "qwen2.5:7b",
-        architect_model: str = "qwen2.5:7b",
-        script_model: str = "qwen2.5:7b",
-        style_model: str = "qwen2.5:7b",
+        analysis_model: str = "qwen3:8b",
+        architect_model: str = "qwen3:8b",
+        script_model: str = "qwen3:8b",
+        style_model: str = "qwen3:8b",
         panel_count: int = 6,
         art_style_template: Path | None = None,
         story_architect_system_prompt: Path | None = None,
@@ -719,17 +719,17 @@ async def _run_cli() -> None:
     )
     parser.add_argument(
         "--architect-model",
-        default="qwen2.5:7b",
+        default="qwen3:8b",
         help="Ollama model name used for Phase 3 story architecture",
     )
     parser.add_argument(
         "--script-model",
-        default="qwen2.5:7b",
+        default="qwen3:8b",
         help="Ollama model name used for Phase 4 scripting",
     )
     parser.add_argument(
         "--style-model",
-        default="qwen2.5:7b",
+        default="qwen3:8b",
         help="Ollama model name used for Phase 4.5 art style integration",
     )
     parser.add_argument(

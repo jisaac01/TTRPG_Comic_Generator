@@ -14,7 +14,7 @@ def _write_inputs(tmp_path: Path) -> tuple[Path, Path, Path]:
         "url": "https://example.test/story",
         "title": "Swamp Trouble",
         "author": "GM",
-        "model": "qwen2.5:7b",
+        "model": "qwen3:8b",
         "player_characters": [
             {
                 "name": "Del",
@@ -51,7 +51,7 @@ def _write_inputs(tmp_path: Path) -> tuple[Path, Path, Path]:
         "url": "https://example.test/story",
         "title": "Swamp Trouble",
         "author": "GM",
-        "model": "qwen2.5:7b",
+        "model": "qwen3:8b",
         "panel_count": 2,
         "panels": [
             {
