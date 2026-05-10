@@ -66,8 +66,12 @@ def _format_beats_for_prompt(beats: list[StoryBeat]) -> str:
 def _format_quotes_for_prompt(quotes: list[dict[str, str | None]] | None = None) -> str:
     quote_lines: list[str] = []
     for quote in quotes or []:
-        text = quote.get("text", "").strip() if isinstance(quote, dict) else ""
-        attribution = quote.get("attribution", "").strip() if isinstance(quote, dict) else ""
+        if isinstance(quote, dict):
+            text = (quote.get("text") or "").strip()
+            attribution = (quote.get("attribution") or "Unknown").strip()
+        else:
+            text = ""
+            attribution = "Unknown"
         if text:
             speaker = attribution or "Unknown"
             quote_lines.append(f"- {speaker}: \"{text}\"")
@@ -87,32 +91,16 @@ def _generate_with_ollama(
     world: WorldStateCheckpoint,
     model: str,
     scene_count: int,
+    system_prompt_text: str,
+    user_prompt_text: str,
+    total_pages: int = 1,
     quotes: list[dict[str, str | None]] | None = None,
-    system_prompt_path: Path | None = None,
-    user_prompt_path: Path | None = None,
 ) -> str:
     """Generate story bible via LLM. Returns the raw text output (not parsed)."""
     client = _build_instructor_client()
 
-    template_vars = {
-        "title": world.title or "Untitled story",
-        "panel_count": scene_count,
-        "scene_count": scene_count,
-        "entities_context": _format_entities_for_prompt(world),
-        "story_text": content,
-        "reference_quotes": _format_quotes_for_prompt(quotes),
-    }
-
-    system_prompt = render_prompt_template(
-        MASTER_BEATER_SYSTEM_PROMPT_FILENAME,
-        template_path=system_prompt_path,
-        **template_vars,
-    )
-    user_prompt = render_prompt_template(
-        MASTER_BEATER_USER_PROMPT_FILENAME,
-        template_path=user_prompt_path,
-        **template_vars,
-    )
+    system_prompt = system_prompt_text
+    user_prompt = user_prompt_text
 
     # Request raw text completion directly; no structured response model is required.
     response = client.chat.completions.create(
@@ -131,10 +119,12 @@ def create_story_bible(
     raw_checkpoint_path: Path = Path("campaigns/<campaign>/<episode>/v001/01_raw_text.json"),
     entities_checkpoint_path: Path = Path("campaigns/<campaign>/<episode>/v001/02_entities.json"),
     output_path: Path = Path("campaigns/<campaign>/<episode>/v001/02_5_story_bible.txt"),
+    *,
+    system_prompt_text: str,
+    user_prompt_text: str,
     model: str = DEFAULT_OLLAMA_MODEL,
     scene_count: int = 6,
-    system_prompt_path: Path | None = None,
-    user_prompt_path: Path | None = None,
+    total_pages: int = 1,
     generator: StoryBibleGenerator | None = None,
 ) -> StoryBibleCheckpoint:
     """Generate a story bible checkpoint from raw text and entities.
@@ -143,10 +133,11 @@ def create_story_bible(
         raw_checkpoint_path: Path to 01_raw_text.json
         entities_checkpoint_path: Path to 02_entities.json
         output_path: Path where story_bible.txt will be written
+        system_prompt_text: Fully rendered system prompt text to send to the model
+        user_prompt_text: Fully rendered user prompt text to send to the model
         model: LLM model name
         scene_count: Target number of scenes to generate
-        system_prompt_path: Optional override path for system prompt
-        user_prompt_path: Optional override path for user prompt
+        total_pages: Total number of pages to distribute scenes across (default: 1)
         generator: Optional custom generator function for testing
         
     Returns:
@@ -178,9 +169,9 @@ def create_story_bible(
                 world,
                 model,
                 scene_count,
+                system_prompt_text,
+                user_prompt_text,
                 quotes=quotes_list,
-                system_prompt_path=system_prompt_path,
-                user_prompt_path=user_prompt_path,
             )
         except Exception as exc:
             generation_errors.append(f"Story bible generation failed: {exc}")
@@ -241,12 +232,44 @@ def _run_cli() -> None:
         help="Target number of scenes to generate",
     )
     args = parser.parse_args()
+
+    raw = RawTextCheckpoint.model_validate_json(Path(args.raw_input).read_text(encoding="utf-8"))
+    world = WorldStateCheckpoint.model_validate_json(
+        Path(args.entities_input).read_text(encoding="utf-8")
+    )
+    quotes_list: list[dict[str, str | None]] = []
+    for quote in raw.quotes:
+        text = quote.text.strip() if quote.text else ""
+        if text:
+            attribution = quote.attribution or "Unknown attribution"
+            quotes_list.append({"text": text, "attribution": attribution})
+
+    template_vars = {
+        "title": world.title or "Untitled story",
+        "panel_count": args.scene_count,
+        "scene_count": args.scene_count,
+        "total_pages": 1,
+        "entities_context": _format_entities_for_prompt(world),
+        "story_text": raw.content,
+        "reference_quotes": _format_quotes_for_prompt(quotes_list),
+    }
+    system_prompt_text = render_prompt_template(
+        MASTER_BEATER_SYSTEM_PROMPT_FILENAME,
+        **template_vars,
+    )
+    user_prompt_text = render_prompt_template(
+        MASTER_BEATER_USER_PROMPT_FILENAME,
+        **template_vars,
+    )
+
     checkpoint = create_story_bible(
         raw_checkpoint_path=Path(args.raw_input),
         entities_checkpoint_path=Path(args.entities_input),
         output_path=Path(args.output),
         model=args.model,
         scene_count=args.scene_count,
+        system_prompt_text=system_prompt_text,
+        user_prompt_text=user_prompt_text,
     )
     print(f"Story bible created with {checkpoint.scene_count} scenes: {args.output}")
 

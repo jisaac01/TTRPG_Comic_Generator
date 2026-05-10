@@ -20,6 +20,7 @@ from prompter import (
     DEFAULT_ART_DIRECTION_TEMPLATE_PATH,
     _load_art_template,
     generate_page_prompt,
+    generate_page_prompts,
 )
 from prompt_saver import (
     prepare_beater_prompts,
@@ -41,7 +42,13 @@ from prompt_templates import (
 from scriptwriter import WorldStateInput
 from style_integrator import StyleIntegrationPartialFailure, integrate_style
 from scraper import RawTextCheckpoint, normalize_recap_version, scrape_scrybequill
-from scriptwriter import ScriptCheckpoint, write_script
+from scriptwriter import (
+    ScriptCheckpoint,
+    apply_cross_page_continuity_errors,
+    renumber_script_page_checkpoints,
+    write_script,
+    write_story_bible_pages,
+)
 from master_beater import StoryBibleCheckpoint, create_story_bible
 
 # ---------------------------------------------------------------------------
@@ -52,9 +59,56 @@ CAMPAIGNS_ROOT = Path("campaigns")
 INDEX_FILENAME = "index.json"
 EPISODE_META_FILENAME = "episode_meta.json"
 PROMPTS_SUBDIR_NAME = "prompts"
+STORY_BIBLE_PAGE_GLOB = "02_6_story_bible_page_*.json"
+SCRIPT_PAGE_GLOB = "03_script_page_*.json"
+STYLED_SCRIPT_PAGE_GLOB = "03_5_styled_script_page_*.json"
 
 RerunFrom = Literal["scrape", "entities", "beater", "script", "style", "prompt"]
 RerunFromArg = Literal["scrape", "entities", "beater", "script", "style", "prompt"]
+
+
+def _story_bible_page_path(version_dir: Path, page_number: int) -> Path:
+    return version_dir / f"02_6_story_bible_page_{page_number:03d}.json"
+
+
+def _script_page_path(version_dir: Path, page_number: int) -> Path:
+    return version_dir / f"03_script_page_{page_number:03d}.json"
+
+
+def _styled_script_page_path(version_dir: Path, page_number: int) -> Path:
+    return version_dir / f"03_5_styled_script_page_{page_number:03d}.json"
+
+
+def _copy_checkpoint_patterns(prev_dir: Path, version_dir: Path, patterns: list[str]) -> None:
+    for pattern in patterns:
+        if "*" in pattern:
+            for src in prev_dir.glob(pattern):
+                shutil.copy2(src, version_dir / src.name)
+            continue
+
+        src = prev_dir / pattern
+        if src.exists():
+            shutil.copy2(src, version_dir / src.name)
+
+
+def _load_script_pages(paths: list[Path]) -> list[ScriptCheckpoint]:
+    return [
+        ScriptCheckpoint.model_validate_json(path.read_text(encoding="utf-8"))
+        for path in paths
+    ]
+
+
+def _write_script_pages(paths: list[Path], checkpoints: list[ScriptCheckpoint]) -> None:
+    if len(paths) != len(checkpoints):
+        raise ValueError(f"Expected {len(paths)} checkpoints, received {len(checkpoints)}.")
+    for path, checkpoint in zip(paths, checkpoints):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(checkpoint.model_dump_json(indent=2), encoding="utf-8")
+
+
+def _delete_matching(version_dir: Path, pattern: str) -> None:
+    for path in version_dir.glob(pattern):
+        path.unlink(missing_ok=True)
 
 # ---------------------------------------------------------------------------
 # Slug helpers
@@ -207,9 +261,9 @@ def _create_version_dir(
                 "01_raw_text.json",
                 "02_entities.json",
                 "02_5_story_bible.json",
-                "03_script.json",
-                "03_5_styled_script.json",
-                "04_page_prompt.txt",
+                STORY_BIBLE_PAGE_GLOB,
+                SCRIPT_PAGE_GLOB,
+                STYLED_SCRIPT_PAGE_GLOB,
             ],
             "scrape": [],
             "entities": ["01_raw_text.json"],
@@ -219,24 +273,27 @@ def _create_version_dir(
                 "01_raw_text.json",
                 "02_entities.json",
                 "02_5_story_bible.json",
-                "03_script.json",
+                STORY_BIBLE_PAGE_GLOB,
+                SCRIPT_PAGE_GLOB,
             ],
             "prompt": [
                 "01_raw_text.json",
                 "02_entities.json",
                 "02_5_story_bible.json",
-                "03_script.json",
-                "03_5_styled_script.json",
+                STORY_BIBLE_PAGE_GLOB,
+                SCRIPT_PAGE_GLOB,
+                STYLED_SCRIPT_PAGE_GLOB,
             ],
         }
         files_to_copy = _CHECKPOINTS_TO_COPY.get(rerun_from, [])
-        
-        for fname in files_to_copy:
-            src = prev_dir / fname
-            if src.exists():
-                shutil.copy2(src, version_dir / fname)
 
+        _copy_checkpoint_patterns(prev_dir, version_dir, files_to_copy)
+
+        # Prompt reruns must regenerate 04_page_*.txt from the current script state.
         if rerun_from is None:
+            for prev_prompt_file in prev_dir.glob("04_page_*.txt"):
+                shutil.copy2(prev_prompt_file, version_dir / prev_prompt_file.name)
+
             prev_prompts_dir = prev_dir / PROMPTS_SUBDIR_NAME
             if prev_prompts_dir.exists():
                 shutil.copytree(prev_prompts_dir, version_dir / PROMPTS_SUBDIR_NAME)
@@ -260,6 +317,7 @@ class ComicPipeline:
         script_model: str = DEFAULT_OLLAMA_MODEL,
         style_model: str = DEFAULT_OLLAMA_MODEL,
         panel_count: int = 6,
+        total_pages: int = 1,
         art_style_template: Path | None = None,
         master_beater_system_prompt: Path | None = None,
         master_beater_user_prompt: Path | None = None,
@@ -280,6 +338,7 @@ class ComicPipeline:
         self.script_model = script_model
         self.style_model = style_model
         self.panel_count = panel_count
+        self.total_pages = total_pages
         self.art_style_template = art_style_template
         self.master_beater_system_prompt = master_beater_system_prompt
         self.master_beater_user_prompt = master_beater_user_prompt
@@ -442,8 +501,6 @@ class ComicPipeline:
                 json.dumps(raw.model_dump(), indent=2, ensure_ascii=False), encoding="utf-8"
             )
 
-            # Bootstrap campaign-level art template on first run.
-            self._ensure_campaign_art_template()
         else:
             episode_dir = _episode_dir(self.campaigns_root, self.campaign, existing_episode)
             version_dir, version_name = _create_version_dir(episode_dir, self.rerun_from)
@@ -463,13 +520,12 @@ class ComicPipeline:
                 if content_changed:
                     print(f"[1/5] Recap variant changed to {self.recap_version!r} - invalidating downstream checkpoints")
                     entities_path = version_dir / "02_entities.json"
-                    script_path = version_dir / "03_script.json"
-                    styled_script_path = version_dir / "03_5_styled_script.json"
-                    prompts_path = version_dir / "04_page_prompt.txt"
                     entities_path.unlink(missing_ok=True)
-                    script_path.unlink(missing_ok=True)
-                    styled_script_path.unlink(missing_ok=True)
-                    prompts_path.unlink(missing_ok=True)
+                    _delete_matching(version_dir, STORY_BIBLE_PAGE_GLOB)
+                    _delete_matching(version_dir, SCRIPT_PAGE_GLOB)
+                    _delete_matching(version_dir, STYLED_SCRIPT_PAGE_GLOB)
+                    for prompt_file in version_dir.glob("04_page_*.txt"):
+                        prompt_file.unlink(missing_ok=True)
                     shutil.rmtree(version_dir / PROMPTS_SUBDIR_NAME, ignore_errors=True)
                 else:
                     print(f"[1/5] Scraping...skipped (checkpoint exists, recap: {self.recap_version})")
@@ -482,12 +538,23 @@ class ComicPipeline:
                 )
                 print(f"      ...done  (title: {raw.title!r}, recap: {self.recap_version})")
 
+        self._ensure_campaign_art_template()
         self._ensure_campaign_prompt_templates()
         entities_path = version_dir / "02_entities.json"
         story_bible_path = version_dir / "02_5_story_bible.json"
-        script_path = version_dir / "03_script.json"
-        styled_script_path = version_dir / "03_5_styled_script.json"
         prompts_path = version_dir / "04_page_prompt.txt"
+        story_bible_page_paths = [
+            _story_bible_page_path(version_dir, page_number)
+            for page_number in range(1, self.total_pages + 1)
+        ]
+        script_page_paths = [
+            _script_page_path(version_dir, page_number)
+            for page_number in range(1, self.total_pages + 1)
+        ]
+        styled_script_page_paths = [
+            _styled_script_page_path(version_dir, page_number)
+            for page_number in range(1, self.total_pages + 1)
+        ]
         template_path = self._resolve_art_template(version_dir, episode_dir)
         prompt_template_paths = self._capture_prompt_templates_for_version(
             self._resolve_prompt_templates(),
@@ -519,31 +586,37 @@ class ComicPipeline:
             print(
                 f"[3/5] Creating story bible...  (model: {self.beater_model}, scenes: {self.panel_count})"
             )
+            # Prepare and save prompts before model call.
+            # The exact rendered strings are also the ones sent to the model.
+            beater_system_prompt, beater_user_prompt = prepare_beater_prompts(
+                version_dir=version_dir,
+                content=raw.content,
+                world=entities,
+                scene_count=self.panel_count,
+                raw_quotes=[
+                    {"text": quote.text, "attribution": quote.attribution}
+                    for quote in raw.quotes
+                ],
+                system_prompt_path=prompt_template_paths[MASTER_BEATER_SYSTEM_PROMPT_FILENAME],
+                user_prompt_path=prompt_template_paths[MASTER_BEATER_USER_PROMPT_FILENAME],
+            )
             try:
-                # Prepare and save prompts before model call
-                prepare_beater_prompts(
-                    version_dir=version_dir,
-                    world=entities,
-                    scene_count=self.panel_count,
-                    raw_quotes=[
-                        {"text": quote.text, "attribution": quote.attribution}
-                        for quote in raw.quotes
-                    ],
-                    system_prompt_path=prompt_template_paths[MASTER_BEATER_SYSTEM_PROMPT_FILENAME],
-                    user_prompt_path=prompt_template_paths[MASTER_BEATER_USER_PROMPT_FILENAME],
-                )
-            except Exception as exc:
-                print(f"      ...WARNING (failed to save interpolated prompts): {exc}")
-            try:
+                # scene_count = total_pages * panels_per_page
+                scene_count = self.total_pages * self.panel_count
                 story_bible = create_story_bible(
                     raw_checkpoint_path=raw_path,
                     entities_checkpoint_path=entities_path,
                     output_path=story_bible_path,
                     model=self.beater_model,
-                    scene_count=self.panel_count,
-                    system_prompt_path=prompt_template_paths[MASTER_BEATER_SYSTEM_PROMPT_FILENAME],
-                    user_prompt_path=prompt_template_paths[MASTER_BEATER_USER_PROMPT_FILENAME],
+                    scene_count=scene_count,
+                    system_prompt_text=beater_system_prompt,
+                    user_prompt_text=beater_user_prompt,
                 )
+                if not story_bible_path.exists():
+                    story_bible_path.write_text(
+                        story_bible.model_dump_json(indent=2),
+                        encoding="utf-8",
+                    )
                 print("      ...done")
             except Exception as exc:
                 errors.append(f"story_bible: {exc}")
@@ -552,135 +625,185 @@ class ComicPipeline:
                     f"{exc}"
                 )
 
-        script: ScriptCheckpoint | None = None
+        script_pages: list[ScriptCheckpoint] | None = None
         script_generated_this_run = False
         if story_bible is None:
             print("[4/5] Writing script...skipped (no story bible)")
-        elif script_path.exists():
-            print("[4/5] Writing script...skipped (checkpoint exists)")
-            script = ScriptCheckpoint.model_validate_json(script_path.read_text(encoding="utf-8"))
+        elif all(path.exists() for path in script_page_paths):
+            print("[4/5] Writing script...skipped (checkpoints exist)")
+            script_pages = _load_script_pages(script_page_paths)
         else:
             print(f"[4/5] Writing script...  (model: {self.script_model})")
+            story_bible_pages: list[StoryBibleCheckpoint] = []
             try:
-                # Prepare and save prompts before model call
-                prepare_scriptwriter_prompts(
-                    version_dir=version_dir,
-                    world=cast(WorldStateInput, entities),
-                    story_bible=story_bible,
-                    system_prompt_path=prompt_template_paths[SCRIPTWRITER_SYSTEM_PROMPT_FILENAME],
-                    user_prompt_path=prompt_template_paths[SCRIPTWRITER_USER_PROMPT_FILENAME],
-                )
-            except Exception as exc:
-                print(f"      ...WARNING (failed to save interpolated prompts): {exc}")
-            try:
-                script = write_script(
-                    raw_checkpoint_path=raw_path,
-                    entities_checkpoint_path=entities_path,
+                story_bible_pages = write_story_bible_pages(
                     story_bible_checkpoint_path=story_bible_path,
-                    output_path=script_path,
-                    model=self.script_model,
-                    system_prompt_path=prompt_template_paths[SCRIPTWRITER_SYSTEM_PROMPT_FILENAME],
-                    user_prompt_path=prompt_template_paths[SCRIPTWRITER_USER_PROMPT_FILENAME],
+                    output_paths=story_bible_page_paths,
+                    total_pages=self.total_pages,
                 )
-                script_generated_this_run = True
-                print("      ...done")
             except Exception as exc:
                 errors.append(f"script: {exc}")
-                print(f"      ...ERROR (script generation failed — skipping phases 3 & 4): {exc}")
+                print(f"      ...ERROR (story bible page splitting failed — skipping phases 4.5 & 5): {exc}")
+            if story_bible_pages:
+                try:
+                    generated_pages: list[ScriptCheckpoint] = []
+                    for page_number, (story_bible_page, story_bible_page_path, script_page_path) in enumerate(
+                        zip(story_bible_pages, story_bible_page_paths, script_page_paths),
+                        start=1,
+                    ):
+                        script_system_prompt, script_user_prompt = prepare_scriptwriter_prompts(
+                            version_dir=version_dir,
+                            world=cast(WorldStateInput, entities),
+                            story_bible=story_bible_page,
+                            system_prompt_path=prompt_template_paths[SCRIPTWRITER_SYSTEM_PROMPT_FILENAME],
+                            user_prompt_path=prompt_template_paths[SCRIPTWRITER_USER_PROMPT_FILENAME],
+                            output_suffix=f"page_{page_number:03d}",
+                        )
 
-        if script_generated_this_run and script is not None and script.generation_errors:
-            for generation_error in script.generation_errors:
-                errors.append(f"script: {generation_error}")
-                print(f"      ...ERROR (script validation): {generation_error}")
+                        generated_pages.append(
+                            write_script(
+                                raw_checkpoint_path=raw_path,
+                                entities_checkpoint_path=entities_path,
+                                story_bible_checkpoint_path=story_bible_page_path,
+                                output_path=script_page_path,
+                                model=self.script_model,
+                                total_pages=1,
+                                system_prompt_text=script_system_prompt,
+                                user_prompt_text=script_user_prompt,
+                            )
+                        )
 
-        styled_script: ScriptCheckpoint | None = None
-        if script is None:
+                    script_pages = apply_cross_page_continuity_errors(
+                        renumber_script_page_checkpoints(generated_pages)
+                    )
+                    _write_script_pages(script_page_paths, script_pages)
+                    script_generated_this_run = True
+                    print(f"      ...done ({len(script_pages)} page{'s' if len(script_pages) != 1 else ''})")
+                except Exception as exc:
+                    errors.append(f"script: {exc}")
+                    print(f"      ...ERROR (script generation failed — skipping phases 4.5 & 5): {exc}")
+
+        if script_generated_this_run and script_pages is not None:
+            for page_number, checkpoint in enumerate(script_pages, start=1):
+                for generation_error in checkpoint.generation_errors:
+                    error_prefix = "script" if len(script_pages) == 1 else f"script: page {page_number}"
+                    errors.append(f"{error_prefix}: {generation_error}")
+                    print(f"      ...ERROR (script validation page {page_number}): {generation_error}")
+
+        styled_script_pages: list[ScriptCheckpoint] | None = None
+        if script_pages is None:
             print("[4.5/5] Integrating art style...skipped (no script)")
         elif self.skip_style:
             print("[4.5/5] Integrating art style...skipped (--skip-style)")
-            styled_script = script
-        elif styled_script_path.exists():
-            print("[4.5/5] Integrating art style...skipped (checkpoint exists)")
-            styled_script = ScriptCheckpoint.model_validate_json(
-                styled_script_path.read_text(encoding="utf-8")
-            )
+            styled_script_pages = script_pages
+        elif all(path.exists() for path in styled_script_page_paths):
+            print("[4.5/5] Integrating art style...skipped (checkpoints exist)")
+            styled_script_pages = _load_script_pages(styled_script_page_paths)
         else:
             template_path = self._capture_art_template_for_version(template_path, version_dir)
             print(f"[4.5/5] Integrating art style...  (model: {self.style_model}, template: {template_path})")
             try:
-                # Prepare and save prompts before model call
                 art_template = _load_art_template(template_path)
-                prepare_style_integrator_prompts(
-                    version_dir=version_dir,
-                    script=script,
-                    art_template=art_template,
-                    system_prompt_path=prompt_template_paths[STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME],
-                    user_prompt_path=prompt_template_paths[STYLE_INTEGRATOR_USER_PROMPT_FILENAME],
-                )
+                generated_styled_pages: list[ScriptCheckpoint] = []
+                for page_number, (script_page, script_page_path, styled_script_page_path) in enumerate(
+                    zip(script_pages, script_page_paths, styled_script_page_paths),
+                    start=1,
+                ):
+                    style_system_prompt, style_user_prompt = prepare_style_integrator_prompts(
+                        version_dir=version_dir,
+                        script=script_page,
+                        art_template=art_template,
+                        system_prompt_path=prompt_template_paths[STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME],
+                        user_prompt_path=prompt_template_paths[STYLE_INTEGRATOR_USER_PROMPT_FILENAME],
+                        output_suffix=f"page_{page_number:03d}",
+                    )
+
+                    try:
+                        generated_styled_pages.append(
+                            integrate_style(
+                                script_checkpoint_path=script_page_path,
+                                art_style_template_path=template_path,
+                                output_path=styled_script_page_path,
+                                model=self.style_model,
+                                system_prompt_text=style_system_prompt,
+                                user_prompt_text=style_user_prompt,
+                            )
+                        )
+                    except StyleIntegrationPartialFailure as exc:
+                        generated_styled_pages.append(exc.checkpoint)
+                        styled_script_page_path.write_text(
+                            exc.checkpoint.model_dump_json(indent=2),
+                            encoding="utf-8",
+                        )
+                        error_prefix = "style" if len(script_pages) == 1 else f"style: page {page_number}"
+                        errors.append(f"{error_prefix}: {exc}")
+                        print(f"      ...WARN (style integration partially failed on page {page_number}): {exc}")
+
+                styled_script_pages = generated_styled_pages
+                print(f"      ...done ({len(styled_script_pages)} page{'s' if len(styled_script_pages) != 1 else ''})")
             except Exception as exc:
-                print(f"      ...WARNING (failed to save interpolated prompts): {exc}")
-            try:
-                styled_script = integrate_style(
-                    script_checkpoint_path=script_path,
-                    art_style_template_path=template_path,
-                    output_path=styled_script_path,
-                    model=self.style_model,
-                    system_prompt_path=prompt_template_paths[STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME],
-                    user_prompt_path=prompt_template_paths[STYLE_INTEGRATOR_USER_PROMPT_FILENAME],
-                )
-                print("      ...done")
-            except StyleIntegrationPartialFailure as exc:
-                styled_script = exc.checkpoint
                 errors.append(f"style: {exc}")
-                print(f"      ...WARN (style integration partially failed): {exc}")
-            except Exception as exc:
-                errors.append(f"style: {exc}")
-                print(f"      ...ERROR (style integration failed — skipping phase 4): {exc}")
+                print(f"      ...ERROR (style integration failed — skipping phase 5): {exc}")
 
         page_prompt: str | None = None
-        if styled_script is None:
+        page_prompts: list[tuple[Path, str]] = []
+        prompt_script_pages = script_pages if self.skip_style else styled_script_pages
+        if not prompt_script_pages:
             print("[5/5] Generating page prompt...skipped (no styled script)")
-        elif prompts_path.exists():
-            print("[5/5] Generating page prompt...skipped (checkpoint exists)")
-            page_prompt = prompts_path.read_text(encoding="utf-8")
         else:
             template_path = self._capture_art_template_for_version(template_path, version_dir)
-            prompt_script_path = script_path if self.skip_style else styled_script_path
-            print(f"[5/5] Generating page prompt...  (template: {template_path})")
-            if prompt_script_path.exists():
+            prompt_script_paths = script_page_paths if self.skip_style else styled_script_page_paths
+            expected_prompt_paths = [
+                version_dir / f"04_page_{page_number}_prompt.txt"
+                for page_number in range(1, self.total_pages + 1)
+            ]
+
+            if all(path.exists() for path in expected_prompt_paths):
+                print("[5/5] Generating page prompt...skipped (checkpoints exist)")
+                page_prompt = expected_prompt_paths[0].read_text(encoding="utf-8")
+            else:
+                print(f"[5/5] Generating page prompt...  (template: {template_path}, pages: {len(prompt_script_pages)})")
                 try:
-                    prompt_script = ScriptCheckpoint.model_validate_json(
-                        prompt_script_path.read_text(encoding="utf-8")
-                    )
                     art_template = _load_art_template(template_path)
-                    prepare_page_prompt_template(
-                        version_dir=version_dir,
-                        world=entities,
-                        script=prompt_script,
-                        art_template=art_template,
-                        template_path=prompt_template_paths[PAGE_PROMPT_TEMPLATE_FILENAME],
-                    )
+                    for page_number, (prompt_script, prompt_script_path) in enumerate(
+                        zip(prompt_script_pages, prompt_script_paths),
+                        start=1,
+                    ):
+                        try:
+                            prepare_page_prompt_template(
+                                version_dir=version_dir,
+                                world=entities,
+                                script=prompt_script,
+                                art_template=art_template,
+                                template_path=prompt_template_paths[PAGE_PROMPT_TEMPLATE_FILENAME],
+                                output_suffix=f"page_{page_number:03d}",
+                            )
+                        except Exception as exc:
+                            print(f"      ...WARNING (failed to save interpolated page {page_number} prompt template): {exc}")
+
+                        page_prompts.extend(
+                            generate_page_prompts(
+                                script_checkpoint_path=prompt_script_path,
+                                entities_checkpoint_path=entities_path,
+                                art_style_template_path=template_path,
+                                output_dir=version_dir,
+                                page_prompt_template_path=prompt_template_paths[PAGE_PROMPT_TEMPLATE_FILENAME],
+                            )
+                        )
+
+                    if page_prompts:
+                        page_prompt = page_prompts[0][1]  # First page's prompt for backward compat
+                    print(f"      ...done ({len(page_prompts)} page{'s' if len(page_prompts) != 1 else ''})")
                 except Exception as exc:
-                    print(f"      ...WARNING (failed to save interpolated prompts): {exc}")
-            try:
-                page_prompt = generate_page_prompt(
-                    script_checkpoint_path=prompt_script_path,
-                    entities_checkpoint_path=entities_path,
-                    art_style_template_path=template_path,
-                    output_path=prompts_path,
-                    page_prompt_template_path=prompt_template_paths[PAGE_PROMPT_TEMPLATE_FILENAME],
-                )
-                print("      ...done")
-            except Exception as exc:
-                errors.append(f"page_prompt: {exc}")
-                print(f"      ...ERROR (page prompt generation failed): {exc}")
+                    errors.append(f"page_prompt: {exc}")
+                    print(f"      ...ERROR (page prompt generation failed): {exc}")
 
         return {
             "raw_text": raw.model_dump(),
             "entities": entities.model_dump(),
             "story_bible": story_bible.model_dump() if story_bible is not None else None,
-            "script": script.model_dump() if script is not None else None,
-            "styled_script": styled_script.model_dump() if styled_script is not None else None,
+            "script": [checkpoint.model_dump() for checkpoint in script_pages] if script_pages is not None else None,
+            "styled_script": [checkpoint.model_dump() for checkpoint in styled_script_pages] if styled_script_pages is not None else None,
             "page_prompt": {
                 "output_path": str(prompts_path),
                 "prompt": page_prompt,
@@ -739,6 +862,12 @@ async def _run_cli() -> None:
         default=6,
         type=int,
         help="Target number of scenes to generate in Phase 3",
+    )
+    parser.add_argument(
+        "--total-pages",
+        default=1,
+        type=int,
+        help="Total number of pages to generate (default: 1). Scenes are distributed evenly across pages.",
     )
     parser.add_argument(
         "--art-style-template",
@@ -850,6 +979,7 @@ async def _run_cli() -> None:
         script_model=args.script_model,
         style_model=args.style_model,
         panel_count=args.panel_count,
+        total_pages=args.total_pages,
         art_style_template=Path(args.art_style_template) if args.art_style_template else None,
         master_beater_system_prompt=Path(args.master_beater_system_prompt)
         if args.master_beater_system_prompt

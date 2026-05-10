@@ -75,22 +75,12 @@ def _generate_with_instructor_ollama(
     script: ScriptCheckpoint,
     art_template: dict[str, str],
     model: str,
-    system_prompt_path: Path | None = None,
-    user_prompt_path: Path | None = None,
+    system_prompt_text: str,
+    user_prompt_text: str,
 ) -> StyledScriptPayload:
     client = _build_instructor_client()
-
-    system_prompt = render_prompt_template(
-        STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME,
-        template_path=system_prompt_path,
-    )
-
-    user_prompt = render_prompt_template(
-        STYLE_INTEGRATOR_USER_PROMPT_FILENAME,
-        template_path=user_prompt_path,
-        art_direction=_format_art_direction(art_template),
-        panels_context=_format_panels_for_prompt(script),
-    )
+    system_prompt = system_prompt_text
+    user_prompt = user_prompt_text
 
     return client.chat.completions.create(
         model=model,
@@ -159,9 +149,10 @@ def integrate_style(
     script_checkpoint_path: Path = Path("campaigns/<campaign>/<episode>/v001/03_script.json"),
     art_style_template_path: Path = Path("campaigns/<campaign>/art_direction_template.json"),
     output_path: Path = Path("campaigns/<campaign>/<episode>/v001/03_5_styled_script.json"),
+    *,
+    system_prompt_text: str,
+    user_prompt_text: str,
     model: str = DEFAULT_OLLAMA_MODEL,
-    system_prompt_path: Path | None = None,
-    user_prompt_path: Path | None = None,
     generator: StyleGenerator | None = None,
 ) -> ScriptCheckpoint:
     script = ScriptCheckpoint.model_validate_json(
@@ -177,8 +168,8 @@ def integrate_style(
             script,
             art_template,
             model,
-            system_prompt_path=system_prompt_path,
-            user_prompt_path=user_prompt_path,
+            system_prompt_text=system_prompt_text,
+            user_prompt_text=user_prompt_text,
         )
 
     try:
@@ -252,11 +243,24 @@ def _run_cli() -> None:
     )
 
     args = parser.parse_args()
+    script = ScriptCheckpoint.model_validate_json(Path(args.script_input).read_text(encoding="utf-8"))
+    art_template = _load_art_template(Path(args.art_style_template))
+    system_prompt_text = render_prompt_template(
+        STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME,
+    )
+    user_prompt_text = render_prompt_template(
+        STYLE_INTEGRATOR_USER_PROMPT_FILENAME,
+        art_direction=_format_art_direction(art_template),
+        panels_context=_format_panels_for_prompt(script),
+    )
+
     checkpoint = integrate_style(
         script_checkpoint_path=Path(args.script_input),
         art_style_template_path=Path(args.art_style_template),
         output_path=Path(args.output),
         model=args.model,
+        system_prompt_text=system_prompt_text,
+        user_prompt_text=user_prompt_text,
     )
     print(json.dumps(checkpoint.model_dump(), indent=2, ensure_ascii=False))
 

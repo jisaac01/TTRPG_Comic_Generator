@@ -109,6 +109,8 @@ def test_integrate_style_writes_checkpoint_and_preserves_structure(tmp_path):
         script_checkpoint_path=script_path,
         art_style_template_path=art_path,
         output_path=output_path,
+        system_prompt_text="TEST_SYSTEM_PROMPT",
+        user_prompt_text="TEST_USER_PROMPT",
         generator=lambda _script, _art, _model: _styled_payload(),
     )
 
@@ -127,6 +129,8 @@ def test_integrate_style_rewrites_setting_and_visual_action(tmp_path):
         script_checkpoint_path=script_path,
         art_style_template_path=art_path,
         output_path=output_path,
+        system_prompt_text="TEST_SYSTEM_PROMPT",
+        user_prompt_text="TEST_USER_PROMPT",
         generator=lambda _script, _art, _model: _styled_payload(),
     )
 
@@ -144,6 +148,8 @@ def test_integrate_style_preserves_structural_fields(tmp_path):
         script_checkpoint_path=script_path,
         art_style_template_path=art_path,
         output_path=output_path,
+        system_prompt_text="TEST_SYSTEM_PROMPT",
+        user_prompt_text="TEST_USER_PROMPT",
         generator=lambda _script, _art, _model: _styled_payload(),
     )
 
@@ -167,6 +173,8 @@ def test_integrate_style_url_and_metadata_preserved(tmp_path):
         script_checkpoint_path=script_path,
         art_style_template_path=art_path,
         output_path=output_path,
+        system_prompt_text="TEST_SYSTEM_PROMPT",
+        user_prompt_text="TEST_USER_PROMPT",
         generator=lambda _script, _art, _model: _styled_payload(),
     )
 
@@ -184,6 +192,8 @@ def test_integrate_style_checkpoint_is_valid_json_on_disk(tmp_path):
         script_checkpoint_path=script_path,
         art_style_template_path=art_path,
         output_path=output_path,
+        system_prompt_text="TEST_SYSTEM_PROMPT",
+        user_prompt_text="TEST_USER_PROMPT",
         generator=lambda _script, _art, _model: _styled_payload(),
     )
 
@@ -213,6 +223,8 @@ def test_integrate_style_passes_art_template_to_generator(tmp_path):
         script_checkpoint_path=script_path,
         art_style_template_path=art_path,
         output_path=output_path,
+        system_prompt_text="TEST_SYSTEM_PROMPT",
+        user_prompt_text="TEST_USER_PROMPT",
         model="llama3.1:8b",
         generator=capturing_generator,
     )
@@ -243,6 +255,8 @@ def test_integrate_style_logs_if_generator_returns_extra_panels(tmp_path):
         script_checkpoint_path=script_path,
         art_style_template_path=art_path,
         output_path=output_path,
+        system_prompt_text="TEST_SYSTEM_PROMPT",
+        user_prompt_text="TEST_USER_PROMPT",
         generator=lambda _s, _a, _m: extra_payload,
     )
 
@@ -262,6 +276,8 @@ def test_integrate_style_logs_if_generator_returns_fewer_panels(tmp_path):
         script_checkpoint_path=script_path,
         art_style_template_path=art_path,
         output_path=output_path,
+        system_prompt_text="TEST_SYSTEM_PROMPT",
+        user_prompt_text="TEST_USER_PROMPT",
         generator=lambda _s, _a, _m: short_payload,
     )
 
@@ -294,6 +310,8 @@ def test_integrate_style_logs_partial_failure_and_writes_checkpoint_if_a_panel_i
         script_checkpoint_path=script_path,
         art_style_template_path=art_path,
         output_path=output_path,
+        system_prompt_text="TEST_SYSTEM_PROMPT",
+        user_prompt_text="TEST_USER_PROMPT",
         generator=lambda _s, _a, _m: unchanged_payload,
     )
 
@@ -319,6 +337,8 @@ def test_integrate_style_raises_if_art_template_missing(tmp_path):
             script_checkpoint_path=script_path,
             art_style_template_path=missing_art,
             output_path=output_path,
+            system_prompt_text="TEST_SYSTEM_PROMPT",
+            user_prompt_text="TEST_USER_PROMPT",
             generator=lambda _s, _a, _m: _styled_payload(),
         )
 
@@ -338,6 +358,8 @@ def test_integrate_style_preserves_narrative_overlays(tmp_path):
         script_checkpoint_path=script_path,
         art_style_template_path=art_path,
         output_path=output_path,
+        system_prompt_text="TEST_SYSTEM_PROMPT",
+        user_prompt_text="TEST_USER_PROMPT",
         generator=lambda _script, _art, _model: _styled_payload(),
     )
 
@@ -363,6 +385,8 @@ def test_integrate_style_narrative_overlays_in_output_json(tmp_path):
         script_checkpoint_path=script_path,
         art_style_template_path=art_path,
         output_path=output_path,
+        system_prompt_text="TEST_SYSTEM_PROMPT",
+        user_prompt_text="TEST_USER_PROMPT",
         generator=lambda _script, _art, _model: _styled_payload(),
     )
 

@@ -459,16 +459,28 @@ async def test_first_run_bootstraps_campaign_prompt_templates_and_copies_version
         assert version_prompt.read_text(encoding="utf-8") == campaign_prompt.read_text(encoding="utf-8")
 
     _, architect_kwargs = mock_architect.call_args
-    assert architect_kwargs["system_prompt_path"] == version_dir / "prompts" / MASTER_BEATER_SYSTEM_PROMPT_FILENAME
-    assert architect_kwargs["user_prompt_path"] == version_dir / "prompts" / MASTER_BEATER_USER_PROMPT_FILENAME
+    assert architect_kwargs["system_prompt_text"] == (
+        version_dir / "prompts" / "master_beater_system_FINAL.txt"
+    ).read_text(encoding="utf-8")
+    assert architect_kwargs["user_prompt_text"] == (
+        version_dir / "prompts" / "master_beater_user_FINAL.txt"
+    ).read_text(encoding="utf-8")
 
     _, script_kwargs = mock_script.call_args
-    assert script_kwargs["system_prompt_path"] == version_dir / "prompts" / SCRIPTWRITER_SYSTEM_PROMPT_FILENAME
-    assert script_kwargs["user_prompt_path"] == version_dir / "prompts" / SCRIPTWRITER_USER_PROMPT_FILENAME
+    assert script_kwargs["system_prompt_text"] == (
+        version_dir / "prompts" / "scriptwriter_system_FINAL_page_001.txt"
+    ).read_text(encoding="utf-8")
+    assert script_kwargs["user_prompt_text"] == (
+        version_dir / "prompts" / "scriptwriter_user_FINAL_page_001.txt"
+    ).read_text(encoding="utf-8")
 
     _, style_kwargs = mock_integrate.call_args
-    assert style_kwargs["system_prompt_path"] == version_dir / "prompts" / STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME
-    assert style_kwargs["user_prompt_path"] == version_dir / "prompts" / STYLE_INTEGRATOR_USER_PROMPT_FILENAME
+    assert style_kwargs["system_prompt_text"] == (
+        version_dir / "prompts" / "style_integrator_system_FINAL_page_001.txt"
+    ).read_text(encoding="utf-8")
+    assert style_kwargs["user_prompt_text"] == (
+        version_dir / "prompts" / "style_integrator_user_FINAL_page_001.txt"
+    ).read_text(encoding="utf-8")
 
     _, prompt_kwargs = mock_prompts.call_args
     assert prompt_kwargs["page_prompt_template_path"] == version_dir / "prompts" / PAGE_PROMPT_TEMPLATE_FILENAME
@@ -526,16 +538,28 @@ async def test_explicit_prompt_overrides_are_copied_into_version(tmp_path):
     assert (prompts_dir / PAGE_PROMPT_TEMPLATE_FILENAME).read_text(encoding="utf-8") == "CUSTOM PAGE PROMPT: {panel_count}"
 
     _, architect_kwargs = mock_architect.call_args
-    assert architect_kwargs["system_prompt_path"] == version_dir / "prompts" / MASTER_BEATER_SYSTEM_PROMPT_FILENAME
-    assert architect_kwargs["user_prompt_path"] == version_dir / "prompts" / MASTER_BEATER_USER_PROMPT_FILENAME
+    assert architect_kwargs["system_prompt_text"] == (
+        version_dir / "prompts" / "master_beater_system_FINAL.txt"
+    ).read_text(encoding="utf-8")
+    assert architect_kwargs["user_prompt_text"] == (
+        version_dir / "prompts" / "master_beater_user_FINAL.txt"
+    ).read_text(encoding="utf-8")
 
     _, script_kwargs = mock_script.call_args
-    assert script_kwargs["system_prompt_path"] == version_dir / "prompts" / SCRIPTWRITER_SYSTEM_PROMPT_FILENAME
-    assert script_kwargs["user_prompt_path"] == version_dir / "prompts" / SCRIPTWRITER_USER_PROMPT_FILENAME
+    assert script_kwargs["system_prompt_text"] == (
+        version_dir / "prompts" / "scriptwriter_system_FINAL_page_001.txt"
+    ).read_text(encoding="utf-8")
+    assert script_kwargs["user_prompt_text"] == (
+        version_dir / "prompts" / "scriptwriter_user_FINAL_page_001.txt"
+    ).read_text(encoding="utf-8")
 
     _, style_kwargs = mock_integrate.call_args
-    assert style_kwargs["system_prompt_path"] == version_dir / "prompts" / STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME
-    assert style_kwargs["user_prompt_path"] == version_dir / "prompts" / STYLE_INTEGRATOR_USER_PROMPT_FILENAME
+    assert style_kwargs["system_prompt_text"] == (
+        version_dir / "prompts" / "style_integrator_system_FINAL_page_001.txt"
+    ).read_text(encoding="utf-8")
+    assert style_kwargs["user_prompt_text"] == (
+        version_dir / "prompts" / "style_integrator_user_FINAL_page_001.txt"
+    ).read_text(encoding="utf-8")
 
     _, prompt_kwargs = mock_prompts.call_args
     assert prompt_kwargs["page_prompt_template_path"] == version_dir / "prompts" / PAGE_PROMPT_TEMPLATE_FILENAME

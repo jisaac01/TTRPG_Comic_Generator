@@ -142,6 +142,8 @@ def test_write_script_writes_checkpoint_and_normalizes_panel_indices(tmp_path):
         entities_checkpoint_path=entities_path,
         story_bible_checkpoint_path=architecture_path,
         output_path=output_path,
+        system_prompt_text="TEST_SYSTEM_PROMPT",
+        user_prompt_text="TEST_USER_PROMPT",
         model=DEFAULT_OLLAMA_MODEL,
         generator=fake_generator,
     )
@@ -168,6 +170,8 @@ def test_write_script_accepts_any_panel_count_without_error(tmp_path):
         entities_checkpoint_path=entities_path,
         story_bible_checkpoint_path=architecture_path,
         output_path=tmp_path / "03_script.json",
+        system_prompt_text="TEST_SYSTEM_PROMPT",
+        user_prompt_text="TEST_USER_PROMPT",
         generator=fake_generator,
     )
 
@@ -189,6 +193,8 @@ def test_write_script_logs_continuity_error_and_keeps_output(tmp_path):
         entities_checkpoint_path=entities_path,
         story_bible_checkpoint_path=architecture_path,
         output_path=tmp_path / "03_script.json",
+        system_prompt_text="TEST_SYSTEM_PROMPT",
+        user_prompt_text="TEST_USER_PROMPT",
         generator=fake_generator,
     )
 
@@ -210,6 +216,8 @@ def test_write_script_allows_added_items_between_panels(tmp_path):
         entities_checkpoint_path=entities_path,
         story_bible_checkpoint_path=architecture_path,
         output_path=tmp_path / "03_script.json",
+        system_prompt_text="TEST_SYSTEM_PROMPT",
+        user_prompt_text="TEST_USER_PROMPT",
         generator=fake_generator,
     )
 
@@ -230,6 +238,8 @@ def test_write_script_allows_missing_character_when_inventory_empty(tmp_path):
         entities_checkpoint_path=entities_path,
         story_bible_checkpoint_path=architecture_path,
         output_path=tmp_path / "03_script.json",
+        system_prompt_text="TEST_SYSTEM_PROMPT",
+        user_prompt_text="TEST_USER_PROMPT",
         generator=fake_generator,
     )
 
@@ -250,6 +260,8 @@ def test_write_script_logs_when_missing_character_with_items(tmp_path):
         entities_checkpoint_path=entities_path,
         story_bible_checkpoint_path=architecture_path,
         output_path=tmp_path / "03_script.json",
+        system_prompt_text="TEST_SYSTEM_PROMPT",
+        user_prompt_text="TEST_USER_PROMPT",
         generator=fake_generator,
     )
 
@@ -273,6 +285,8 @@ def test_write_script_preserves_story_bible_info(tmp_path):
         entities_checkpoint_path=entities_path,
         story_bible_checkpoint_path=architecture_path,
         output_path=tmp_path / "03_script.json",
+        system_prompt_text="TEST_SYSTEM_PROMPT",
+        user_prompt_text="TEST_USER_PROMPT",
         generator=fake_generator,
     )
 
@@ -334,6 +348,8 @@ def test_narrative_overlays_preserved_in_checkpoint(tmp_path):
         entities_checkpoint_path=entities_path,
         story_bible_checkpoint_path=architecture_path,
         output_path=tmp_path / "03_script.json",
+        system_prompt_text="TEST_SYSTEM_PROMPT",
+        user_prompt_text="TEST_USER_PROMPT",
         generator=fake_generator,
     )
 
@@ -364,6 +380,8 @@ def test_narrative_overlays_serialized_in_json(tmp_path):
         entities_checkpoint_path=entities_path,
         story_bible_checkpoint_path=architecture_path,
         output_path=output_path,
+        system_prompt_text="TEST_SYSTEM_PROMPT",
+        user_prompt_text="TEST_USER_PROMPT",
         generator=fake_generator,
     )
 

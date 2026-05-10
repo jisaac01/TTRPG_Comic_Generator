@@ -45,6 +45,7 @@ def _save_prompt_template(
 
 def prepare_beater_prompts(
     version_dir: Path,
+    content: str,
     world: WorldStateCheckpoint,
     scene_count: int,
     raw_quotes: list[dict[str, str | None]] | None = None,
@@ -69,7 +70,7 @@ def prepare_beater_prompts(
         "scene_count": scene_count,
         "entities_context": _format_entities_for_prompt(world),
         "reference_quotes": _format_quotes_for_prompt(raw_quotes),
-        "story_text": "<story_text_omitted_for_brevity>",
+        "story_text": content,
     }
 
     # Render prompts
