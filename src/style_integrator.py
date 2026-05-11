@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
 from pydantic import BaseModel, Field
 
-from model_defaults import DEFAULT_OLLAMA_MODEL
+from llm_client import build_instructor_client
+from model_defaults import DEFAULT_MODEL
 from prompter import (
     ART_DIRECTION_TEMPLATE_FIELDS,
     _format_art_direction,
@@ -20,7 +20,7 @@ from prompt_templates import (
     STYLE_INTEGRATOR_USER_PROMPT_FILENAME,
     render_prompt_template,
 )
-from scriptwriter import Panel, ScriptCheckpoint
+from scriptwriter import Page, Panel, ScriptCheckpoint
 
 
 class StyleIntegrationPartialFailure(ValueError):
@@ -61,14 +61,8 @@ def _format_panels_for_prompt(script: ScriptCheckpoint) -> str:
     return json.dumps(panel_payload, indent=2, ensure_ascii=False)
 
 
-def _build_instructor_client():
-    import instructor
-    from openai import OpenAI
-
-    base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
-    api_key = os.getenv("OLLAMA_API_KEY", "ollama")
-    openai_client = OpenAI(base_url=base_url, api_key=api_key)
-    return instructor.from_openai(openai_client, mode=instructor.Mode.JSON)
+def _build_instructor_client(model: str):
+    return build_instructor_client(model)
 
 
 def _generate_with_instructor_ollama(
@@ -78,7 +72,7 @@ def _generate_with_instructor_ollama(
     system_prompt_text: str,
     user_prompt_text: str,
 ) -> StyledScriptPayload:
-    client = _build_instructor_client()
+    client = _build_instructor_client(model)
     system_prompt = system_prompt_text
     user_prompt = user_prompt_text
 
@@ -128,10 +122,11 @@ def _normalize_panels_from_source(
 ) -> list[Panel]:
     """Rebuild panels, preserving source structure and only replacing styled prose."""
     normalized: list[Panel] = []
-    for idx, (source, styled) in enumerate(zip(source_panels, styled_panels), start=1):
+    for source, styled in zip(source_panels, styled_panels):
         normalized.append(
             Panel(
-                index=idx,
+                index=source.index,
+                page_number=source.page_number,
                 panel_scale=source.panel_scale,
                 panel_shape=source.panel_shape,
                 setting=styled.setting,
@@ -145,6 +140,21 @@ def _normalize_panels_from_source(
     return normalized
 
 
+def _rebuild_pages_from_panels(source_script: ScriptCheckpoint, panels: list[Panel]) -> list[Page]:
+    panels_by_page = {
+        page.page_number: [panel for panel in panels if panel.page_number == page.page_number]
+        for page in source_script.pages
+    }
+    return [
+        Page(
+            page_number=page.page_number,
+            panel_count=len(panels_by_page[page.page_number]),
+            panels=panels_by_page[page.page_number],
+        )
+        for page in source_script.pages
+    ]
+
+
 def integrate_style(
     script_checkpoint_path: Path = Path("campaigns/<campaign>/<episode>/v001/03_script.json"),
     art_style_template_path: Path = Path("campaigns/<campaign>/art_direction_template.json"),
@@ -152,7 +162,7 @@ def integrate_style(
     *,
     system_prompt_text: str,
     user_prompt_text: str,
-    model: str = DEFAULT_OLLAMA_MODEL,
+    model: str = DEFAULT_MODEL,
     generator: StyleGenerator | None = None,
 ) -> ScriptCheckpoint:
     script = ScriptCheckpoint.model_validate_json(
@@ -196,6 +206,7 @@ def integrate_style(
         )
 
     panels = _normalize_panels_from_source(styled_panels, script.panels)
+    pages = _rebuild_pages_from_panels(script, panels)
 
     checkpoint = ScriptCheckpoint(
         url=script.url,
@@ -203,7 +214,8 @@ def integrate_style(
         author=script.author,
         model=model,
         panel_count=len(panels),
-        panels=panels,
+        total_pages=script.total_pages,
+        pages=pages,
         generation_errors=generation_errors,
         scripted_at=datetime.now(timezone.utc).isoformat(),
     )
@@ -238,7 +250,7 @@ def _run_cli() -> None:
     )
     parser.add_argument(
         "--model",
-        default=DEFAULT_OLLAMA_MODEL,
+        default=DEFAULT_MODEL,
         help="Ollama model name",
     )
 

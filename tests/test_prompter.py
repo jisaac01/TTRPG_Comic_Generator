@@ -7,7 +7,7 @@ import pytest
 sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
 import prompter
-from model_defaults import DEFAULT_OLLAMA_MODEL
+from model_defaults import DEFAULT_MODEL
 
 
 def _write_inputs(tmp_path: Path) -> tuple[Path, Path, Path]:
@@ -15,7 +15,7 @@ def _write_inputs(tmp_path: Path) -> tuple[Path, Path, Path]:
         "url": "https://example.test/story",
         "title": "Swamp Trouble",
         "author": "GM",
-        "model": DEFAULT_OLLAMA_MODEL,
+        "model": DEFAULT_MODEL,
         "player_characters": [
             {
                 "name": "Del",
@@ -52,7 +52,7 @@ def _write_inputs(tmp_path: Path) -> tuple[Path, Path, Path]:
         "url": "https://example.test/story",
         "title": "Swamp Trouble",
         "author": "GM",
-        "model": DEFAULT_OLLAMA_MODEL,
+        "model": DEFAULT_MODEL,
         "panel_count": 2,
         "panels": [
             {

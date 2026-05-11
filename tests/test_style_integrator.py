@@ -7,8 +7,8 @@ import pytest
 sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
 import style_integrator
-from model_defaults import DEFAULT_OLLAMA_MODEL
-from scriptwriter import Panel, ScriptCheckpoint
+from model_defaults import DEFAULT_MODEL
+from scriptwriter import Page, Panel, ScriptCheckpoint
 
 
 # ---------------------------------------------------------------------------
@@ -31,39 +31,48 @@ def _write_script_checkpoint(tmp_path: Path) -> Path:
         url="https://example.test/story",
         title="Swamp Trouble",
         author="GM",
-        model=DEFAULT_OLLAMA_MODEL,
+        model=DEFAULT_MODEL,
         panel_count=2,
-        panels=[
-            Panel(
-                index=1,
-                panel_scale="large",
-                panel_shape="wide",
-                setting="Marsh edge at dusk",
-                visual_action="A shark flops on the ground while Del watches.",
-                dialogue_overlay=["Del: What is that?"],
-                held_items_before={"Del": []},
-                held_items_after={"Del": []},
-                narrative_overlays_and_text_direction=[
-                    "CAPTION: The marsh was still.",
-                    "CHYRON: Swamp, Dusk",
-                    "SFX: SPLASH",
-                    "SFX: FLOP",
+        total_pages=1,
+        pages=[
+            Page(
+                page_number=1,
+                panel_count=2,
+                panels=[
+                    Panel(
+                        index=1,
+                        page_number=1,
+                        panel_scale="large",
+                        panel_shape="wide",
+                        setting="Marsh edge at dusk",
+                        visual_action="A shark flops on the ground while Del watches.",
+                        dialogue_overlay=["Del: What is that?"],
+                        held_items_before={"Del": []},
+                        held_items_after={"Del": []},
+                        narrative_overlays_and_text_direction=[
+                            "CAPTION: The marsh was still.",
+                            "CHYRON: Swamp, Dusk",
+                            "SFX: SPLASH",
+                            "SFX: FLOP",
+                        ],
+                    ),
+                    Panel(
+                        index=2,
+                        page_number=1,
+                        panel_scale="medium",
+                        panel_shape="standard",
+                        setting="Narrow path between reeds",
+                        visual_action="Vendetta prods the shark with a stick.",
+                        dialogue_overlay=["Vendetta: It's still alive."],
+                        held_items_before={"Vendetta": []},
+                        held_items_after={"Vendetta": ["stick"]},
+                        narrative_overlays_and_text_direction=[
+                            "V.O.: Del (V.O.): Impossible creatures...",
+                            "SFX: POKE",
+                        ],
+                    ),
                 ],
-            ),
-            Panel(
-                index=2,
-                panel_scale="medium",
-                panel_shape="standard",
-                setting="Narrow path between reeds",
-                visual_action="Vendetta prods the shark with a stick.",
-                dialogue_overlay=["Vendetta: It's still alive."],
-                held_items_before={"Vendetta": []},
-                held_items_after={"Vendetta": ["stick"]},
-                narrative_overlays_and_text_direction=[
-                    "V.O.: Del (V.O.): Impossible creatures...",
-                    "SFX: POKE",
-                ],
-            ),
+            )
         ],
         scripted_at="2026-05-04T00:00:00+00:00",
     )
@@ -199,7 +208,7 @@ def test_integrate_style_checkpoint_is_valid_json_on_disk(tmp_path):
 
     payload = json.loads(output_path.read_text(encoding="utf-8"))
     assert payload["panel_count"] == 2
-    assert payload["panels"][0]["setting"] == "A scribbly marsh edge at wobbly dusk"
+    assert payload["pages"][0]["panels"][0]["setting"] == "A scribbly marsh edge at wobbly dusk"
 
 
 # ---------------------------------------------------------------------------
@@ -391,14 +400,14 @@ def test_integrate_style_narrative_overlays_in_output_json(tmp_path):
     )
 
     payload = json.loads(output_path.read_text(encoding="utf-8"))
-    
-    assert payload["panels"][0]["narrative_overlays_and_text_direction"] == [
+
+    assert payload["pages"][0]["panels"][0]["narrative_overlays_and_text_direction"] == [
         "CAPTION: The marsh was still.",
         "CHYRON: Swamp, Dusk",
         "SFX: SPLASH",
         "SFX: FLOP",
     ]
-    assert payload["panels"][1]["narrative_overlays_and_text_direction"] == [
+    assert payload["pages"][0]["panels"][1]["narrative_overlays_and_text_direction"] == [
         "V.O.: Del (V.O.): Impossible creatures...",
         "SFX: POKE",
     ]

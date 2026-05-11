@@ -10,7 +10,8 @@ from typing import Callable
 from pydantic import BaseModel, Field
 
 from entities import StoryBeat, WorldStateCheckpoint
-from model_defaults import DEFAULT_OLLAMA_MODEL
+from llm_client import build_openai_client
+from model_defaults import DEFAULT_MODEL
 from prompt_templates import (
     MASTER_BEATER_SYSTEM_PROMPT_FILENAME,
     MASTER_BEATER_USER_PROMPT_FILENAME,
@@ -78,12 +79,8 @@ def _format_quotes_for_prompt(quotes: list[dict[str, str | None]] | None = None)
     return "\n".join(quote_lines) or "- none"
 
 
-def _build_instructor_client():
-    from openai import OpenAI
-
-    base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
-    api_key = os.getenv("OLLAMA_API_KEY", "ollama")
-    return OpenAI(base_url=base_url, api_key=api_key)
+def _build_instructor_client(model: str):
+    return build_openai_client(model)
 
 
 def _generate_with_ollama(
@@ -97,7 +94,7 @@ def _generate_with_ollama(
     quotes: list[dict[str, str | None]] | None = None,
 ) -> str:
     """Generate story bible via LLM. Returns the raw text output (not parsed)."""
-    client = _build_instructor_client()
+    client = _build_instructor_client(model)
 
     system_prompt = system_prompt_text
     user_prompt = user_prompt_text
@@ -122,7 +119,7 @@ def create_story_bible(
     *,
     system_prompt_text: str,
     user_prompt_text: str,
-    model: str = DEFAULT_OLLAMA_MODEL,
+    model: str = DEFAULT_MODEL,
     scene_count: int = 6,
     total_pages: int = 1,
     generator: StoryBibleGenerator | None = None,
@@ -222,7 +219,7 @@ def _run_cli() -> None:
     )
     parser.add_argument(
         "--model",
-        default=DEFAULT_OLLAMA_MODEL,
+        default=DEFAULT_MODEL,
         help="Ollama model name",
     )
     parser.add_argument(

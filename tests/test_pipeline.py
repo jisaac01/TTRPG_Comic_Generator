@@ -12,7 +12,7 @@ import pytest
 sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
 import entities
-from model_defaults import DEFAULT_OLLAMA_MODEL
+from model_defaults import DEFAULT_MODEL
 from prompter import DEFAULT_ART_DIRECTION_TEMPLATE_PATH
 from prompt_templates import (
     DEFAULT_PROMPTS_DIR,
@@ -61,7 +61,7 @@ _WORLD_CHECKPOINT = entities.WorldStateCheckpoint(
     url="https://example.test/story",
     title="Dreadmarsh Crossing",
     author="GM",
-    model=DEFAULT_OLLAMA_MODEL,
+    model=DEFAULT_MODEL,
     player_characters=[
         entities.Character(
             name="Del",
@@ -89,7 +89,7 @@ _SCRIPT_CHECKPOINT = scriptwriter.ScriptCheckpoint(
     url="https://example.test/story",
     title="Dreadmarsh Crossing",
     author="GM",
-    model=DEFAULT_OLLAMA_MODEL,
+    model=DEFAULT_MODEL,
     panel_count=2,
     panels=[
         scriptwriter.Panel(
@@ -130,7 +130,7 @@ _STORY_BIBLE_CHECKPOINT = master_beater.StoryBibleCheckpoint(
     url="https://example.test/story",
     title="Dreadmarsh Crossing",
     author="GM",
-    model=DEFAULT_OLLAMA_MODEL,
+    model=DEFAULT_MODEL,
     scene_count=2,
     story_bible="""Scene 1:
 Del the Druid raises her torch as she and Vendetta stand at the edge of Dreadmarsh. The path ahead winds through reeds taller than a person, their silhouettes ghostly in the dusk light. Del's voice is steady but urgent. \"Keep moving. We need to reach the far bank before full dark.\"
@@ -147,7 +147,7 @@ _STYLED_SCRIPT_CHECKPOINT = scriptwriter.ScriptCheckpoint(
     url="https://example.test/story",
     title="Dreadmarsh Crossing",
     author="GM",
-    model=DEFAULT_OLLAMA_MODEL,
+    model=DEFAULT_MODEL,
     panel_count=2,
     panels=[
         scriptwriter.Panel(
@@ -593,7 +593,7 @@ async def test_first_run_result_contains_model_dump_dicts(tmp_path):
     assert isinstance(result["page_prompt"], dict)
     assert result["errors"] == []
     assert _checkpoint_dict(result, "raw_text")["url"] == "https://example.test/story"
-    assert _checkpoint_dict(result, "entities")["model"] == DEFAULT_OLLAMA_MODEL
+    assert _checkpoint_dict(result, "entities")["model"] == DEFAULT_MODEL
 
 
 @pytest.mark.asyncio

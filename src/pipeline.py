@@ -14,13 +14,11 @@ from entities import (
     WorldStateCheckpoint,
     build_entities_from_raw,
 )
-from model_defaults import DEFAULT_OLLAMA_MODEL
+from model_defaults import DEFAULT_MODEL
 from prompter import (
     ART_DIRECTION_TEMPLATE_FILENAME,
     DEFAULT_ART_DIRECTION_TEMPLATE_PATH,
     _load_art_template,
-    generate_page_prompt,
-    generate_page_prompts,
 )
 from prompt_saver import (
     prepare_beater_prompts,
@@ -312,10 +310,10 @@ class ComicPipeline:
         url: str,
         campaign: str,
         campaigns_root: Path = CAMPAIGNS_ROOT,
-        analysis_model: str = DEFAULT_OLLAMA_MODEL,
-        beater_model: str = DEFAULT_OLLAMA_MODEL,
-        script_model: str = DEFAULT_OLLAMA_MODEL,
-        style_model: str = DEFAULT_OLLAMA_MODEL,
+        analysis_model: str = DEFAULT_MODEL,
+        beater_model: str = DEFAULT_MODEL,
+        script_model: str = DEFAULT_MODEL,
+        style_model: str = DEFAULT_MODEL,
         panel_count: int = 6,
         total_pages: int = 1,
         art_style_template: Path | None = None,
@@ -770,7 +768,7 @@ class ComicPipeline:
                         start=1,
                     ):
                         try:
-                            prepare_page_prompt_template(
+                            prompt_text = prepare_page_prompt_template(
                                 version_dir=version_dir,
                                 world=entities,
                                 script=prompt_script,
@@ -780,16 +778,11 @@ class ComicPipeline:
                             )
                         except Exception as exc:
                             print(f"      ...WARNING (failed to save interpolated page {page_number} prompt template): {exc}")
+                            continue
 
-                        page_prompts.extend(
-                            generate_page_prompts(
-                                script_checkpoint_path=prompt_script_path,
-                                entities_checkpoint_path=entities_path,
-                                art_style_template_path=template_path,
-                                output_dir=version_dir,
-                                page_prompt_template_path=prompt_template_paths[PAGE_PROMPT_TEMPLATE_FILENAME],
-                            )
-                        )
+                        page_output_path = version_dir / f"04_page_{page_number}_prompt.txt"
+                        page_output_path.write_text(prompt_text, encoding="utf-8")
+                        page_prompts.append((page_output_path, prompt_text))
 
                     if page_prompts:
                         page_prompt = page_prompts[0][1]  # First page's prompt for backward compat
@@ -843,19 +836,24 @@ async def _run_cli() -> None:
         help="Root directory for all campaign data (default: campaigns/)",
     )
     parser.add_argument(
+        "--model",
+        default=DEFAULT_MODEL,
+        help="Model name used for all stages (default: %(default)s). Override per-stage with --beater-model, --script-model, --style-model.",
+    )
+    parser.add_argument(
         "--beater-model",
-        default=DEFAULT_OLLAMA_MODEL,
-        help="Ollama model name used for Phase 3 story bible creation",
+        default=None,
+        help="Model name for Phase 3 story bible creation (overrides --model)",
     )
     parser.add_argument(
         "--script-model",
-        default=DEFAULT_OLLAMA_MODEL,
-        help="Ollama model name used for Phase 4 scripting",
+        default=None,
+        help="Model name for Phase 4 scripting (overrides --model)",
     )
     parser.add_argument(
         "--style-model",
-        default=DEFAULT_OLLAMA_MODEL,
-        help="Ollama model name used for Phase 4.5 art style integration",
+        default=None,
+        help="Model name for Phase 4.5 art style integration (overrides --model)",
     )
     parser.add_argument(
         "--panel-count",
@@ -975,9 +973,9 @@ async def _run_cli() -> None:
         url=args.url,
         campaign=args.campaign,
         campaigns_root=Path(args.campaigns_root),
-        beater_model=args.beater_model,
-        script_model=args.script_model,
-        style_model=args.style_model,
+        beater_model=args.beater_model or args.model,
+        script_model=args.script_model or args.model,
+        style_model=args.style_model or args.model,
         panel_count=args.panel_count,
         total_pages=args.total_pages,
         art_style_template=Path(args.art_style_template) if args.art_style_template else None,

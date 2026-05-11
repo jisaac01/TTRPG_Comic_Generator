@@ -5,7 +5,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
 import master_beater
-from model_defaults import DEFAULT_OLLAMA_MODEL
+from model_defaults import DEFAULT_MODEL
 
 
 def _write_input_checkpoints(tmp_path: Path) -> tuple[Path, Path]:
@@ -27,7 +27,7 @@ def _write_input_checkpoints(tmp_path: Path) -> tuple[Path, Path]:
         "url": "https://example.test/story",
         "title": "Swamp Trouble",
         "author": "GM",
-        "model": DEFAULT_OLLAMA_MODEL,
+        "model": DEFAULT_MODEL,
         "player_characters": [
             {
                 "name": "Del",
@@ -75,7 +75,7 @@ def test_create_story_bible_writes_checkpoint_with_text_content(tmp_path):
         assert "torch" in raw_content
         assert world.title == "Swamp Trouble"
         assert scene_count == 2
-        assert model == DEFAULT_OLLAMA_MODEL
+        assert model == DEFAULT_MODEL
         # Return a simple text-based story bible
         return """Scene 1:
 The party enters the marsh at dusk. Del leads them through the foggy trail lined with reeds, warning "Stay close to me." The atmosphere is tense as darkness falls and unknown dangers lurk in the mist.
@@ -89,7 +89,7 @@ Del lights a torch to guide the group through the narrow marsh path. The firelig
         output_path=output_path,
         system_prompt_text="TEST_SYSTEM_PROMPT",
         user_prompt_text="TEST_USER_PROMPT",
-        model=DEFAULT_OLLAMA_MODEL,
+        model=DEFAULT_MODEL,
         scene_count=2,
         generator=fake_generator,
     )
@@ -123,7 +123,7 @@ Continuation scene."""
         output_path=output_path,
         system_prompt_text="TEST_SYSTEM_PROMPT",
         user_prompt_text="TEST_USER_PROMPT",
-        model=DEFAULT_OLLAMA_MODEL,
+        model=DEFAULT_MODEL,
         scene_count=2,
         generator=fake_generator,
     )
@@ -159,7 +159,7 @@ def test_story_bible_checkpoint_validates_text_field(tmp_path):
         url="https://example.test/story",
         title="Test Story",
         author="Test Author",
-        model=DEFAULT_OLLAMA_MODEL,
+        model=DEFAULT_MODEL,
         scene_count=2,
         story_bible="Scene 1:\nText\n\nScene 2:\nMore text",
         generation_errors=[],

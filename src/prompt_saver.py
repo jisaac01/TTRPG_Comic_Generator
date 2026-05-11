@@ -102,6 +102,8 @@ def prepare_scriptwriter_prompts(
     story_bible: StoryBibleCheckpoint,
     system_prompt_path: Path | None = None,
     user_prompt_path: Path | None = None,
+    *,
+    output_suffix: str,
 ) -> tuple[str, str]:
     """Prepare and save scriptwriter prompts before model call.
     
@@ -131,12 +133,15 @@ def prepare_scriptwriter_prompts(
         story_bible=_format_story_bible_for_prompt(story_bible),
     )
 
-    (prompts_dir / f"{SCRIPTWRITER_SYSTEM_PROMPT_FILENAME.replace('.txt', '')}_FINAL.txt").write_text(
-        system_prompt, encoding="utf-8"
+    system_final_stem = (
+        f"{SCRIPTWRITER_SYSTEM_PROMPT_FILENAME.replace('.txt', '')}_FINAL_{output_suffix}"
     )
-    (prompts_dir / f"{SCRIPTWRITER_USER_PROMPT_FILENAME.replace('.txt', '')}_FINAL.txt").write_text(
-        user_prompt, encoding="utf-8"
+    user_final_stem = (
+        f"{SCRIPTWRITER_USER_PROMPT_FILENAME.replace('.txt', '')}_FINAL_{output_suffix}"
     )
+
+    (prompts_dir / f"{system_final_stem}.txt").write_text(system_prompt, encoding="utf-8")
+    (prompts_dir / f"{user_final_stem}.txt").write_text(user_prompt, encoding="utf-8")
 
     return system_prompt, user_prompt
 
@@ -147,6 +152,8 @@ def prepare_style_integrator_prompts(
     art_template: dict[str, str],
     system_prompt_path: Path | None = None,
     user_prompt_path: Path | None = None,
+    *,
+    output_suffix: str,
 ) -> tuple[str, str]:
     """Prepare and save style integrator prompts before model call.
     
@@ -172,12 +179,15 @@ def prepare_style_integrator_prompts(
         panels_context=_format_panels_for_prompt(script),
     )
 
-    (prompts_dir / f"{STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME.replace('.txt', '')}_FINAL.txt").write_text(
-        system_prompt, encoding="utf-8"
+    system_final_stem = (
+        f"{STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME.replace('.txt', '')}_FINAL_{output_suffix}"
     )
-    (prompts_dir / f"{STYLE_INTEGRATOR_USER_PROMPT_FILENAME.replace('.txt', '')}_FINAL.txt").write_text(
-        user_prompt, encoding="utf-8"
+    user_final_stem = (
+        f"{STYLE_INTEGRATOR_USER_PROMPT_FILENAME.replace('.txt', '')}_FINAL_{output_suffix}"
     )
+
+    (prompts_dir / f"{system_final_stem}.txt").write_text(system_prompt, encoding="utf-8")
+    (prompts_dir / f"{user_final_stem}.txt").write_text(user_prompt, encoding="utf-8")
 
     return system_prompt, user_prompt
 
@@ -188,6 +198,8 @@ def prepare_page_prompt_template(
     script: ScriptCheckpoint,
     art_template: dict[str, str],
     template_path: Path | None = None,
+    *,
+    output_suffix: str,
 ) -> str:
     """Prepare and save page prompt template before generation.
     
@@ -216,9 +228,11 @@ def prepare_page_prompt_template(
         panel_block=panel_block,
     )
 
-    (prompts_dir / f"{PAGE_PROMPT_TEMPLATE_FILENAME.replace('.txt', '')}_FINAL.txt").write_text(
-        prompt_text, encoding="utf-8"
+    final_filename_stem = (
+        f"{PAGE_PROMPT_TEMPLATE_FILENAME.replace('.txt', '')}_FINAL_{output_suffix}"
     )
+
+    (prompts_dir / f"{final_filename_stem}.txt").write_text(prompt_text, encoding="utf-8")
 
     return prompt_text
 

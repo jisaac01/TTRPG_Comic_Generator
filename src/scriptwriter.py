@@ -11,7 +11,8 @@ from typing import Callable, Literal, cast
 from pydantic import BaseModel, ConfigDict, Field
 
 from entities import Character, Location, StoryBeat
-from model_defaults import DEFAULT_OLLAMA_MODEL
+from llm_client import build_instructor_client
+from model_defaults import DEFAULT_MODEL
 from prompt_templates import (
     SCRIPTWRITER_SYSTEM_PROMPT_FILENAME,
     SCRIPTWRITER_USER_PROMPT_FILENAME,
@@ -90,14 +91,8 @@ ScriptGenerator = Callable[[WorldStateInput, StoryBibleCheckpoint, str], ScriptP
 SCENE_HEADER_RE = re.compile(r"(?m)^Scene\s+(\d+):")
 
 
-def _build_instructor_client():
-    import instructor
-    from openai import OpenAI
-
-    base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
-    api_key = os.getenv("OLLAMA_API_KEY", "ollama")
-    openai_client = OpenAI(base_url=base_url, api_key=api_key)
-    return instructor.from_openai(openai_client, mode=instructor.Mode.JSON)
+def _build_instructor_client(model: str):
+    return build_instructor_client(model)
 
 
 def _format_entities_for_prompt(world: WorldStateInput) -> str:
@@ -327,10 +322,9 @@ def _generate_with_instructor_ollama(
     system_prompt_text: str,
     user_prompt_text: str,
 ) -> ScriptPayload:
-    client = _build_instructor_client()
+    client = _build_instructor_client(model)
     system_prompt = system_prompt_text
     user_prompt = user_prompt_text
-
     return client.chat.completions.create(
         model=model,
         temperature=0.7,
@@ -441,7 +435,7 @@ def write_script(
     *,
     system_prompt_text: str,
     user_prompt_text: str,
-    model: str = DEFAULT_OLLAMA_MODEL,
+    model: str = DEFAULT_MODEL,
     total_pages: int = 1,
     generator: ScriptGenerator | None = None,
 ) -> ScriptCheckpoint:
@@ -579,7 +573,7 @@ def _run_cli() -> None:
     )
     parser.add_argument(
         "--model",
-        default=DEFAULT_OLLAMA_MODEL,
+        default=DEFAULT_MODEL,
         help="Ollama model name",
     )
     args = parser.parse_args()
