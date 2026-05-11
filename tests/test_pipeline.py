@@ -1171,6 +1171,37 @@ async def test_script_model_and_panel_count_forwarded(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_beater_prompt_uses_total_scene_count(tmp_path):
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=2,
+        total_pages=3,
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT) as mock_architect,
+        patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
+        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT),
+    ):
+        result = await pipeline.run()
+
+    _, architect_kwargs = mock_architect.call_args
+    assert architect_kwargs.get("scene_count") == 6
+
+    version_dir = _version_dir_from_result(result)
+    rendered_prompt = (version_dir / "prompts" / "master_beater_user_FINAL.txt").read_text(
+        encoding="utf-8"
+    )
+    assert "Target scene count: 6" in rendered_prompt
+    assert "Break the story into exactly 6 scenes." in rendered_prompt
+
+
+@pytest.mark.asyncio
 async def test_style_model_forwarded(tmp_path):
     pipeline = ComicPipeline(
         url="https://example.test/story",

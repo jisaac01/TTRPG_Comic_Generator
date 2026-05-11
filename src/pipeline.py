@@ -581,8 +581,9 @@ class ComicPipeline:
                 story_bible_path.read_text(encoding="utf-8")
             )
         else:
+            scene_count = self.total_pages * self.panel_count
             print(
-                f"[3/5] Creating story bible...  (model: {self.beater_model}, scenes: {self.panel_count})"
+                f"[3/5] Creating story bible...  (model: {self.beater_model}, scenes: {scene_count})"
             )
             # Prepare and save prompts before model call.
             # The exact rendered strings are also the ones sent to the model.
@@ -590,7 +591,7 @@ class ComicPipeline:
                 version_dir=version_dir,
                 content=raw.content,
                 world=entities,
-                scene_count=self.panel_count,
+                scene_count=scene_count,
                 raw_quotes=[
                     {"text": quote.text, "attribution": quote.attribution}
                     for quote in raw.quotes
@@ -599,8 +600,6 @@ class ComicPipeline:
                 user_prompt_path=prompt_template_paths[MASTER_BEATER_USER_PROMPT_FILENAME],
             )
             try:
-                # scene_count = total_pages * panels_per_page
-                scene_count = self.total_pages * self.panel_count
                 story_bible = create_story_bible(
                     raw_checkpoint_path=raw_path,
                     entities_checkpoint_path=entities_path,
