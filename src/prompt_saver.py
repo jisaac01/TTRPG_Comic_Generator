@@ -103,6 +103,7 @@ def prepare_scriptwriter_prompts(
     system_prompt_path: Path | None = None,
     user_prompt_path: Path | None = None,
     *,
+    page_number: int,
     output_suffix: str,
 ) -> tuple[str, str]:
     """Prepare and save scriptwriter prompts before model call.
@@ -119,6 +120,13 @@ def prepare_scriptwriter_prompts(
 
     title = world.title or "Untitled story"
     entities_context = _format_entities_for_prompt(world)
+    first_page_panel_1_narration_directive = (
+        "For page 1 only: Include a CAPTION narration entry in "
+        "narrative_overlays_and_text_direction for panel index 1 to quickly bring readers up to speed. "
+        "Do not apply this requirement to any other panel."
+        if page_number == 1
+        else ""
+    )
 
     system_prompt = render_prompt_template(
         SCRIPTWRITER_SYSTEM_PROMPT_FILENAME,
@@ -131,6 +139,7 @@ def prepare_scriptwriter_prompts(
         panel_count=story_bible.scene_count,
         entities_context=entities_context,
         story_bible=_format_story_bible_for_prompt(story_bible),
+        first_page_panel_1_narration_directive=first_page_panel_1_narration_directive,
     )
 
     system_final_stem = (

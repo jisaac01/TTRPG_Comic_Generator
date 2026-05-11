@@ -36,6 +36,7 @@ from pipeline import (
     _next_version_name,
     _slugify,
 )
+from prompt_saver import prepare_scriptwriter_prompts
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -256,6 +257,39 @@ def test_slugify_empty_title():
 
 def test_slugify_special_chars():
     assert _slugify("The—Dark & Twisted Fen") == "the-dark-twisted-fen"
+
+
+def test_prepare_scriptwriter_prompts_adds_first_page_directive_only_on_page_one(tmp_path):
+    version_dir = tmp_path / "v001"
+    world = scriptwriter.WorldStateInput(
+        url="https://example.test/story",
+        title="Dreadmarsh Crossing",
+        author="GM",
+        model=DEFAULT_MODEL,
+        player_characters=_WORLD_CHECKPOINT.player_characters,
+        npcs=_WORLD_CHECKPOINT.npcs,
+        locations=_WORLD_CHECKPOINT.locations,
+        beats=_WORLD_CHECKPOINT.beats,
+        analyzed_at=_WORLD_CHECKPOINT.analyzed_at,
+    )
+
+    _, first_page_user_prompt = prepare_scriptwriter_prompts(
+        version_dir=version_dir,
+        world=world,
+        story_bible=_STORY_BIBLE_CHECKPOINT,
+        page_number=1,
+        output_suffix="page_001",
+    )
+    _, second_page_user_prompt = prepare_scriptwriter_prompts(
+        version_dir=version_dir,
+        world=world,
+        story_bible=_STORY_BIBLE_CHECKPOINT,
+        page_number=2,
+        output_suffix="page_002",
+    )
+
+    assert "For page 1 only: Include a CAPTION narration entry" in first_page_user_prompt
+    assert "For page 1 only: Include a CAPTION narration entry" not in second_page_user_prompt
 
 
 # ---------------------------------------------------------------------------

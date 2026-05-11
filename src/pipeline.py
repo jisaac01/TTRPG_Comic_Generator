@@ -655,6 +655,7 @@ class ComicPipeline:
                             story_bible=story_bible_page,
                             system_prompt_path=prompt_template_paths[SCRIPTWRITER_SYSTEM_PROMPT_FILENAME],
                             user_prompt_path=prompt_template_paths[SCRIPTWRITER_USER_PROMPT_FILENAME],
+                            page_number=page_number,
                             output_suffix=f"page_{page_number:03d}",
                         )
 

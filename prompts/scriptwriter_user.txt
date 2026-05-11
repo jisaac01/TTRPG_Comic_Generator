@@ -2,6 +2,8 @@ Story title: {title}
 
 Write exactly {panel_count} story panels.
 
+{first_page_panel_1_narration_directive}
+
 Important: Story architecture is a junk drawer. It's up to you to craft it into a narrative.
 Use narrative_overlays_and_text_direction sparingly (often empty). Only include entries when they materially help storytelling or readability.
 When used, each entry should be a single prefixed string such as:

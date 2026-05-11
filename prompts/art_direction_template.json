@@ -2,7 +2,7 @@
   "base_style": "Brutalist, hand-inked graphic novel aesthetic. High contrast, Gothic shadows, heavy ink washes, grainy texture.",
   "characters": "Consistent, iconic character designs rendered in bold ink lines and heavy cross-hatching. Expressive silhouettes, stark facial features, and dramatic chiaroscuro shading. All characters maintain the same visual identity and costume details across every panel.",
   "color_palette": "Black and white only. No color.",
-  "layout_and_composition": "One single comic page image containing all panels in order, with clear gutters and consistent character design across panels.",
+  "layout_and_composition": "One single comic page image containing all panels in order, with clear gutters and consistent character design across panels. Vertical layout.",
   "lettering_and_dialog": "Lettering should feel hand-drawn, legible, and integrated with the page composition.",
   "text_rendering_guide": "Dialogue: hand-drawn rounded speech balloons with variable line weight. Captions: black rectangular boxes with white text, positioned bottom-left when present. Voice Over: shaded/faded oval bubbles, top-right corner, subtle and background. Chyrons: white text on black horizontal bar, bottom-center, minimal spacing. Sound Effects: jagged burst shapes with bold, expressive lettering."
 }

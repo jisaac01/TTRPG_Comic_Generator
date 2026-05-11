@@ -593,6 +593,11 @@ def _run_cli() -> None:
         panel_count=story_bible.scene_count,
         entities_context=entities_context,
         story_bible=_format_story_bible_for_prompt(story_bible),
+        first_page_panel_1_narration_directive=(
+            "For page 1 only: Include a CAPTION narration entry in "
+            "narrative_overlays_and_text_direction for panel index 1 to quickly bring readers up to speed. "
+            "Do not apply this requirement to any other panel."
+        ),
     )
 
     checkpoint = write_script(
