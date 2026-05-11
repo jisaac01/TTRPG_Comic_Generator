@@ -1,9 +1,13 @@
+{title}
+
 {art_direction}
 
 Style enforcement: Apply the provided art direction uniformly across every panel; do not let any panel drift into a generic default rendering style.
+Do not render the words "Caption", "V.O.", "Chyron", or "SFX"; these are panel elements not content. 
 
 Output goal: one single comic page image containing all panels below in order.
 Character details (apply to every panel): {character_details}
+{page_elements_instruction}
 
 Panel count: {panel_count}
 Panel specifications:

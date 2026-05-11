@@ -208,9 +208,13 @@ def prepare_page_prompt_template(
     from prompter import (
         _format_art_direction,
         _format_character_details,
+        _format_page_elements_instruction,
         _format_panel_block,
+        _resolve_page_number,
     )
 
+    title = script.title or world.title or "Untitled story"
+    page_number = _resolve_page_number(script)
     prompts_dir = _ensure_prompts_dir(version_dir)
     
     # Save original template
@@ -222,8 +226,10 @@ def prepare_page_prompt_template(
     prompt_text = render_prompt_template(
         PAGE_PROMPT_TEMPLATE_FILENAME,
         template_path=template_path,
+        title=title,
         art_direction=_format_art_direction(art_template),
         character_details=character_details,
+        page_elements_instruction=_format_page_elements_instruction(title, page_number),
         panel_count=script.panel_count,
         panel_block=panel_block,
     )

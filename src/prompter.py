@@ -20,6 +20,7 @@ DEFAULT_ART_DIRECTION_TEMPLATE_PATH = (
 )
 ART_DIRECTION_TEMPLATE_FIELDS = (
     ("base_style", "Base Style"),
+    ("characters", "Characters"),
     ("color_palette", "Color Palette"),
     ("layout_and_composition", "Layout & Composition"),
     ("lettering_and_dialog", "Lettering & Dialog"),
@@ -111,6 +112,24 @@ def _format_art_direction(template: dict[str, str]) -> str:
     )
 
 
+def _resolve_page_number(script: ScriptCheckpoint) -> int:
+    page_numbers = sorted({panel.page_number for panel in script.panels})
+    if not page_numbers:
+        raise ValueError("Script must contain at least one panel to generate a page prompt.")
+    if len(page_numbers) != 1:
+        raise ValueError(
+            "Page prompt generation expects a single-page script checkpoint; "
+            f"found page numbers: {page_numbers}."
+        )
+    return page_numbers[0]
+
+
+def _format_page_elements_instruction(title: str, page_number: int) -> str:
+    if page_number == 1:
+        return f'Page elements: Include the title "{title}" on the page.'
+    return f"Page elements: Include page number {page_number} at the bottom of the page."
+
+
 def _format_panel_block(script: ScriptCheckpoint) -> str:
     panel_lines: list[str] = []
     for panel in script.panels:
@@ -156,14 +175,18 @@ def generate_page_prompt(
     )
 
     art_direction_template = _load_art_template(art_style_template_path)
+    title = script.title or world.title or "Untitled story"
+    page_number = _resolve_page_number(script)
     character_details = _format_character_details(world, script)
     panel_block = _format_panel_block(script)
 
     prompt_text = render_prompt_template(
         PAGE_PROMPT_TEMPLATE_FILENAME,
         template_path=page_prompt_template_path,
+        title=title,
         art_direction=_format_art_direction(art_direction_template),
         character_details=character_details,
+        page_elements_instruction=_format_page_elements_instruction(title, page_number),
         panel_count=script.panel_count,
         panel_block=panel_block,
     )

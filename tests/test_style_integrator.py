@@ -7,6 +7,7 @@ import pytest
 sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
 import style_integrator
+from prompt_saver import prepare_style_integrator_prompts
 from model_defaults import DEFAULT_MODEL
 from scriptwriter import Page, Panel, ScriptCheckpoint
 
@@ -17,6 +18,7 @@ from scriptwriter import Page, Panel, ScriptCheckpoint
 
 _ART_TEMPLATE = {
     "base_style": "Scratchy MS Paint kid drawing",
+    "characters": "Characters should stay rubber-limbed, uneven, and immediately readable as the same figures across panels.",
     "color_palette": "Primary colours, lots of scribble",
     "layout_and_composition": "Wobbly borders and uneven panels",
     "lettering_and_dialog": "Wiggly hand-lettered text",
@@ -239,7 +241,25 @@ def test_integrate_style_passes_art_template_to_generator(tmp_path):
     )
 
     assert received["art"]["base_style"] == "Scratchy MS Paint kid drawing"
+    assert received["art"]["characters"].startswith("Characters should stay rubber-limbed")
     assert received["model"] == "llama3.1:8b"
+
+
+def test_prepare_style_integrator_prompts_include_characters_art_direction(tmp_path):
+    script_path = _write_script_checkpoint(tmp_path)
+    script = ScriptCheckpoint.model_validate_json(script_path.read_text(encoding="utf-8"))
+
+    _system_prompt, user_prompt = prepare_style_integrator_prompts(
+        version_dir=tmp_path,
+        script=script,
+        art_template=_ART_TEMPLATE,
+        output_suffix="page_001",
+    )
+
+    assert (
+        "Characters: Characters should stay rubber-limbed, uneven, and immediately "
+        "readable as the same figures across panels."
+    ) in user_prompt
 
 
 # ---------------------------------------------------------------------------
