@@ -7,7 +7,9 @@ Each run is isolated in its own version folder. Prior runs are never overwritten
 ## Requirements
 
 - Python 3.12+
-- [Ollama](https://ollama.com) running locally with the model configured in `src/model_defaults.py` pulled
+- One of the following model backends configured for the model selected in `src/model_defaults.py`:
+  - [Ollama](https://ollama.com) running locally for non-`gemini-` models
+  - Google Gemini API access via `GEMINI_API_KEY` for models whose name starts with `gemini-`
 
 ## Setup
 
@@ -16,6 +18,10 @@ python -m venv .venv && source .venv/bin/activate
 pip install playwright pydantic instructor ollama openai pytest pytest-asyncio black
 playwright install chromium
 ```
+
+If you are using Gemini, set `GEMINI_API_KEY` in your environment or in a local `.env` file.
+
+If you are using Ollama, make sure Ollama is running locally and the selected model is available. `OLLAMA_BASE_URL` defaults to `http://localhost:11434/v1`.
 
 ## Campaign setup
 
@@ -108,9 +114,9 @@ python src/pipeline.py belowdown https://scrybequill.com/share/...
 
 ```
 --campaigns-root PATH        default: campaigns/
---beater-model NAME          default: DEFAULT_OLLAMA_MODEL (src/model_defaults.py)
---script-model NAME          default: DEFAULT_OLLAMA_MODEL (src/model_defaults.py)
---style-model NAME           default: DEFAULT_OLLAMA_MODEL (src/model_defaults.py)
+--beater-model NAME          default: DEFAULT_MODEL (src/model_defaults.py)
+--script-model NAME          default: DEFAULT_MODEL (src/model_defaults.py)
+--style-model NAME           default: DEFAULT_MODEL (src/model_defaults.py)
 --scene-count N              default: 6 (target scene count for the story bible)
 --art-style-template PATH    Override campaign-level template for this run only
 --master-beater-system-prompt PATH
