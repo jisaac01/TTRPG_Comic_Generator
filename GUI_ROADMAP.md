@@ -5,11 +5,11 @@
 **Goal**: Prepare the pipeline to be GUI-safe. Extract a structured run config, add event reporting, and keep the CLI as a presentation layer.
 
 **Deliverables**:
-- [ ] New `src/pipeline_config.py`: `RunConfig` dataclass mirroring all real ComicPipeline options (campaign, url, campaigns_root, per-stage models, panel_count, total_pages, art/prompt template overrides, rerun_from, recap_version, skip_style).
-- [ ] New `src/pipeline_events.py`: `PipelineEvent` union (base class or enum) for `PhaseStart`, `PhaseSkip`, `PhaseWarning`, PhaseError`, `PhasePartialFailure`, `VersionCreated`, `RunCompleted`. Add event dataclass with timestamp, phase, message, exception payload where relevant.
-- [ ] Refactor `src/pipeline.py` `ComicPipeline.run()` to emit `PipelineEvent` instances instead of calling `print()` directly. Keep print output as a thin event-listener adapter so the CLI behavior is unchanged.
-- [ ] Add `run()` test coverage in `tests/test_pipeline.py` asserting event emission for skipped phases, warnings, and errors (extend existing mocks).
-- [ ] Update existing CLI in `src/pipeline.py` to receive and print events without changing the user-facing output.
+- [x] New `src/pipeline_config.py`: `RunConfig` dataclass mirroring all real ComicPipeline options (campaign, url, campaigns_root, per-stage models, panel_count, total_pages, art/prompt template overrides, rerun_from, recap_version, skip_style).
+- [x] New `src/pipeline_events.py`: `PipelineEvent` union (base class or enum) for `PhaseStart`, `PhaseSkip`, `PhaseWarning`, PhaseError`, `PhasePartialFailure`, `VersionCreated`, `RunCompleted`. Add event dataclass with timestamp, phase, message, exception payload where relevant.
+- [x] Refactor `src/pipeline.py` `ComicPipeline.run()` to emit `PipelineEvent` instances instead of calling `print()` directly. Keep print output as a thin event-listener adapter so the CLI behavior is unchanged.
+- [x] Add `run()` test coverage in `tests/test_pipeline.py` asserting event emission for skipped phases, warnings, and errors (extend existing mocks).
+- [x] Update existing CLI in `src/pipeline.py` to receive and print events without changing the user-facing output.
 
 **Success Criteria**:
 - All existing `tests/test_pipeline.py` tests pass without modification.

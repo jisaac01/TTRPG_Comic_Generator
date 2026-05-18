@@ -8,13 +8,26 @@ import shutil
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal, cast
+from typing import Callable, Literal, cast
 
 from entities import (
     WorldStateCheckpoint,
     build_entities_from_raw,
 )
 from model_defaults import DEFAULT_MODEL
+from pipeline_config import RunConfig, RerunFrom, CAMPAIGNS_ROOT
+from pipeline_events import (
+    PipelineEvent,
+    PipelineEventUnion,
+    PhaseStarted,
+    PhaseSkipped,
+    PhaseCompleted,
+    PhaseWarning,
+    PhaseError,
+    PhasePartialFailure,
+    VersionCreated,
+    RunCompleted,
+)
 from prompter import (
     ART_DIRECTION_TEMPLATE_FILENAME,
     DEFAULT_ART_DIRECTION_TEMPLATE_PATH,
@@ -53,7 +66,6 @@ from master_beater import StoryBibleCheckpoint, create_story_bible
 # Constants
 # ---------------------------------------------------------------------------
 
-CAMPAIGNS_ROOT = Path("campaigns")
 INDEX_FILENAME = "index.json"
 EPISODE_META_FILENAME = "episode_meta.json"
 PROMPTS_SUBDIR_NAME = "prompts"
@@ -61,8 +73,7 @@ STORY_BIBLE_PAGE_GLOB = "02_6_story_bible_page_*.json"
 SCRIPT_PAGE_GLOB = "03_script_page_*.json"
 STYLED_SCRIPT_PAGE_GLOB = "03_5_styled_script_page_*.json"
 
-RerunFrom = Literal["scrape", "entities", "beater", "script", "style", "prompt"]
-RerunFromArg = Literal["scrape", "entities", "beater", "script", "style", "prompt"]
+# RerunFrom is imported from pipeline_config above
 
 
 def _story_bible_page_path(version_dir: Path, page_number: int) -> Path:
@@ -226,7 +237,7 @@ def _next_version_name(episode_dir: Path) -> str:
 
 
 def _create_version_dir(
-    episode_dir: Path, rerun_from: RerunFromArg | None
+    episode_dir: Path, rerun_from: RerunFrom | None
 ) -> tuple[Path, str]:
     """
     Create the next version directory.
@@ -310,7 +321,6 @@ class ComicPipeline:
         url: str,
         campaign: str,
         campaigns_root: Path = CAMPAIGNS_ROOT,
-        analysis_model: str = DEFAULT_MODEL,
         beater_model: str = DEFAULT_MODEL,
         script_model: str = DEFAULT_MODEL,
         style_model: str = DEFAULT_MODEL,
@@ -324,14 +334,14 @@ class ComicPipeline:
         style_integrator_system_prompt: Path | None = None,
         style_integrator_user_prompt: Path | None = None,
         page_prompt_template: Path | None = None,
-        rerun_from: RerunFromArg | None = None,
+        rerun_from: RerunFrom | None = None,
         recap_version: str = "standard",
         skip_style: bool = False,
+        event_callback: Callable[[PipelineEventUnion], None] | None = None,
     ):
         self.url = url
         self.campaign = campaign
         self.campaigns_root = campaigns_root
-        self.analysis_model = analysis_model
         self.beater_model = beater_model
         self.script_model = script_model
         self.style_model = style_model
@@ -345,9 +355,15 @@ class ComicPipeline:
         self.style_integrator_system_prompt = style_integrator_system_prompt
         self.style_integrator_user_prompt = style_integrator_user_prompt
         self.page_prompt_template = page_prompt_template
-        self.rerun_from: RerunFromArg | None = rerun_from
+        self.rerun_from: RerunFrom | None = rerun_from
         self.recap_version = normalize_recap_version(recap_version)
         self.skip_style = skip_style
+        self.event_callback = event_callback or (lambda _: None)
+        self._version_dir: Path | None = None
+
+    def _emit(self, event: PipelineEventUnion) -> None:
+        """Emit an event via the callback."""
+        self.event_callback(event)
 
     def _apply_recap_selection(self, raw: RawTextCheckpoint) -> tuple[RawTextCheckpoint, bool, bool]:
         """Select content from recap variants and report selection/content changes."""
@@ -477,7 +493,7 @@ class ComicPipeline:
 
         if existing_episode is None:
             # First run: scrape to get the title so we can slug the episode folder.
-            print("[1/5] Scraping...")
+            self._emit(PhaseStarted(phase="scrape", message="Scraping..."))
             with tempfile.TemporaryDirectory() as tmpdir:
                 tmp_raw_path = Path(tmpdir) / "01_raw_text.json"
                 raw = await scrape_scrybequill(
@@ -485,14 +501,26 @@ class ComicPipeline:
                     checkpoint_path=tmp_raw_path,
                     recap_version=self.recap_version,
                 )
-            print(f"      ...done  (title: {raw.title!r}, recap: {self.recap_version})")
+            self._emit(
+                PhaseCompleted(
+                    phase="scrape",
+                    message="...done",
+                    details={"title": raw.title, "recap": self.recap_version},
+                )
+            )
 
             episode_dir = _resolve_episode_dir(
                 self.campaigns_root, self.campaign, self.url, raw.title
             )
             version_dir, version_name = _create_version_dir(episode_dir, self.rerun_from)
             self._version_dir = version_dir
-            print(f"      episode: {episode_dir.name}/{version_name}")
+            self._emit(
+                VersionCreated(
+                    version=version_name,
+                    version_dir=str(version_dir),
+                    episode_slug=episode_dir.name,
+                )
+            )
 
             raw_path = version_dir / "01_raw_text.json"
             raw_path.write_text(
@@ -503,7 +531,13 @@ class ComicPipeline:
             episode_dir = _episode_dir(self.campaigns_root, self.campaign, existing_episode)
             version_dir, version_name = _create_version_dir(episode_dir, self.rerun_from)
             self._version_dir = version_dir
-            print(f"      episode: {episode_dir.name}/{version_name}")
+            self._emit(
+                VersionCreated(
+                    version=version_name,
+                    version_dir=str(version_dir),
+                    episode_slug=episode_dir.name,
+                )
+            )
             raw_path = version_dir / "01_raw_text.json"
 
             if raw_path.exists():
@@ -516,7 +550,13 @@ class ComicPipeline:
                         encoding="utf-8",
                     )
                 if content_changed:
-                    print(f"[1/5] Recap variant changed to {self.recap_version!r} - invalidating downstream checkpoints")
+                    self._emit(
+                        PhaseWarning(
+                            phase="scrape",
+                            message="Recap variant changed - invalidating downstream checkpoints",
+                            warning=f"Recap variant changed to {self.recap_version!r}",
+                        )
+                    )
                     entities_path = version_dir / "02_entities.json"
                     entities_path.unlink(missing_ok=True)
                     _delete_matching(version_dir, STORY_BIBLE_PAGE_GLOB)
@@ -526,15 +566,27 @@ class ComicPipeline:
                         prompt_file.unlink(missing_ok=True)
                     shutil.rmtree(version_dir / PROMPTS_SUBDIR_NAME, ignore_errors=True)
                 else:
-                    print(f"[1/5] Scraping...skipped (checkpoint exists, recap: {self.recap_version})")
+                    self._emit(
+                        PhaseSkipped(
+                            phase="scrape",
+                            message="Skipped",
+                            reason="checkpoint exists",
+                        )
+                    )
             else:
-                print("[1/5] Scraping...")
+                self._emit(PhaseStarted(phase="scrape", message="Scraping..."))
                 raw = await scrape_scrybequill(
                     url=self.url,
                     checkpoint_path=raw_path,
                     recap_version=self.recap_version,
                 )
-                print(f"      ...done  (title: {raw.title!r}, recap: {self.recap_version})")
+                self._emit(
+                    PhaseCompleted(
+                        phase="scrape",
+                        message="...done",
+                        details={"title": raw.title, "recap": self.recap_version},
+                    )
+                )
 
         self._ensure_campaign_art_template()
         self._ensure_campaign_prompt_templates()
@@ -561,29 +613,45 @@ class ComicPipeline:
         errors: list[str] = []
 
         if entities_path.exists():
-            print("[2/5] Building entities...skipped (checkpoint exists)")
+            self._emit(
+                PhaseSkipped(
+                    phase="entities",
+                    message="Skipped",
+                    reason="checkpoint exists",
+                )
+            )
             entities = WorldStateCheckpoint.model_validate_json(
                 entities_path.read_text(encoding="utf-8")
             )
         else:
-            print("[2/5] Building entities from scraped notes...")
+            self._emit(PhaseStarted(phase="entities", message="Building entities from scraped notes..."))
             entities = build_entities_from_raw(
                 raw_checkpoint_path=raw_path,
                 output_path=entities_path,
                 model_label="scraper-direct",
             )
-            print("      ...done")
+            self._emit(PhaseCompleted(phase="entities", message="...done"))
 
         story_bible: StoryBibleCheckpoint | None = None
         if story_bible_path.exists():
-            print("[3/5] Creating story bible...skipped (checkpoint exists)")
+            self._emit(
+                PhaseSkipped(
+                    phase="beater",
+                    message="Skipped",
+                    reason="checkpoint exists",
+                )
+            )
             story_bible = StoryBibleCheckpoint.model_validate_json(
                 story_bible_path.read_text(encoding="utf-8")
             )
         else:
             scene_count = self.total_pages * self.panel_count
-            print(
-                f"[3/5] Creating story bible...  (model: {self.beater_model}, scenes: {scene_count})"
+            self._emit(
+                PhaseStarted(
+                    phase="beater",
+                    message="Creating story bible...",
+                    details={"model": self.beater_model, "scene_count": scene_count},
+                )
             )
             # Prepare and save prompts before model call.
             # The exact rendered strings are also the ones sent to the model.
@@ -614,23 +682,45 @@ class ComicPipeline:
                         story_bible.model_dump_json(indent=2),
                         encoding="utf-8",
                     )
-                print("      ...done")
+                self._emit(PhaseCompleted(phase="beater", message="...done"))
             except Exception as exc:
                 errors.append(f"story_bible: {exc}")
-                print(
-                    "      ...ERROR (story bible generation failed — skipping phases 4 & 5): "
-                    f"{exc}"
+                self._emit(
+                    PhasePartialFailure(
+                        phase="beater",
+                        message="Story bible generation failed - skipping downstream phases",
+                        skipped_phases=["script", "style", "prompt"],
+                        error_detail=str(exc),
+                    )
                 )
 
         script_pages: list[ScriptCheckpoint] | None = None
         script_generated_this_run = False
         if story_bible is None:
-            print("[4/5] Writing script...skipped (no story bible)")
+            self._emit(
+                PhaseSkipped(
+                    phase="script",
+                    message="Skipped",
+                    reason="no story bible",
+                )
+            )
         elif all(path.exists() for path in script_page_paths):
-            print("[4/5] Writing script...skipped (checkpoints exist)")
+            self._emit(
+                PhaseSkipped(
+                    phase="script",
+                    message="Skipped",
+                    reason="checkpoints exist",
+                )
+            )
             script_pages = _load_script_pages(script_page_paths)
         else:
-            print(f"[4/5] Writing script...  (model: {self.script_model})")
+            self._emit(
+                PhaseStarted(
+                    phase="script",
+                    message="Writing script...",
+                    details={"model": self.script_model},
+                )
+            )
             story_bible_pages: list[StoryBibleCheckpoint] = []
             try:
                 story_bible_pages = write_story_bible_pages(
@@ -640,7 +730,14 @@ class ComicPipeline:
                 )
             except Exception as exc:
                 errors.append(f"script: {exc}")
-                print(f"      ...ERROR (story bible page splitting failed — skipping phases 4.5 & 5): {exc}")
+                self._emit(
+                    PhasePartialFailure(
+                        phase="script",
+                        message="Story bible page splitting failed - skipping style and prompt phases",
+                        skipped_phases=["style", "prompt"],
+                        error_detail=str(exc),
+                    )
+                )
             if story_bible_pages:
                 try:
                     generated_pages: list[ScriptCheckpoint] = []
@@ -676,30 +773,74 @@ class ComicPipeline:
                     )
                     _write_script_pages(script_page_paths, script_pages)
                     script_generated_this_run = True
-                    print(f"      ...done ({len(script_pages)} page{'s' if len(script_pages) != 1 else ''})")
+                    page_word = "page" if len(script_pages) == 1 else "pages"
+                    self._emit(
+                        PhaseCompleted(
+                            phase="script",
+                            message="...done",
+                            details={"page_count": len(script_pages)},
+                        )
+                    )
                 except Exception as exc:
                     errors.append(f"script: {exc}")
-                    print(f"      ...ERROR (script generation failed — skipping phases 4.5 & 5): {exc}")
+                    self._emit(
+                        PhasePartialFailure(
+                            phase="script",
+                            message="Script generation failed - skipping style and prompt phases",
+                            skipped_phases=["style", "prompt"],
+                            error_detail=str(exc),
+                        )
+                    )
 
         if script_generated_this_run and script_pages is not None:
             for page_number, checkpoint in enumerate(script_pages, start=1):
                 for generation_error in checkpoint.generation_errors:
                     error_prefix = "script" if len(script_pages) == 1 else f"script: page {page_number}"
                     errors.append(f"{error_prefix}: {generation_error}")
-                    print(f"      ...ERROR (script validation page {page_number}): {generation_error}")
+                    self._emit(
+                        PhaseWarning(
+                            phase="script",
+                            message=f"Script validation warning (page {page_number})",
+                            warning=generation_error,
+                        )
+                    )
 
         styled_script_pages: list[ScriptCheckpoint] | None = None
         if script_pages is None:
-            print("[4.5/5] Integrating art style...skipped (no script)")
+            self._emit(
+                PhaseSkipped(
+                    phase="style",
+                    message="Skipped",
+                    reason="no script",
+                )
+            )
         elif self.skip_style:
-            print("[4.5/5] Integrating art style...skipped (--skip-style)")
+            self._emit(
+                PhaseSkipped(
+                    phase="style",
+                    message="Skipped",
+                    reason="--skip-style flag",
+                )
+            )
             styled_script_pages = script_pages
         elif all(path.exists() for path in styled_script_page_paths):
-            print("[4.5/5] Integrating art style...skipped (checkpoints exist)")
+            self._emit(
+                PhaseSkipped(
+                    phase="style",
+                    message="Skipped",
+                    reason="checkpoints exist",
+                )
+            )
             styled_script_pages = _load_script_pages(styled_script_page_paths)
         else:
             template_path = self._capture_art_template_for_version(template_path, version_dir)
-            print(f"[4.5/5] Integrating art style...  (model: {self.style_model}, template: {template_path})")
+            self._emit(
+                PhaseStarted(
+                    phase="style",
+                    message="Integrating art style...",
+                    details={"model": self.style_model, "template": str(template_path)},
+                )
+            )
             try:
                 art_template = _load_art_template(template_path)
                 generated_styled_pages: list[ScriptCheckpoint] = []
@@ -735,19 +876,45 @@ class ComicPipeline:
                         )
                         error_prefix = "style" if len(script_pages) == 1 else f"style: page {page_number}"
                         errors.append(f"{error_prefix}: {exc}")
-                        print(f"      ...WARN (style integration partially failed on page {page_number}): {exc}")
+                        self._emit(
+                            PhaseWarning(
+                                phase="style",
+                                message=f"Style integration partially failed on page {page_number}",
+                                warning=str(exc),
+                            )
+                        )
 
                 styled_script_pages = generated_styled_pages
-                print(f"      ...done ({len(styled_script_pages)} page{'s' if len(styled_script_pages) != 1 else ''})")
+                page_word = "page" if len(styled_script_pages) == 1 else "pages"
+                self._emit(
+                    PhaseCompleted(
+                        phase="style",
+                        message="...done",
+                        details={"page_count": len(styled_script_pages)},
+                    )
+                )
             except Exception as exc:
                 errors.append(f"style: {exc}")
-                print(f"      ...ERROR (style integration failed — skipping phase 5): {exc}")
+                self._emit(
+                    PhasePartialFailure(
+                        phase="style",
+                        message="Style integration failed - skipping prompt phase",
+                        skipped_phases=["prompt"],
+                        error_detail=str(exc),
+                    )
+                )
 
         page_prompt: str | None = None
         page_prompts: list[tuple[Path, str]] = []
         prompt_script_pages = script_pages if self.skip_style else styled_script_pages
         if not prompt_script_pages:
-            print("[5/5] Generating page prompt...skipped (no styled script)")
+            self._emit(
+                PhaseSkipped(
+                    phase="prompt",
+                    message="Skipped",
+                    reason="no script available",
+                )
+            )
         else:
             template_path = self._capture_art_template_for_version(template_path, version_dir)
             prompt_script_paths = script_page_paths if self.skip_style else styled_script_page_paths
@@ -757,10 +924,22 @@ class ComicPipeline:
             ]
 
             if all(path.exists() for path in expected_prompt_paths):
-                print("[5/5] Generating page prompt...skipped (checkpoints exist)")
+                self._emit(
+                    PhaseSkipped(
+                        phase="prompt",
+                        message="Skipped",
+                        reason="checkpoints exist",
+                    )
+                )
                 page_prompt = expected_prompt_paths[0].read_text(encoding="utf-8")
             else:
-                print(f"[5/5] Generating page prompt...  (template: {template_path}, pages: {len(prompt_script_pages)})")
+                self._emit(
+                    PhaseStarted(
+                        phase="prompt",
+                        message="Generating page prompt...",
+                        details={"template": str(template_path), "page_count": len(prompt_script_pages)},
+                    )
+                )
                 try:
                     art_template = _load_art_template(template_path)
                     for page_number, (prompt_script, prompt_script_path) in enumerate(
@@ -777,7 +956,13 @@ class ComicPipeline:
                                 output_suffix=f"page_{page_number:03d}",
                             )
                         except Exception as exc:
-                            print(f"      ...WARNING (failed to save interpolated page {page_number} prompt template): {exc}")
+                            self._emit(
+                                PhaseWarning(
+                                    phase="prompt",
+                                    message=f"Failed to save interpolated page {page_number} prompt template",
+                                    warning=str(exc),
+                                )
+                            )
                             continue
 
                         page_output_path = version_dir / f"04_page_{page_number}_prompt.txt"
@@ -786,10 +971,66 @@ class ComicPipeline:
 
                     if page_prompts:
                         page_prompt = page_prompts[0][1]  # First page's prompt for backward compat
-                    print(f"      ...done ({len(page_prompts)} page{'s' if len(page_prompts) != 1 else ''})")
+                    page_word = "page" if len(page_prompts) == 1 else "pages"
+                    self._emit(
+                        PhaseCompleted(
+                            phase="prompt",
+                            message="...done",
+                            details={"page_count": len(page_prompts)},
+                        )
+                    )
                 except Exception as exc:
                     errors.append(f"page_prompt: {exc}")
-                    print(f"      ...ERROR (page prompt generation failed): {exc}")
+                    self._emit(
+                        PhaseError(
+                            phase="prompt",
+                            message="Page prompt generation failed",
+                            error=str(exc),
+                            exception=exc,
+                        )
+                    )
+
+        # Determine final status
+        checkpoint_keys = (
+            "entities",
+            "story_bible",
+            "script",
+            "styled_script",
+            "page_prompt",
+        )
+        checkpoints_created = []
+        if entities_path.exists():
+            checkpoints_created.append("entities")
+        if story_bible_path.exists():
+            checkpoints_created.append("story_bible")
+        if all(path.exists() for path in script_page_paths):
+            checkpoints_created.append("script")
+        if all(path.exists() for path in styled_script_page_paths) and not self.skip_style:
+            checkpoints_created.append("styled_script")
+        if all(path.exists() for path in expected_prompt_paths) if prompt_script_pages else False:
+            checkpoints_created.append("page_prompt")
+
+        failed_phases = []
+        if story_bible is None:
+            failed_phases.append("beater")
+        if script_pages is None and story_bible is not None:
+            failed_phases.append("script")
+        if styled_script_pages is None and script_pages is not None and not self.skip_style:
+            failed_phases.append("style")
+        if page_prompt is None and prompt_script_pages:
+            failed_phases.append("prompt")
+
+        final_status = "ok" if not errors else ("partial" if script_pages is not None else "failed")
+        self._emit(
+            RunCompleted(
+                status=final_status,
+                version=version_name,
+                version_dir=str(version_dir),
+                checkpoints=checkpoints_created,
+                failed_phases=failed_phases,
+                error_messages=errors,
+            )
+        )
 
         return {
             "raw_text": raw.model_dump(),
@@ -805,6 +1046,82 @@ class ComicPipeline:
             "version": version_name,
             "version_dir": str(version_dir),
         }
+
+
+# ---------------------------------------------------------------------------
+# CLI Event Printer (adapts events back to terminal output)
+# ---------------------------------------------------------------------------
+
+
+def _format_event_for_cli(event: PipelineEventUnion) -> str:
+    """Format a pipeline event as a human-readable CLI message."""
+    if isinstance(event, PhaseStarted):
+        msg = f"[5/5] {event.message}"  # Will be corrected by phase name below
+        if event.phase == "scrape":
+            msg = f"[1/5] {event.message}"
+        elif event.phase == "entities":
+            msg = f"[2/5] {event.message}"
+        elif event.phase == "beater":
+            msg = f"[3/5] {event.message}"
+        elif event.phase == "script":
+            msg = f"[4/5] {event.message}"
+        elif event.phase == "style":
+            msg = f"[4.5/5] {event.message}"
+        elif event.phase == "prompt":
+            msg = f"[5/5] {event.message}"
+        if event.details:
+            detail_str = ", ".join(f"{k}: {v}" for k, v in event.details.items())
+            msg += f"  ({detail_str})"
+        return msg
+
+    elif isinstance(event, PhaseSkipped):
+        msg = f"[5/5] {event.message} ({event.reason})"
+        if event.phase == "scrape":
+            msg = f"[1/5] Scraping...skipped ({event.reason})"
+        elif event.phase == "entities":
+            msg = f"[2/5] Building entities...skipped ({event.reason})"
+        elif event.phase == "beater":
+            msg = f"[3/5] Creating story bible...skipped ({event.reason})"
+        elif event.phase == "script":
+            msg = f"[4/5] Writing script...skipped ({event.reason})"
+        elif event.phase == "style":
+            msg = f"[4.5/5] Integrating art style...skipped ({event.reason})"
+        elif event.phase == "prompt":
+            msg = f"[5/5] Generating page prompt...skipped ({event.reason})"
+        return msg
+
+    elif isinstance(event, PhaseCompleted):
+        msg = "      ...done"
+        if event.details:
+            detail_str = ", ".join(f"{v}" for v in event.details.values())
+            msg += f" ({detail_str})"
+        return msg
+
+    elif isinstance(event, PhaseWarning):
+        return f"      ...WARN {event.warning}"
+
+    elif isinstance(event, PhaseError):
+        return f"      ...ERROR {event.error}"
+
+    elif isinstance(event, PhasePartialFailure):
+        skipped = ", ".join(event.skipped_phases) if event.skipped_phases else "none"
+        return f"      ...ERROR ({event.error_detail} — skipping phases {skipped})"
+
+    elif isinstance(event, VersionCreated):
+        return f"      episode: {event.episode_slug}/{event.version}"
+
+    elif isinstance(event, RunCompleted):
+        failed_str = ", ".join(event.failed_phases) if event.failed_phases else "none"
+        return f"Run completed: status={event.status}, checkpoints={len(event.checkpoints)}, failed_phases={failed_str}"
+
+    return f"[{event.__class__.__name__}]"
+
+
+def _print_event_callback(event: PipelineEventUnion) -> None:
+    """Callback that prints pipeline events in the original CLI format."""
+    msg = _format_event_for_cli(event)
+    if msg:
+        print(msg)
 
 
 # ---------------------------------------------------------------------------
@@ -1003,6 +1320,7 @@ async def _run_cli() -> None:
         rerun_from=rerun_from_arg,
         recap_version=args.recap_version,
         skip_style=args.skip_style,
+        event_callback=_print_event_callback,
     )
     try:
         result = await pipeline.run()

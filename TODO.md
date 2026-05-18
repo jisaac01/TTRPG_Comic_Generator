@@ -10,12 +10,12 @@
 
 ### Phase 0: Foundation — Pipeline Events & Config Model
 
-- [ ] Create `src/pipeline_config.py` with `RunConfig` dataclass
-- [ ] Create `src/pipeline_events.py` with `PipelineEvent` union and event types
-- [ ] Refactor `src/pipeline.py` to emit `PipelineEvent` instead of print()
-- [ ] Update CLI to consume events as presentation layer
-- [ ] Add event emission tests in `tests/test_pipeline.py`
-- [ ] Verify all existing pipeline tests still pass
+- [x] Create `src/pipeline_config.py` with `RunConfig` dataclass
+- [x] Create `src/pipeline_events.py` with `PipelineEvent` union and event types
+- [x] Refactor `src/pipeline.py` to emit `PipelineEvent` instead of print()
+- [x] Update CLI to consume events as presentation layer
+- [x] Add event emission tests in `tests/test_pipeline.py`
+- [x] Verify all existing pipeline tests still pass
 
 ### Phase 1: Services Layer
 
