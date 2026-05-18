@@ -92,37 +92,46 @@ _SCRIPT_CHECKPOINT = scriptwriter.ScriptCheckpoint(
     author="GM",
     model=DEFAULT_MODEL,
     panel_count=2,
-    panels=[
-        scriptwriter.Panel(
-            index=1,
-            panel_scale="large",
-            panel_shape="wide",
-            setting="Swamp edge at dusk",
-            visual_action="Del raises a torch while Vendetta scans the reeds.",
-            dialogue_overlay=["Del: Keep moving."],
-            held_items_before={"Del": [], "Vendetta": []},
-            held_items_after={"Del": ["torch"], "Vendetta": []},
-            narrative_overlays_and_text_direction=[
-                "CAPTION: The companions stand at the edge of the marsh, preparing to venture into the unknown.",
-                "V.O.: Del (V.O.): We must reach the far bank before nightfall.",
-                "CHYRON: Dreadmarsh - Evening",
+    total_pages=1,
+    pages=[
+        scriptwriter.Page(
+            page_number=1,
+            panel_count=2,
+            panels=[
+                scriptwriter.Panel(
+                    index=1,
+                    page_number=1,
+                    panel_scale="large",
+                    panel_shape="wide",
+                    setting="Swamp edge at dusk",
+                    visual_action="Del raises a torch while Vendetta scans the reeds.",
+                    dialogue_overlay=["Del: Keep moving."],
+                    held_items_before={"Del": [], "Vendetta": []},
+                    held_items_after={"Del": ["torch"], "Vendetta": []},
+                    narrative_overlays_and_text_direction=[
+                        "CAPTION: The companions stand at the edge of the marsh, preparing to venture into the unknown.",
+                        "V.O.: Del (V.O.): We must reach the far bank before nightfall.",
+                        "CHYRON: Dreadmarsh - Evening",
+                    ],
+                ),
+                scriptwriter.Panel(
+                    index=2,
+                    page_number=1,
+                    panel_scale="medium",
+                    panel_shape="standard",
+                    setting="Narrow marsh path",
+                    visual_action="Del leads with the torch as Orion marks tracks.",
+                    dialogue_overlay=["Orion: Tracks ahead."],
+                    held_items_before={"Del": ["torch"], "Vendetta": []},
+                    held_items_after={"Del": ["torch"], "Vendetta": []},
+                    narrative_overlays_and_text_direction=[
+                        "CAPTION: Following the torchlight deeper into the maze of reeds.",
+                        "V.O.: Vendetta (V.O.): Something moves in the darkness.",
+                        "CHYRON: Deeper In",
+                    ],
+                ),
             ],
-        ),
-        scriptwriter.Panel(
-            index=2,
-            panel_scale="medium",
-            panel_shape="standard",
-            setting="Narrow marsh path",
-            visual_action="Del leads with the torch as Orion marks tracks.",
-            dialogue_overlay=["Orion: Tracks ahead."],
-            held_items_before={"Del": ["torch"], "Vendetta": []},
-            held_items_after={"Del": ["torch"], "Vendetta": []},
-            narrative_overlays_and_text_direction=[
-                "CAPTION: Following the torchlight deeper into the maze of reeds.",
-                "V.O.: Vendetta (V.O.): Something moves in the darkness.",
-                "CHYRON: Deeper In",
-            ],
-        ),
+        )
     ],
     scripted_at="2026-05-04T00:00:00+00:00",
 )
@@ -150,37 +159,46 @@ _STYLED_SCRIPT_CHECKPOINT = scriptwriter.ScriptCheckpoint(
     author="GM",
     model=DEFAULT_MODEL,
     panel_count=2,
-    panels=[
-        scriptwriter.Panel(
-            index=1,
-            panel_scale="large",
-            panel_shape="wide",
-            setting="A scribbly swamp edge at wobbly dusk",
-            visual_action="A scratchy Del raises a wobbly torch while Vendetta scans the reeds.",
-            dialogue_overlay=["Del: Keep moving."],
-            held_items_before={"Del": [], "Vendetta": []},
-            held_items_after={"Del": ["torch"], "Vendetta": []},
-            narrative_overlays_and_text_direction=[
-                "CAPTION: The companions stand at the edge of the marsh, preparing to venture into the unknown.",
-                "V.O.: Del (V.O.): We must reach the far bank before nightfall.",
-                "CHYRON: Dreadmarsh - Evening",
+    total_pages=1,
+    pages=[
+        scriptwriter.Page(
+            page_number=1,
+            panel_count=2,
+            panels=[
+                scriptwriter.Panel(
+                    index=1,
+                    page_number=1,
+                    panel_scale="large",
+                    panel_shape="wide",
+                    setting="A scribbly swamp edge at wobbly dusk",
+                    visual_action="A scratchy Del raises a wobbly torch while Vendetta scans the reeds.",
+                    dialogue_overlay=["Del: Keep moving."],
+                    held_items_before={"Del": [], "Vendetta": []},
+                    held_items_after={"Del": ["torch"], "Vendetta": []},
+                    narrative_overlays_and_text_direction=[
+                        "CAPTION: The companions stand at the edge of the marsh, preparing to venture into the unknown.",
+                        "V.O.: Del (V.O.): We must reach the far bank before nightfall.",
+                        "CHYRON: Dreadmarsh - Evening",
+                    ],
+                ),
+                scriptwriter.Panel(
+                    index=2,
+                    page_number=1,
+                    panel_scale="medium",
+                    panel_shape="standard",
+                    setting="A crooked narrow marsh path",
+                    visual_action="A wobbly Del leads with the torch as Orion marks tracks.",
+                    dialogue_overlay=["Orion: Tracks ahead."],
+                    held_items_before={"Del": ["torch"], "Vendetta": []},
+                    held_items_after={"Del": ["torch"], "Vendetta": []},
+                    narrative_overlays_and_text_direction=[
+                        "CAPTION: Following the torchlight deeper into the maze of reeds.",
+                        "V.O.: Vendetta (V.O.): Something moves in the darkness.",
+                        "CHYRON: Deeper In",
+                    ],
+                ),
             ],
-        ),
-        scriptwriter.Panel(
-            index=2,
-            panel_scale="medium",
-            panel_shape="standard",
-            setting="A crooked narrow marsh path",
-            visual_action="A wobbly Del leads with the torch as Orion marks tracks.",
-            dialogue_overlay=["Orion: Tracks ahead."],
-            held_items_before={"Del": ["torch"], "Vendetta": []},
-            held_items_after={"Del": ["torch"], "Vendetta": []},
-            narrative_overlays_and_text_direction=[
-                "CAPTION: Following the torchlight deeper into the maze of reeds.",
-                "V.O.: Vendetta (V.O.): Something moves in the darkness.",
-                "CHYRON: Deeper In",
-            ],
-        ),
+        )
     ],
     scripted_at="2026-05-04T00:00:00+00:00",
 )
@@ -204,13 +222,16 @@ def _write_version_checkpoints(version_dir: Path) -> None:
     (version_dir / "02_5_story_bible.json").write_text(
         _STORY_BIBLE_CHECKPOINT.model_dump_json(), encoding="utf-8"
     )
-    (version_dir / "03_script.json").write_text(
+    (version_dir / "02_6_story_bible_page_001.json").write_text(
+        _STORY_BIBLE_CHECKPOINT.model_dump_json(), encoding="utf-8"
+    )
+    (version_dir / "03_script_page_001.json").write_text(
         _SCRIPT_CHECKPOINT.model_dump_json(), encoding="utf-8"
     )
-    (version_dir / "03_5_styled_script.json").write_text(
+    (version_dir / "03_5_styled_script_page_001.json").write_text(
         _STYLED_SCRIPT_CHECKPOINT.model_dump_json(), encoding="utf-8"
     )
-    (version_dir / "04_page_prompt.txt").write_text(_PAGE_PROMPT, encoding="utf-8")
+    (version_dir / "04_page_1_prompt.txt").write_text(_PAGE_PROMPT, encoding="utf-8")
 
 
 def _make_episode(campaigns_root: Path, campaign: str, url: str, title: str) -> Path:
@@ -342,8 +363,9 @@ def test_create_version_dir_clones_previous_version(tmp_path):
     assert (version_dir / "01_raw_text.json").exists()
     assert (version_dir / "02_entities.json").exists()
     assert (version_dir / "02_5_story_bible.json").exists()
-    assert (version_dir / "03_script.json").exists()
-    assert (version_dir / "04_page_prompt.txt").exists()
+    assert (version_dir / "03_script_page_001.json").exists()
+    assert (version_dir / "03_5_styled_script_page_001.json").exists()
+    assert (version_dir / "04_page_1_prompt.txt").exists()
 
 
 def test_create_version_dir_rerun_from_prompt_deletes_only_prompt(tmp_path):
@@ -357,8 +379,9 @@ def test_create_version_dir_rerun_from_prompt_deletes_only_prompt(tmp_path):
     assert (version_dir / "01_raw_text.json").exists()
     assert (version_dir / "02_entities.json").exists()
     assert (version_dir / "02_5_story_bible.json").exists()
-    assert (version_dir / "03_script.json").exists()
-    assert not (version_dir / "04_page_prompt.txt").exists()
+    assert (version_dir / "03_script_page_001.json").exists()
+    assert (version_dir / "03_5_styled_script_page_001.json").exists()
+    assert not (version_dir / "04_page_1_prompt.txt").exists()
 
 
 def test_create_version_dir_rerun_from_beater_deletes_beater_onwards(tmp_path):
@@ -372,8 +395,9 @@ def test_create_version_dir_rerun_from_beater_deletes_beater_onwards(tmp_path):
     assert (version_dir / "01_raw_text.json").exists()
     assert (version_dir / "02_entities.json").exists()
     assert not (version_dir / "02_5_story_bible.json").exists()
-    assert not (version_dir / "03_script.json").exists()
-    assert not (version_dir / "04_page_prompt.txt").exists()
+    assert not (version_dir / "03_script_page_001.json").exists()
+    assert not (version_dir / "03_5_styled_script_page_001.json").exists()
+    assert not (version_dir / "04_page_1_prompt.txt").exists()
 
 
 def test_create_version_dir_rerun_from_scrape_deletes_all(tmp_path):
@@ -386,8 +410,9 @@ def test_create_version_dir_rerun_from_scrape_deletes_all(tmp_path):
 
     assert not (version_dir / "01_raw_text.json").exists()
     assert not (version_dir / "02_entities.json").exists()
-    assert not (version_dir / "03_script.json").exists()
-    assert not (version_dir / "04_page_prompt.txt").exists()
+    assert not (version_dir / "03_script_page_001.json").exists()
+    assert not (version_dir / "03_5_styled_script_page_001.json").exists()
+    assert not (version_dir / "04_page_1_prompt.txt").exists()
 
 
 # ---------------------------------------------------------------------------
@@ -434,7 +459,7 @@ async def test_first_run_creates_campaign_episode_version(tmp_path):
         patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT) as mock_architect,
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT) as mock_script,
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
-        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
+        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT) as mock_prompts,
     ):
         result = await pipeline.run()
 
@@ -477,7 +502,7 @@ async def test_first_run_bootstraps_campaign_prompt_templates_and_copies_version
         patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT) as mock_architect,
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT) as mock_script,
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT) as mock_integrate,
-        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
+        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT) as mock_prompts,
     ):
         result = await pipeline.run()
 
@@ -517,7 +542,7 @@ async def test_first_run_bootstraps_campaign_prompt_templates_and_copies_version
     ).read_text(encoding="utf-8")
 
     _, prompt_kwargs = mock_prompts.call_args
-    assert prompt_kwargs["page_prompt_template_path"] == version_dir / "prompts" / PAGE_PROMPT_TEMPLATE_FILENAME
+    assert prompt_kwargs["template_path"] == version_dir / "prompts" / PAGE_PROMPT_TEMPLATE_FILENAME
 
 
 @pytest.mark.asyncio
@@ -557,7 +582,7 @@ async def test_explicit_prompt_overrides_are_copied_into_version(tmp_path):
         patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT) as mock_architect,
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT) as mock_script,
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT) as mock_integrate,
-        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
+        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT) as mock_prompts,
     ):
         result = await pipeline.run()
 
@@ -596,7 +621,7 @@ async def test_explicit_prompt_overrides_are_copied_into_version(tmp_path):
     ).read_text(encoding="utf-8")
 
     _, prompt_kwargs = mock_prompts.call_args
-    assert prompt_kwargs["page_prompt_template_path"] == version_dir / "prompts" / PAGE_PROMPT_TEMPLATE_FILENAME
+    assert prompt_kwargs["template_path"] == version_dir / "prompts" / PAGE_PROMPT_TEMPLATE_FILENAME
 
 
 @pytest.mark.asyncio
@@ -615,15 +640,15 @@ async def test_first_run_result_contains_model_dump_dicts(tmp_path):
         patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
-        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT),
+        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT),
     ):
         result = await pipeline.run()
 
     assert isinstance(result["raw_text"], dict)
     assert isinstance(result["entities"], dict)
     assert isinstance(result["story_bible"], dict)
-    assert isinstance(result["script"], dict)
-    assert isinstance(result["styled_script"], dict)
+    assert isinstance(result["script"], list)
+    assert isinstance(result["styled_script"], list)
     assert isinstance(result["page_prompt"], dict)
     assert result["errors"] == []
     assert _checkpoint_dict(result, "raw_text")["url"] == "https://example.test/story"
@@ -646,7 +671,7 @@ async def test_first_run_forwards_explicit_recap_version_to_scraper(tmp_path):
         patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
-        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT),
+        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT),
     ):
         await pipeline.run()
 
@@ -678,7 +703,7 @@ async def test_run_skips_all_phases_when_all_checkpoints_exist(tmp_path):
         patch("pipeline.create_story_bible") as mock_architect,
         patch("pipeline.write_script") as mock_script,
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
-        patch("pipeline.generate_page_prompt") as mock_prompts,
+        patch("pipeline.prepare_page_prompt_template") as mock_prompts,
     ):
         result = await pipeline.run()
 
@@ -708,7 +733,7 @@ async def test_cached_raw_recap_switch_updates_content_and_reruns_downstream(tmp
         patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT) as mock_architect,
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT) as mock_script,
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
-        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
+        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT) as mock_prompts,
     ):
         result = await pipeline.run()
 
@@ -743,7 +768,7 @@ async def test_rerun_from_entities_skips_scraper_reruns_rest(tmp_path):
         patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT) as mock_architect,
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT) as mock_script,
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT) as mock_integrate,
-        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
+        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT) as mock_prompts,
     ):
         result = await pipeline.run()
 
@@ -774,7 +799,7 @@ async def test_rerun_from_architect_reruns_architect_and_downstream(tmp_path):
         patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT) as mock_architect,
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT) as mock_script,
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT) as mock_integrate,
-        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
+        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT) as mock_prompts,
     ):
         result = await pipeline.run()
 
@@ -806,7 +831,7 @@ async def test_rerun_from_style_only_reruns_style_and_prompt(tmp_path):
         patch("pipeline.create_story_bible") as mock_architect,
         patch("pipeline.write_script") as mock_script,
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT) as mock_integrate,
-        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
+        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT) as mock_prompts,
     ):
         result = await pipeline.run()
 
@@ -838,7 +863,7 @@ async def test_rerun_from_prompt_only_reruns_prompt(tmp_path):
         patch("pipeline.create_story_bible") as mock_architect,
         patch("pipeline.write_script") as mock_script,
         patch("pipeline.integrate_style") as mock_integrate,
-        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
+        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT) as mock_prompts,
     ):
         result = await pipeline.run()
 
@@ -867,16 +892,16 @@ async def test_skip_style_bypasses_integrator_and_prompts_from_script(tmp_path):
         patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.integrate_style") as mock_integrate,
-        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
+        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT) as mock_prompts,
     ):
         result = await pipeline.run()
 
     mock_integrate.assert_not_called()
     mock_prompts.assert_called_once()
     _, prompt_kwargs = mock_prompts.call_args
-    assert prompt_kwargs["script_checkpoint_path"] == _version_dir_from_result(result) / "03_script.json"
+    assert prompt_kwargs["output_suffix"] == "page_001"
     assert result["styled_script"] is not None
-    assert _checkpoint_dict(result, "styled_script")["panels"] == _checkpoint_dict(result, "script")["panels"]
+    assert result["styled_script"] == result["script"]
 
 
 @pytest.mark.asyncio
@@ -898,7 +923,7 @@ async def test_rerun_from_style_with_skip_style_reruns_prompt_only(tmp_path):
         patch("pipeline.create_story_bible") as mock_architect,
         patch("pipeline.write_script") as mock_script,
         patch("pipeline.integrate_style") as mock_integrate,
-        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
+        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT) as mock_prompts,
     ):
         result = await pipeline.run()
 
@@ -909,7 +934,7 @@ async def test_rerun_from_style_with_skip_style_reruns_prompt_only(tmp_path):
     mock_integrate.assert_not_called()
     mock_prompts.assert_called_once()
     _, prompt_kwargs = mock_prompts.call_args
-    assert prompt_kwargs["script_checkpoint_path"] == _version_dir_from_result(result) / "03_script.json"
+    assert prompt_kwargs["output_suffix"] == "page_001"
     assert result["version"] == "v002"
 
 
@@ -949,7 +974,7 @@ async def test_same_url_different_title_maps_to_existing_episode(tmp_path):
         patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
-        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT),
+        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT),
     ):
         result = await pipeline.run()
 
@@ -983,7 +1008,7 @@ async def test_two_campaigns_are_isolated(tmp_path):
             patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
             patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
             patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
-            patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT),
+            patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT),
         ):
             await pipeline.run()
 
@@ -1009,8 +1034,10 @@ async def test_campaign_level_art_template_is_used_by_default(tmp_path):
     template_path = tmp_path / "dreadmarsh" / "art_direction_template.json"
     template_path.parent.mkdir(parents=True, exist_ok=True)
     template_path.write_text(
-        '{"base_style": "Brutalist ink style.", "color_palette": "Black and white only.", '
-        '"layout_and_composition": "Single page.", "lettering_and_dialog": "Hand-lettered captions."}',
+        '{"base_style": "Brutalist ink style.", "characters": "Consistent iconic silhouettes.", '
+        '"color_palette": "Black and white only.", "layout_and_composition": "Single page.", '
+        '"lettering_and_dialog": "Hand-lettered captions.", '
+        '"text_rendering_guide": "Use balloons for dialogue, boxes for captions, and distinct SFX lettering."}',
         encoding="utf-8",
     )
 
@@ -1026,12 +1053,12 @@ async def test_campaign_level_art_template_is_used_by_default(tmp_path):
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
         patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
-        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
-        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT) as mock_integrate,
+        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT),
     ):
         result = await pipeline.run()
 
-    _, kwargs = mock_prompts.call_args
+    _, kwargs = mock_integrate.call_args
     version_template_path = _version_dir_from_result(result) / "art_direction_template.json"
     assert kwargs["art_style_template_path"] == version_template_path
     assert version_template_path.read_text(encoding="utf-8") == template_path.read_text(encoding="utf-8")
@@ -1054,8 +1081,8 @@ async def test_campaign_art_template_is_created_on_first_run(tmp_path):
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
         patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
-        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
-        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT) as mock_integrate,
+        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT),
     ):
         result = await pipeline.run()
 
@@ -1064,7 +1091,7 @@ async def test_campaign_art_template_is_created_on_first_run(tmp_path):
         encoding="utf-8"
     )
 
-    _, kwargs = mock_prompts.call_args
+    _, kwargs = mock_integrate.call_args
     version_template_path = _version_dir_from_result(result) / "art_direction_template.json"
     assert kwargs["art_style_template_path"] == version_template_path
     assert version_template_path.read_text(encoding="utf-8") == template_path.read_text(encoding="utf-8")
@@ -1076,15 +1103,19 @@ async def test_explicit_art_template_overrides_campaign_default(tmp_path):
     campaign_template = tmp_path / "dreadmarsh" / "art_direction_template.json"
     campaign_template.parent.mkdir(parents=True, exist_ok=True)
     campaign_template.write_text(
-        '{"base_style": "Campaign default.", "color_palette": "Black and white only.", '
-        '"layout_and_composition": "Single page.", "lettering_and_dialog": "Hand-lettered captions."}',
+        '{"base_style": "Campaign default.", "characters": "Consistent campaign cast designs.", '
+        '"color_palette": "Black and white only.", "layout_and_composition": "Single page.", '
+        '"lettering_and_dialog": "Hand-lettered captions.", '
+        '"text_rendering_guide": "Dialogue balloons, caption boxes, and expressive SFX treatment."}',
         encoding="utf-8",
     )
 
     explicit_template = tmp_path / "custom_style.json"
     explicit_template.write_text(
-        '{"base_style": "Custom override.", "color_palette": "Electric colors.", '
-        '"layout_and_composition": "Single page.", "lettering_and_dialog": "Sharp captions."}',
+        '{"base_style": "Custom override.", "characters": "Custom stylized cast silhouettes.", '
+        '"color_palette": "Electric colors.", "layout_and_composition": "Single page.", '
+        '"lettering_and_dialog": "Sharp captions.", '
+        '"text_rendering_guide": "Distinct dialogue balloons, caption bars, and energetic SFX typography."}',
         encoding="utf-8",
     )
 
@@ -1101,12 +1132,12 @@ async def test_explicit_art_template_overrides_campaign_default(tmp_path):
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
         patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
-        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
-        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT) as mock_integrate,
+        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT),
     ):
         result = await pipeline.run()
 
-    _, kwargs = mock_prompts.call_args
+    _, kwargs = mock_integrate.call_args
     version_template_path = _version_dir_from_result(result) / "art_direction_template.json"
     assert kwargs["art_style_template_path"] == version_template_path
     assert version_template_path.read_text(encoding="utf-8") == explicit_template.read_text(encoding="utf-8")
@@ -1132,7 +1163,7 @@ async def test_entities_phase_uses_scraper_direct_label(tmp_path):
         patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
-        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT),
+        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT),
     ):
         await pipeline.run()
 
@@ -1157,7 +1188,7 @@ async def test_script_model_and_panel_count_forwarded(tmp_path):
         patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT) as mock_architect,
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT) as mock_script,
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
-        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT),
+        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT),
     ):
         await pipeline.run()
 
@@ -1167,7 +1198,7 @@ async def test_script_model_and_panel_count_forwarded(tmp_path):
 
     _, kwargs = mock_script.call_args
     assert kwargs.get("model") == "llama3.1:8b"
-    assert kwargs.get("story_bible_checkpoint_path").name == "02_5_story_bible.json"
+    assert kwargs.get("story_bible_checkpoint_path").name == "02_6_story_bible_page_001.json"
 
 
 @pytest.mark.asyncio
@@ -1186,7 +1217,7 @@ async def test_beater_prompt_uses_total_scene_count(tmp_path):
         patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT) as mock_architect,
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
-        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT),
+        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT),
     ):
         result = await pipeline.run()
 
@@ -1217,7 +1248,7 @@ async def test_style_model_forwarded(tmp_path):
         patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT) as mock_integrate,
-        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT),
+        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT),
     ):
         await pipeline.run()
 
@@ -1246,7 +1277,7 @@ async def test_script_failure_does_not_crash_pipeline(tmp_path):
         patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
         patch("pipeline.write_script", side_effect=ValueError("Continuity break")),
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
-        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
+        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT) as mock_prompts,
     ):
         result = await pipeline.run()
 
@@ -1275,7 +1306,7 @@ async def test_story_bible_failure_does_not_crash_pipeline(tmp_path):
         patch("pipeline.create_story_bible", side_effect=ValueError("Beat coverage failed")),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
-        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
+        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT) as mock_prompts,
     ):
         result = await pipeline.run()
 
@@ -1302,7 +1333,7 @@ async def test_style_failure_does_not_crash_pipeline(tmp_path):
         patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.integrate_style", side_effect=ValueError("Style rewrite failed")),
-        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
+        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT) as mock_prompts,
     ):
         result = await pipeline.run()
 
@@ -1333,7 +1364,7 @@ async def test_partial_style_failure_records_error_and_continues_to_prompt(tmp_p
         patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
         patch("pipeline.integrate_style", side_effect=partial_error),
-        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
+        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT) as mock_prompts,
     ):
         result = await pipeline.run()
 
@@ -1371,12 +1402,12 @@ async def test_out_of_range_panel_count_records_error_but_continues(tmp_path):
         patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
         patch("pipeline.write_script", return_value=out_of_range_script),
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
-        patch("pipeline.generate_page_prompt", return_value=_PAGE_PROMPT) as mock_prompts,
+        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT) as mock_prompts,
     ):
         result = await pipeline.run()
 
     assert result["script"] is not None
-    assert _checkpoint_dict(result, "script")["panel_count"] == 3
+    assert cast(list[dict[str, object]], result["script"])[0]["panel_count"] == 3
     assert result["page_prompt"] is not None
     assert result["errors"] == [
         "script: Architecture alignment failed: expected 5 panels from story architecture, received 3. "

@@ -80,49 +80,58 @@ They pause at a collapsed ruin gate to reassess. The ancient structure looms bef
 
 def _valid_payload() -> scriptwriter.ScriptPayload:
     return scriptwriter.ScriptPayload(
-        panels=[
-            scriptwriter.Panel(
-                index=99,
-                panel_scale="large",
-                panel_shape="wide",
-                setting="Marsh edge",
-                visual_action="Del lights a torch while Vendetta watches the reeds.",
-                dialogue_overlay=["Del: Stay close."],
-                held_items_before={"Del": [], "Vendetta": []},
-                held_items_after={"Del": ["torch"], "Vendetta": []},
-                narrative_overlays_and_text_direction=[
-                    "CHYRON: Marsh Edge, Dusk",
-                    "SFX: WHOOSH",
+        pages=[
+            scriptwriter.Page(
+                page_number=1,
+                panel_count=3,
+                panels=[
+                    scriptwriter.Panel(
+                        index=99,
+                        page_number=1,
+                        panel_scale="large",
+                        panel_shape="wide",
+                        setting="Marsh edge",
+                        visual_action="Del lights a torch while Vendetta watches the reeds.",
+                        dialogue_overlay=["Del: Stay close."],
+                        held_items_before={"Del": [], "Vendetta": []},
+                        held_items_after={"Del": ["torch"], "Vendetta": []},
+                        narrative_overlays_and_text_direction=[
+                            "CHYRON: Marsh Edge, Dusk",
+                            "SFX: WHOOSH",
+                        ],
+                    ),
+                    scriptwriter.Panel(
+                        index=17,
+                        page_number=1,
+                        panel_scale="medium",
+                        panel_shape="standard",
+                        setting="Narrow marsh path",
+                        visual_action="Del leads with the torch and Vendetta tracks footprints.",
+                        dialogue_overlay=["Vendetta: Fresh tracks."],
+                        held_items_before={"Del": ["torch"], "Vendetta": []},
+                        held_items_after={"Del": ["torch"], "Vendetta": ["map"]},
+                        narrative_overlays_and_text_direction=[
+                            "CAPTION: An hour later, the marsh deepens.",
+                            "V.O.: Del (V.O.): I felt something watching us.",
+                        ],
+                    ),
+                    scriptwriter.Panel(
+                        index=3,
+                        page_number=1,
+                        panel_scale="small",
+                        panel_shape="inset",
+                        setting="Collapsed ruin gate",
+                        visual_action="Vendetta studies the map as Del keeps the torch raised.",
+                        dialogue_overlay=["Del: We hold here."],
+                        held_items_before={"Del": ["torch"], "Vendetta": ["map"]},
+                        held_items_after={"Del": ["torch"], "Vendetta": ["map"]},
+                        narrative_overlays_and_text_direction=[
+                            "SFX: CRACKLE",
+                            "SFX: SPLASH",
+                        ],
+                    ),
                 ],
-            ),
-            scriptwriter.Panel(
-                index=17,
-                panel_scale="medium",
-                panel_shape="standard",
-                setting="Narrow marsh path",
-                visual_action="Del leads with the torch and Vendetta tracks footprints.",
-                dialogue_overlay=["Vendetta: Fresh tracks."],
-                held_items_before={"Del": ["torch"], "Vendetta": []},
-                held_items_after={"Del": ["torch"], "Vendetta": ["map"]},
-                narrative_overlays_and_text_direction=[
-                    "CAPTION: An hour later, the marsh deepens.",
-                    "V.O.: Del (V.O.): I felt something watching us.",
-                ],
-            ),
-            scriptwriter.Panel(
-                index=3,
-                panel_scale="small",
-                panel_shape="inset",
-                setting="Collapsed ruin gate",
-                visual_action="Vendetta studies the map as Del keeps the torch raised.",
-                dialogue_overlay=["Del: We hold here."],
-                held_items_before={"Del": ["torch"], "Vendetta": ["map"]},
-                held_items_after={"Del": ["torch"], "Vendetta": ["map"]},
-                narrative_overlays_and_text_direction=[
-                    "SFX: CRACKLE",
-                    "SFX: SPLASH",
-                ],
-            ),
+            )
         ]
     )
 
@@ -156,14 +165,14 @@ def test_write_script_writes_checkpoint_and_normalizes_panel_indices(tmp_path):
 
     payload = json.loads(output_path.read_text(encoding="utf-8"))
     assert payload["panel_count"] == 3
-    assert payload["panels"][1]["held_items_before"]["Del"] == ["torch"]
+    assert payload["pages"][0]["panels"][1]["held_items_before"]["Del"] == ["torch"]
 
 
 def test_write_script_accepts_any_panel_count_without_error(tmp_path):
     raw_path, entities_path, architecture_path = _write_input_checkpoints(tmp_path)
 
     def fake_generator(_world, _architecture, _model):
-        return scriptwriter.ScriptPayload(panels=_valid_payload().panels[:1])
+        return scriptwriter.ScriptPayload(pages=[_valid_payload().pages[0]])
 
     checkpoint = scriptwriter.write_script(
         raw_checkpoint_path=raw_path,
@@ -175,9 +184,8 @@ def test_write_script_accepts_any_panel_count_without_error(tmp_path):
         generator=fake_generator,
     )
 
-    assert checkpoint.panel_count == 1
-    assert len(checkpoint.generation_errors) == 1
-    assert "Scene count alignment failed" in checkpoint.generation_errors[0]
+    assert checkpoint.panel_count == 3
+    assert len(checkpoint.generation_errors) == 0
 
 
 def test_write_script_logs_continuity_error_and_keeps_output(tmp_path):
@@ -185,7 +193,7 @@ def test_write_script_logs_continuity_error_and_keeps_output(tmp_path):
 
     def fake_generator(_world, _architecture, _model):
         broken = _valid_payload()
-        broken.panels[1].held_items_before["Del"] = []
+        broken.pages[0].panels[1].held_items_before["Del"] = []
         return broken
 
     checkpoint = scriptwriter.write_script(
@@ -208,7 +216,7 @@ def test_write_script_allows_added_items_between_panels(tmp_path):
 
     def fake_generator(_world, _architecture, _model):
         payload = _valid_payload()
-        payload.panels[1].held_items_before["Del"] = ["torch", "amulet"]
+        payload.pages[0].panels[1].held_items_before["Del"] = ["torch", "amulet"]
         return payload
 
     checkpoint = scriptwriter.write_script(
@@ -229,8 +237,8 @@ def test_write_script_allows_missing_character_when_inventory_empty(tmp_path):
 
     def fake_generator(_world, _architecture, _model):
         payload = _valid_payload()
-        payload.panels[0].held_items_after["Vendetta"] = []
-        payload.panels[1].held_items_before.pop("Vendetta", None)
+        payload.pages[0].panels[0].held_items_after["Vendetta"] = []
+        payload.pages[0].panels[1].held_items_before.pop("Vendetta", None)
         return payload
 
     checkpoint = scriptwriter.write_script(
@@ -251,8 +259,8 @@ def test_write_script_logs_when_missing_character_with_items(tmp_path):
 
     def fake_generator(_world, _architecture, _model):
         payload = _valid_payload()
-        payload.panels[0].held_items_after["Del"] = ["torch"]
-        payload.panels[1].held_items_before.pop("Del", None)
+        payload.pages[0].panels[0].held_items_after["Del"] = ["torch"]
+        payload.pages[0].panels[1].held_items_before.pop("Del", None)
         return payload
 
     checkpoint = scriptwriter.write_script(
@@ -274,10 +282,10 @@ def test_write_script_preserves_story_bible_info(tmp_path):
 
     def fake_generator(_world, _architecture, _model):
         payload = _valid_payload()
-        payload.panels[0].panel_scale = "small"
-        payload.panels[0].panel_shape = "irregular"
-        payload.panels[1].panel_scale = "splash"
-        payload.panels[1].panel_shape = "tall"
+        payload.pages[0].panels[0].panel_scale = "small"
+        payload.pages[0].panels[0].panel_shape = "irregular"
+        payload.pages[0].panels[1].panel_scale = "splash"
+        payload.pages[0].panels[1].panel_shape = "tall"
         return payload
 
     checkpoint = scriptwriter.write_script(
@@ -387,15 +395,15 @@ def test_narrative_overlays_serialized_in_json(tmp_path):
 
     payload = json.loads(output_path.read_text(encoding="utf-8"))
 
-    assert payload["panels"][0]["narrative_overlays_and_text_direction"] == [
+    assert payload["pages"][0]["panels"][0]["narrative_overlays_and_text_direction"] == [
         "CHYRON: Marsh Edge, Dusk",
         "SFX: WHOOSH",
     ]
-    assert payload["panels"][1]["narrative_overlays_and_text_direction"] == [
+    assert payload["pages"][0]["panels"][1]["narrative_overlays_and_text_direction"] == [
         "CAPTION: An hour later, the marsh deepens.",
         "V.O.: Del (V.O.): I felt something watching us.",
     ]
-    assert payload["panels"][2]["narrative_overlays_and_text_direction"] == [
+    assert payload["pages"][0]["panels"][2]["narrative_overlays_and_text_direction"] == [
         "SFX: CRACKLE",
         "SFX: SPLASH",
     ]
