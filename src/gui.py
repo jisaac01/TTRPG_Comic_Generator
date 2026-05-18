@@ -7,7 +7,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from pipeline_events import PipelineEventUnion
+from model_defaults import DEFAULT_MODEL
+from pipeline_config import RunConfig
+from pipeline_events import PhaseStarted, RunCompleted, PipelineEventUnion
 from repository_service import RepositoryService
 from run_controller import RunController
 from settings_service import SettingsService
@@ -36,11 +38,138 @@ def create_services(campaigns_root: Path = Path("campaigns")) -> AppServices:
     )
 
 
-def create_run_page(_ft: Any) -> Any:
-    return _ft.Container(
-        content=_ft.Text("Run workspace coming next", size=18, weight=_ft.FontWeight.W_600),
-        padding=16,
+def build_run_page(
+    services: AppServices, page: Any, event_log: Any, _ft: Any
+) -> tuple[Any, dict[str, Any]]:
+    """Build the Run workspace controls.
+
+    Returns a ``(container, state)`` tuple where *state* exposes individual
+    controls plus callable hooks used by tests.
+    """
+    campaigns = services.repository.list_campaigns()
+
+    campaign_dropdown = _ft.Dropdown(
+        label="Campaign",
+        options=[_ft.dropdown.Option(c) for c in campaigns],
+        value=campaigns[0] if campaigns else None,
+        width=220,
     )
+    url_field = _ft.TextField(label="Story URL", expand=True, hint_text="https://...")
+    rerun_dropdown = _ft.Dropdown(
+        label="Rerun from",
+        value="full",
+        options=[
+            _ft.dropdown.Option("full", "Full run"),
+            _ft.dropdown.Option("scrape", "Scrape"),
+            _ft.dropdown.Option("entities", "Entities"),
+            _ft.dropdown.Option("beater", "Beater"),
+            _ft.dropdown.Option("script", "Script"),
+            _ft.dropdown.Option("style", "Style"),
+            _ft.dropdown.Option("prompt", "Prompt"),
+        ],
+        width=160,
+    )
+    recap_dropdown = _ft.Dropdown(
+        label="Recap",
+        value="standard",
+        options=[
+            _ft.dropdown.Option("standard"),
+            _ft.dropdown.Option("short"),
+            _ft.dropdown.Option("alternate"),
+            _ft.dropdown.Option("long"),
+        ],
+        width=140,
+    )
+    skip_style_checkbox = _ft.Checkbox(label="Skip style", value=False)
+    panel_count_field = _ft.TextField(label="Panels", value="6", width=80)
+    total_pages_field = _ft.TextField(label="Pages", value="1", width=80)
+    model_field = _ft.TextField(
+        label="Model",
+        value=services.settings.get_default_model(),
+        width=280,
+    )
+
+    run_button = _ft.Button("Run", disabled=False)
+    phase_badge = _ft.Text("", size=12, italic=True)
+    status_summary = _ft.Text("", size=13, weight=_ft.FontWeight.W_600)
+    version_text = _ft.Text("", size=11, selectable=True)
+
+    def _build_config() -> RunConfig:
+        rerun_val = rerun_dropdown.value
+        rerun = None if rerun_val == "full" else rerun_val  # type: ignore[assignment]
+        model = model_field.value or DEFAULT_MODEL
+        return RunConfig(
+            url=url_field.value or "",
+            campaign=campaign_dropdown.value or "",
+            rerun_from=rerun,
+            recap_version=recap_dropdown.value or "standard",  # type: ignore[arg-type]
+            skip_style=bool(skip_style_checkbox.value),
+            panel_count=int(panel_count_field.value or 6),
+            total_pages=int(total_pages_field.value or 1),
+            beater_model=model,
+            script_model=model,
+            style_model=model,
+        )
+
+    def on_pipeline_event(event: PipelineEventUnion) -> None:
+        if isinstance(event, PhaseStarted):
+            phase_badge.value = f"Phase: {event.phase} – {event.message}"
+        elif isinstance(event, RunCompleted):
+            run_button.disabled = False
+            if event.status == "ok":
+                status_summary.value = "✓ OK"
+            elif event.status == "partial":
+                status_summary.value = "⚠ Partial"
+            else:
+                status_summary.value = "✗ Failed"
+            if event.version_dir:
+                version_text.value = str(event.version_dir)
+        append_pipeline_event(event_log, event, _ft)
+        page.update()
+
+    async def _execute_run() -> None:
+        config = _build_config()
+        task = services.run_controller.launch_run(config, on_pipeline_event)
+        await task
+        run_button.disabled = False
+        page.update()
+
+    def on_run_click(_event: Any) -> None:
+        run_button.disabled = True
+        page.update()
+        page.run_task(_execute_run)
+
+    run_button.on_click = on_run_click
+
+    container = _ft.Column(
+        controls=[
+            _ft.Text("Run", size=18, weight=_ft.FontWeight.W_600),
+            _ft.Row([campaign_dropdown, url_field], spacing=12),
+            _ft.Row([rerun_dropdown, recap_dropdown, skip_style_checkbox], spacing=12),
+            _ft.Row([panel_count_field, total_pages_field, model_field], spacing=12),
+            _ft.Row([run_button, phase_badge, status_summary], spacing=12),
+            version_text,
+        ],
+        spacing=8,
+    )
+
+    return container, {
+        "campaign_dropdown": campaign_dropdown,
+        "url_field": url_field,
+        "rerun_dropdown": rerun_dropdown,
+        "recap_dropdown": recap_dropdown,
+        "skip_style_checkbox": skip_style_checkbox,
+        "panel_count_field": panel_count_field,
+        "total_pages_field": total_pages_field,
+        "model_field": model_field,
+        "run_button": run_button,
+        "phase_badge": phase_badge,
+        "status_summary": status_summary,
+        "version_text": version_text,
+        "on_pipeline_event": on_pipeline_event,
+        "build_config": _build_config,
+        "execute_run": _execute_run,
+    }
 
 
 def create_prompt_page(_ft: Any) -> Any:
@@ -154,7 +283,7 @@ def build_main_layout(page: Any, services: AppServices) -> dict[str, Any]:
         on_click=lambda _e: open_settings_dialog(page, settings_dialog),
     )
 
-    run_view = create_run_page(ft)
+    run_view, run_page_state = build_run_page(services, page, event_log, ft)
     prompt_view = create_prompt_page(ft)
     output_view = create_output_page(ft)
     prompt_view.visible = False
@@ -201,6 +330,7 @@ def build_main_layout(page: Any, services: AppServices) -> dict[str, Any]:
     return {
         "navigation": nav_row,
         "run_view": run_view,
+        "run_page_state": run_page_state,
         "prompt_view": prompt_view,
         "output_view": output_view,
         "event_log": event_log,
@@ -212,13 +342,7 @@ def build_main_layout(page: Any, services: AppServices) -> dict[str, Any]:
 
 def main(page: Any) -> None:
     services = create_services()
-    controls = build_main_layout(page, services)
-
-    event_log = controls["event_log"]
-
-    def gui_event_callback(event: PipelineEventUnion) -> None:
-        append_pipeline_event(event_log, event, ft)
-        page.update()
+    build_main_layout(page, services)
 
 
 def run() -> None:

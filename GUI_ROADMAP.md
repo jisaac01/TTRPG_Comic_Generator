@@ -110,7 +110,7 @@
 **Goal**: Build the primary workflow surface for launching and monitoring runs.
 
 **Deliverables**:
-- [ ] `RunPage` component: 
+- [x] `RunPage` component: 
   - Campaign dropdown (populated by RepositoryService.list_campaigns()).
   - Story URL text field.
   - Rerun stage dropdown (scrape, entities, beater, script, style, prompt, or "Full run").
@@ -123,13 +123,13 @@
   - Run status summary (final: "✓ OK", "⚠ Partial", "✗ Failed").
   - Latest version path and link/button to open in file explorer or refresh Output tab.
 
-- [ ] State management:
+- [x] State management:
   - `RunPage` holds the UI state (campaign, URL, options).
   - On Run button click, validates inputs and calls `RunController.launch_run()`.
   - Event callback updates phase badge and appends to shared event log.
   - On run completion, refreshes version discovery via RepositoryService and enables the Run button again.
 
-- [ ] Tests:
+- [x] Tests:
   - Mock RunController and verify Run button launches with correct config.
   - Verify phase badge updates as events arrive.
   - Verify Run button is disabled during a run and re-enabled on completion.

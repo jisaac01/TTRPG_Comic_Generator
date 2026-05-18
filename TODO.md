@@ -58,28 +58,28 @@
   - [x] Default model selection
 - [x] Add placeholder workspace pages (RunPage, PromptPage, OutputPage)
 - [x] Add `tests/test_gui_integration.py` smoke tests
-- [ ] Verify app starts without errors
+- [x] Verify app starts without errors
 
 ### Phase 4: Run Workspace
 
-- [ ] Implement RunPage component
-  - [ ] Campaign dropdown (via RepositoryService)
-  - [ ] Story URL text field
-  - [ ] Rerun stage dropdown
-  - [ ] Recap version dropdown
-  - [ ] Skip style toggle
-  - [ ] Panel count / total pages spinners
-  - [ ] Model selectors (default or per-stage)
-- [ ] Implement Run status panel
-  - [ ] Status indicator
-  - [ ] Current phase badge
+- [x] Implement RunPage component
+  - [x] Campaign dropdown (via RepositoryService)
+  - [x] Story URL text field
+  - [x] Rerun stage dropdown
+  - [x] Recap version dropdown
+  - [x] Skip style toggle
+  - [x] Panel count / total pages spinners
+  - [x] Model selectors (default or per-stage)
+- [x] Implement Run status panel
+  - [x] Status indicator
+  - [x] Current phase badge
   - [ ] Checkpoint readiness list
-  - [ ] Latest version path display
-- [ ] Implement Run button & disable logic
-- [ ] State management for RunPage
-- [ ] Implement event callback → UI update flow
-- [ ] Add unit tests for RunPage state & button behavior
-- [ ] Test end-to-end with mocked pipeline
+  - [x] Latest version path display
+- [x] Implement Run button & disable logic
+- [x] State management for RunPage
+- [x] Implement event callback → UI update flow
+- [x] Add unit tests for RunPage state & button behavior
+- [x] Test end-to-end with mocked pipeline
 
 ### Phase 5: Prompt Workspace
 
