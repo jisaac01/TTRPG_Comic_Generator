@@ -39,13 +39,13 @@
 
 ### Phase 2: Run Controller & Event Streaming
 
-- [ ] Create `src/run_controller.py` with RunController class
-  - [ ] launch_run()
-  - [ ] current_run()
-  - [ ] cancel_run()
-- [ ] Add `tests/test_run_controller.py` with unit tests
-- [ ] Add integration test (RepositoryService + RunController)
-- [ ] Verify all tests pass
+- [x] Create `src/run_controller.py` with RunController class
+  - [x] launch_run()
+  - [x] current_run()
+  - [x] cancel_run()
+- [x] Add `tests/test_run_controller.py` with unit tests
+- [x] Add integration test (RepositoryService + RunController)
+- [x] Verify all tests pass
 
 ### Phase 3: Flet UI Shell & Navigation
 

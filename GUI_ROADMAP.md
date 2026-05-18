@@ -57,18 +57,18 @@
 **Goal**: Bridge the pipeline engine to the GUI with a controller that launches runs off-thread, emits events, and handles results.
 
 **Deliverables**:
-- [ ] New `src/run_controller.py`: `RunController` class:
+- [x] New `src/run_controller.py`: `RunController` class:
   - `launch_run(config: RunConfig, event_callback: Callable[[PipelineEvent], None])`: spawns the pipeline in an asyncio task, calls event_callback for each PipelineEvent, accumulates final result.
   - `current_run() -> RunInfo | None`: returns active run status or None if idle.
   - `cancel_run()`: requests cancellation (implementation depends on asyncio task model).
   - Internally tracks event history for this run, final status, version created.
 
-- [ ] New `tests/test_run_controller.py`: unit tests with a mock pipeline engine:
+- [x] New `tests/test_run_controller.py`: unit tests with a mock pipeline engine:
   - Launch a fake run, verify events are emitted in order.
   - Verify cancellation stops event emission.
   - Verify final result includes version_dir and error list.
 
-- [ ] Integration test combining `RepositoryService` + `RunController`: launch a run with a fake pipeline, then verify the created version is discoverable via the repository service.
+- [x] Integration test combining `RepositoryService` + `RunController`: launch a run with a fake pipeline, then verify the created version is discoverable via the repository service.
 
 **Success Criteria**:
 - `RunController` successfully launches a run and emits a sequence of events without blocking the test thread.
