@@ -49,15 +49,15 @@
 
 ### Phase 3: Flet UI Shell & Navigation
 
-- [ ] Create `src/gui.py` main Flet application
-- [ ] Implement three-tab workspace navigation
-- [ ] Implement shared event log view
-- [ ] Implement Settings panel/dialog
-  - [ ] API key configuration
-  - [ ] Backend selection
-  - [ ] Default model selection
-- [ ] Add placeholder workspace pages (RunPage, PromptPage, OutputPage)
-- [ ] Add `tests/test_gui_integration.py` smoke tests
+- [x] Create `src/gui.py` main Flet application
+- [x] Implement three-tab workspace navigation
+- [x] Implement shared event log view
+- [x] Implement Settings panel/dialog
+  - [x] API key configuration
+  - [x] Backend selection
+  - [x] Default model selection
+- [x] Add placeholder workspace pages (RunPage, PromptPage, OutputPage)
+- [x] Add `tests/test_gui_integration.py` smoke tests
 - [ ] Verify app starts without errors
 
 ### Phase 4: Run Workspace

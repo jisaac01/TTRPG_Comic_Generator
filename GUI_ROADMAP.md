@@ -82,16 +82,16 @@
 **Goal**: Create the main Flet window, routing, and workspace navigation structure without implementing the detailed workspace contents yet.
 
 **Deliverables**:
-- [ ] New `src/gui.py`: main Flet application with:
+- [x] New `src/gui.py`: main Flet application with:
   - `main()` function that builds and runs the app.
-  - Three-tab or sidebar navigation structure (Run, Prompt, Output workspaces).
-  - A top-level page that initializes RepositoryService, SettingsService, RunController.
-  - A shared event log view (vertical list of timestamped messages, auto-scrolling).
-  - A Settings panel/dialog accessible from a menu or gear icon.
+  - [x] Three-tab or sidebar navigation structure (Run, Prompt, Output workspaces).
+  - [x] A top-level page that initializes RepositoryService, SettingsService, RunController.
+  - [x] A shared event log view (vertical list of timestamped messages, auto-scrolling).
+  - [x] A Settings panel/dialog accessible from a menu or gear icon.
 
-- [ ] Placeholder workspace pages: `RunPage`, `PromptPage`, `OutputPage` (flet.Container with a Text control saying "Coming next").
+- [x] Placeholder workspace pages: `RunPage`, `PromptPage`, `OutputPage` (flet.Container with a Text control saying "Coming next").
 
-- [ ] New `tests/test_gui_integration.py`: smoke test:
+- [x] New `tests/test_gui_integration.py`: smoke test:
   - Instantiate main page with mocked services.
   - Navigate between tabs.
   - Verify Settings panel opens/closes.
