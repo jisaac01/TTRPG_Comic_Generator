@@ -19,23 +19,23 @@
 
 ### Phase 1: Services Layer
 
-- [ ] Create `src/repository_service.py` with RepositoryService class
-  - [ ] list_campaigns()
-  - [ ] list_episodes()
-  - [ ] latest_version()
-  - [ ] list_versions()
-  - [ ] get_version_files()
-  - [ ] get_campaign_prompts()
-  - [ ] get_version_prompts()
-  - [ ] run_status()
-- [ ] Create `src/settings_service.py` with SettingsService class
-  - [ ] get/set_gemini_api_key() (OS keyring)
-  - [ ] get/set_ollama_base_url()
-  - [ ] get/set_default_model()
-  - [ ] apply_to_environment()
-- [ ] Add `tests/test_repository_service.py` with functional tests
-- [ ] Add `tests/test_settings_service.py` with unit tests
-- [ ] Verify all existing tests still pass
+- [x] Create `src/repository_service.py` with RepositoryService class
+  - [x] list_campaigns()
+  - [x] list_episodes()
+  - [x] latest_version()
+  - [x] list_versions()
+  - [x] get_version_files()
+  - [x] get_campaign_prompts()
+  - [x] get_version_prompts()
+  - [x] run_status()
+- [x] Create `src/settings_service.py` with SettingsService class
+  - [x] get/set_gemini_api_key() (OS keyring)
+  - [x] get/set_ollama_base_url()
+  - [x] get/set_default_model()
+  - [x] apply_to_environment()
+- [x] Add `tests/test_repository_service.py` with functional tests
+- [x] Add `tests/test_settings_service.py` with unit tests
+- [x] Verify all existing tests still pass
 
 ### Phase 2: Run Controller & Event Streaming
 
@@ -138,7 +138,7 @@
 
 ## Milestones
 
-- [ ] **Milestone 1** (End of Phase 1): Services are testable in isolation; CLI works
+- [x] **Milestone 1** (End of Phase 1): Services are testable in isolation; CLI works
 - [ ] **Milestone 2** (End of Phase 3): Flet app starts, tabs navigate, Settings dialog works
 - [ ] **Milestone 3** (End of Phase 4): Run workspace is functional, user can launch mocked run
 - [ ] **Milestone 4** (End of Phase 6): All workspaces feature-complete, full workflow usable

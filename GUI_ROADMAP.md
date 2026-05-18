@@ -23,7 +23,7 @@
 **Goal**: Build the repository and settings abstractions so the GUI does not need to understand campaign/version/prompt filesystem conventions directly.
 
 **Deliverables**:
-- [ ] New `src/repository_service.py`: `RepositoryService` class answering:
+- [x] New `src/repository_service.py`: `RepositoryService` class answering:
   - `list_campaigns() -> list[str]`: campaigns under campaigns_root.
   - `list_episodes(campaign: str) -> list[Episode]` (dataclass with campaign, slug, url, title, created_at from episode_meta.json).
   - `latest_version(campaign: str, episode_slug: str) -> str | None`: e.g. "v003".
@@ -33,7 +33,7 @@
   - `get_version_prompts(campaign: str, episode_slug: str, version: str) -> CampaignPrompts`: version-captured prompt paths.
   - `run_status(campaign: str, episode_slug: str, version: str) -> dict | None`: parse run_status.json.
 
-- [ ] New `src/settings_service.py`: `SettingsService` class for API configuration:
+- [x] New `src/settings_service.py`: `SettingsService` class for API configuration:
   - `get_gemini_api_key() -> str | None`: reads from OS keyring (use `keyring` library).
   - `set_gemini_api_key(key: str)`: writes to OS keyring.
   - `get_ollama_base_url() -> str`: defaults to `http://localhost:11434/v1`.
@@ -42,8 +42,8 @@
   - `set_default_model(model: str)`.
   - `apply_to_environment()`: writes GEMINI_API_KEY, OLLAMA_BASE_URL to os.environ so the existing llm_client contract is honored.
 
-- [ ] New `tests/test_repository_service.py`: functional tests creating temp campaign/episode/version directories and asserting discovery, listing, and file lookups.
-- [ ] New `tests/test_settings_service.py`: unit tests for settings read/write, keyring fallbacks, and environment application.
+- [x] New `tests/test_repository_service.py`: functional tests creating temp campaign/episode/version directories and asserting discovery, listing, and file lookups.
+- [x] New `tests/test_settings_service.py`: unit tests for settings read/write, keyring fallbacks, and environment application.
 
 **Success Criteria**:
 - `RepositoryService` correctly lists all campaigns and episodes in a multi-campaign temp setup.

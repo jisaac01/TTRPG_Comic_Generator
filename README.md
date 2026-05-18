@@ -15,7 +15,7 @@ Each run is isolated in its own version folder. Prior runs are never overwritten
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install playwright pydantic instructor ollama openai pytest pytest-asyncio black
+pip install playwright pydantic instructor ollama openai keyring pytest pytest-asyncio black
 playwright install chromium
 ```
 
