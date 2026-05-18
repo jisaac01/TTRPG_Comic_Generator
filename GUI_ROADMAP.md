@@ -146,7 +146,7 @@
 **Goal**: Build the campaign-level prompt and art-template editor.
 
 **Deliverables**:
-- [ ] `PromptPage` component:
+- [x] `PromptPage` component:
   - Campaign dropdown to select which campaign's prompts to edit.
   - List of 7 editable files: master_beater_system.txt, master_beater_user.txt, scriptwriter_system.txt, scriptwriter_user.txt, style_integrator_system.txt, style_integrator_user.txt, page_prompt.txt.
   - Art direction template JSON: special handling to validate required fields (base_style, characters, color_palette, layout_and_composition, lettering_and_dialog, text_rendering_guide) using rules from `src/prompter.py`.
@@ -155,22 +155,22 @@
   - Validation feedback: red border or error message if art template JSON is invalid.
   - Preview: show which files will be captured into the next run (all 7 + art template).
 
-- [ ] State management:
+- [x] State management:
   - `PromptPage` fetches campaign prompts on campaign change via RepositoryService.
   - Load reads the file content into the text area.
   - Save writes the edited text back to disk.
   - Reset overwrites with the default from prompts/.
   - Art template validation uses `_load_art_template()` logic from `src/prompter.py`.
 
-- [ ] Tests:
+- [x] Tests:
   - Mock RepositoryService; verify file load/save flows.
   - Verify art template JSON validation rejects missing fields.
   - Verify Reset restores the default from prompts/.
 
 **Success Criteria**:
-- User can edit a campaign prompt file and see changes persisted to disk.
-- User cannot save invalid art template JSON and receives clear error feedback.
-- Reset to default works correctly.
+- [x] User can edit a campaign prompt file and see changes persisted to disk.
+- [x] User cannot save invalid art template JSON and receives clear error feedback.
+- [x] Reset to default works correctly.
 
 ---
 
@@ -179,7 +179,7 @@
 **Goal**: Browse and preview the latest versioned outputs.
 
 **Deliverables**:
-- [ ] `OutputPage` component:
+- [x] `OutputPage` component:
   - Campaign and episode selectors.
   - Version selector (dropdown of all versions, with latest pre-selected).
   - File browser: clickable list of checkpoint files present in the version (01_raw_text.json, 02_entities.json, 03_script.json, 03_5_styled_script.json, 04_page_prompt.txt, etc.).
@@ -187,20 +187,20 @@
   - Run status display: parse and display run_status.json (status, checkpoints, failed stages, errors/warnings as a list).
   - Quick-action buttons: Open Version Folder, Copy Latest Prompt Path, Copy Latest Script Path (for copy-paste into image generation tools).
 
-- [ ] State management:
+- [x] State management:
   - `OutputPage` uses RepositoryService to list campaigns, episodes, versions, and files.
   - On version change, refresh the file list via `get_version_files()`.
   - On file click, load and display via a preview formatter.
 
-- [ ] Tests:
+- [x] Tests:
   - Mock RepositoryService; verify file list is correctly displayed for a given version.
   - Verify JSON preview is readable (not raw single-line).
   - Verify run_status errors/warnings are parsed and displayed.
 
 **Success Criteria**:
-- User can browse a multi-version episode and see all outputs from any version.
-- Latest version is pre-selected and easily accessible.
-- Run errors and warnings are surfaced clearly so the user can diagnose failures.
+- [x] User can browse a multi-version episode and see all outputs from any version.
+- [x] Latest version is pre-selected and easily accessible.
+- [x] Run errors and warnings are surfaced clearly so the user can diagnose failures.
 
 ---
 
