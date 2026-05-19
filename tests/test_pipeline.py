@@ -28,6 +28,7 @@ from prompt_templates import (
 import scraper
 import scriptwriter
 import master_beater
+from pipeline_events import PhaseWarning
 from style_integrator import StyleIntegrationPartialFailure
 from pipeline import (
     ComicPipeline,
@@ -1292,6 +1293,56 @@ async def test_script_failure_does_not_crash_pipeline(tmp_path):
     assert result["raw_text"] is not None
     assert result["entities"] is not None
     assert result["story_bible"] is not None
+
+
+@pytest.mark.asyncio
+async def test_script_prompt_variable_mismatch_reports_template_file(tmp_path):
+    bad_scriptwriter_user = tmp_path / "bad_scriptwriter_user.txt"
+    bad_scriptwriter_user.write_text(
+        "Story architecture:\n{story_bible}\n",
+        encoding="utf-8",
+    )
+
+    emitted_events = []
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=2,
+        scriptwriter_user_prompt=bad_scriptwriter_user,
+        event_callback=emitted_events.append,
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
+        patch("pipeline.write_script") as mock_script,
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
+        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT),
+    ):
+        result = await pipeline.run()
+
+    assert result["script"] is None
+    assert result["page_prompt"] is None
+    assert result["errors"]
+    first_error = cast(list[str], result["errors"])[0]
+    assert first_error.startswith("script: Prompt template variable mismatch in ")
+    assert "/prompts/scriptwriter_user.txt" in first_error
+    assert "{story_bible}" in first_error
+
+    details = cast(list[str], result["error_details"])
+    assert details
+    assert "KeyError: 'story_bible'" in details[0]
+    assert mock_script.call_count == 0
+
+    prompt_warning_events = [
+        event
+        for event in emitted_events
+        if isinstance(event, PhaseWarning) and event.message == "Prompt template update required"
+    ]
+    assert prompt_warning_events
+    assert "/prompts/scriptwriter_user.txt" in prompt_warning_events[-1].warning
 
 
 @pytest.mark.asyncio

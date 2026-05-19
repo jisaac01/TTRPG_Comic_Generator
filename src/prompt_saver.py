@@ -14,6 +14,7 @@ from prompt_templates import (
     STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME,
     STYLE_INTEGRATOR_USER_PROMPT_FILENAME,
     render_prompt_template,
+    resolve_prompt_template_path,
 )
 from scriptwriter import ScriptCheckpoint, WorldStateInput
 from master_beater import StoryBibleCheckpoint
@@ -41,6 +42,30 @@ def _save_prompt_template(
     target_path = prompts_dir / template_filename
     template_path.read_bytes()  # Verify it exists
     target_path.write_text(template_path.read_text(encoding="utf-8"), encoding="utf-8")
+
+
+def _render_prompt_template_checked(
+    template_filename: str,
+    template_path: Path | None,
+    **values: str | int,
+) -> str:
+    """Render prompt templates with explicit missing-variable diagnostics."""
+    try:
+        return render_prompt_template(
+            template_filename,
+            template_path=template_path,
+            **values,
+        )
+    except KeyError as exc:
+        missing = exc.args[0] if exc.args else "unknown"
+        template_file = resolve_prompt_template_path(
+            name=template_filename,
+            template_path=template_path,
+        )
+        raise ValueError(
+            f"Prompt template variable mismatch in {template_file}: "
+            f"missing placeholder {{{missing}}}."
+        ) from exc
 
 
 def prepare_beater_prompts(
@@ -74,12 +99,12 @@ def prepare_beater_prompts(
     }
 
     # Render prompts
-    system_prompt = render_prompt_template(
+    system_prompt = _render_prompt_template_checked(
         MASTER_BEATER_SYSTEM_PROMPT_FILENAME,
         template_path=system_prompt_path,
         **template_vars,
     )
-    user_prompt = render_prompt_template(
+    user_prompt = _render_prompt_template_checked(
         MASTER_BEATER_USER_PROMPT_FILENAME,
         template_path=user_prompt_path,
         **template_vars,
@@ -128,17 +153,17 @@ def prepare_scriptwriter_prompts(
         else ""
     )
 
-    system_prompt = render_prompt_template(
+    system_prompt = _render_prompt_template_checked(
         SCRIPTWRITER_SYSTEM_PROMPT_FILENAME,
         template_path=system_prompt_path,
     )
-    user_prompt = render_prompt_template(
+    user_prompt = _render_prompt_template_checked(
         SCRIPTWRITER_USER_PROMPT_FILENAME,
         template_path=user_prompt_path,
         title=title,
         panel_count=story_bible.scene_count,
         entities_context=entities_context,
-        story_bible=_format_story_bible_for_prompt(story_bible),
+        story_architecture=_format_story_bible_for_prompt(story_bible),
         first_page_panel_1_narration_directive=first_page_panel_1_narration_directive,
     )
 
@@ -177,11 +202,11 @@ def prepare_style_integrator_prompts(
     _save_prompt_template(prompts_dir, system_prompt_path, STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME)
     _save_prompt_template(prompts_dir, user_prompt_path, STYLE_INTEGRATOR_USER_PROMPT_FILENAME)
 
-    system_prompt = render_prompt_template(
+    system_prompt = _render_prompt_template_checked(
         STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME,
         template_path=system_prompt_path,
     )
-    user_prompt = render_prompt_template(
+    user_prompt = _render_prompt_template_checked(
         STYLE_INTEGRATOR_USER_PROMPT_FILENAME,
         template_path=user_prompt_path,
         art_direction=_format_art_direction(art_template),
@@ -232,7 +257,7 @@ def prepare_page_prompt_template(
     character_details = _format_character_details(world, script)
     panel_block = _format_panel_block(script)
 
-    prompt_text = render_prompt_template(
+    prompt_text = _render_prompt_template_checked(
         PAGE_PROMPT_TEMPLATE_FILENAME,
         template_path=template_path,
         title=title,

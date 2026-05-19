@@ -124,6 +124,14 @@ def _delete_matching(version_dir: Path, pattern: str) -> None:
 def _format_exception_detail(exc: BaseException) -> str:
     return "".join(traceback.format_exception(type(exc), exc, exc.__traceback__)).strip()
 
+
+def _prompt_template_mismatch_detail(exc: BaseException) -> str | None:
+    """Return a user-facing detail when an exception is a prompt template mismatch."""
+    detail = str(exc).strip()
+    if detail.startswith("Prompt template variable mismatch in "):
+        return detail
+    return None
+
 # ---------------------------------------------------------------------------
 # Slug helpers
 # ---------------------------------------------------------------------------
@@ -369,6 +377,18 @@ class ComicPipeline:
     def _emit(self, event: PipelineEventUnion) -> None:
         """Emit an event via the callback."""
         self.event_callback(event)
+
+    def _emit_prompt_template_mismatch_warning(self, phase: Literal["beater", "script", "style", "prompt"], exc: BaseException) -> None:
+        detail = _prompt_template_mismatch_detail(exc)
+        if detail is None:
+            return
+        self._emit(
+            PhaseWarning(
+                phase=phase,
+                message="Prompt template update required",
+                warning=detail,
+            )
+        )
 
     def _apply_recap_selection(self, raw: RawTextCheckpoint) -> tuple[RawTextCheckpoint, bool, bool]:
         """Select content from recap variants and report selection/content changes."""
@@ -659,21 +679,21 @@ class ComicPipeline:
                     details={"model": self.beater_model, "scene_count": scene_count},
                 )
             )
-            # Prepare and save prompts before model call.
-            # The exact rendered strings are also the ones sent to the model.
-            beater_system_prompt, beater_user_prompt = prepare_beater_prompts(
-                version_dir=version_dir,
-                content=raw.content,
-                world=entities,
-                scene_count=scene_count,
-                raw_quotes=[
-                    {"text": quote.text, "attribution": quote.attribution}
-                    for quote in raw.quotes
-                ],
-                system_prompt_path=prompt_template_paths[MASTER_BEATER_SYSTEM_PROMPT_FILENAME],
-                user_prompt_path=prompt_template_paths[MASTER_BEATER_USER_PROMPT_FILENAME],
-            )
             try:
+                # Prepare and save prompts before model call.
+                # The exact rendered strings are also the ones sent to the model.
+                beater_system_prompt, beater_user_prompt = prepare_beater_prompts(
+                    version_dir=version_dir,
+                    content=raw.content,
+                    world=entities,
+                    scene_count=scene_count,
+                    raw_quotes=[
+                        {"text": quote.text, "attribution": quote.attribution}
+                        for quote in raw.quotes
+                    ],
+                    system_prompt_path=prompt_template_paths[MASTER_BEATER_SYSTEM_PROMPT_FILENAME],
+                    user_prompt_path=prompt_template_paths[MASTER_BEATER_USER_PROMPT_FILENAME],
+                )
                 story_bible = create_story_bible(
                     raw_checkpoint_path=raw_path,
                     entities_checkpoint_path=entities_path,
@@ -700,6 +720,7 @@ class ComicPipeline:
                         error_detail=str(exc),
                     )
                 )
+                self._emit_prompt_template_mismatch_warning("beater", exc)
 
         script_pages: list[ScriptCheckpoint] | None = None
         script_generated_this_run = False
@@ -746,6 +767,7 @@ class ComicPipeline:
                         error_detail=str(exc),
                     )
                 )
+                self._emit_prompt_template_mismatch_warning("script", exc)
             if story_bible_pages:
                 try:
                     generated_pages: list[ScriptCheckpoint] = []
@@ -800,6 +822,7 @@ class ComicPipeline:
                             error_detail=str(exc),
                         )
                     )
+                    self._emit_prompt_template_mismatch_warning("script", exc)
 
         if script_generated_this_run and script_pages is not None:
             for page_number, checkpoint in enumerate(script_pages, start=1):
@@ -915,6 +938,7 @@ class ComicPipeline:
                         error_detail=str(exc),
                     )
                 )
+                self._emit_prompt_template_mismatch_warning("style", exc)
 
         page_prompt: str | None = None
         page_prompts: list[tuple[Path, str]] = []
@@ -1002,6 +1026,7 @@ class ComicPipeline:
                             exception=exc,
                         )
                     )
+                    self._emit_prompt_template_mismatch_warning("prompt", exc)
 
         # Determine final status
         checkpoint_keys = (

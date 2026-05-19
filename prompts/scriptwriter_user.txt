@@ -19,4 +19,4 @@ Character and Location information:
 {entities_context}
 
 Story bible:
-{story_bible}
+{story_architecture}
