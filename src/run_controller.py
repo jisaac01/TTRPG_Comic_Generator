@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import traceback
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -32,6 +34,7 @@ class RunInfo:
     version_dir: str | None = None
     failed_phases: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    error_details: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -41,6 +44,7 @@ class RunResult:
     version_dir: str | None
     failed_phases: list[str]
     errors: list[str]
+    error_details: list[str]
     events: list[PipelineEventUnion]
     output: dict[str, object] | None
 
@@ -138,6 +142,9 @@ class RunController:
                 output_errors = [str(err) for err in output.get("errors", [])] if output else []
                 run_info.status = "ok" if not output_errors else "partial"
                 run_info.errors = output_errors
+                run_info.error_details = [
+                    str(err) for err in output.get("error_details", output_errors)
+                ] if output else []
                 run_info.version = str(output.get("version")) if output.get("version") is not None else None
                 run_info.version_dir = (
                     str(output.get("version_dir"))
@@ -145,38 +152,109 @@ class RunController:
                     else None
                 )
 
+            self._persist_run_status(run_info, output)
+
             return RunResult(
                 status=run_info.status,
                 version=run_info.version,
                 version_dir=run_info.version_dir,
                 failed_phases=list(run_info.failed_phases),
                 errors=list(run_info.errors),
+                error_details=list(run_info.error_details),
                 events=list(run_info.events),
                 output=output,
             )
         except asyncio.CancelledError:
             run_info.status = "cancelled"
+            if "Run cancelled by user." not in run_info.errors:
+                run_info.errors.append("Run cancelled by user.")
+            if "Run cancelled by user." not in run_info.error_details:
+                run_info.error_details.append("Run cancelled by user.")
+            self._persist_run_status(run_info, None)
             return RunResult(
                 status="cancelled",
                 version=run_info.version,
                 version_dir=run_info.version_dir,
                 failed_phases=list(run_info.failed_phases),
                 errors=list(run_info.errors),
+                error_details=list(run_info.error_details),
                 events=list(run_info.events),
                 output=None,
             )
         except Exception as exc:
             run_info.status = "failed"
             run_info.errors.append(str(exc))
+            run_info.error_details.append(_format_exception_detail(exc))
+            self._persist_run_status(run_info, None)
             return RunResult(
                 status="failed",
                 version=run_info.version,
                 version_dir=run_info.version_dir,
                 failed_phases=list(run_info.failed_phases),
                 errors=list(run_info.errors),
+                error_details=list(run_info.error_details),
                 events=list(run_info.events),
                 output=None,
             )
+
+    def _persist_run_status(self, run_info: RunInfo, output: dict[str, object] | None) -> None:
+        if not run_info.version_dir:
+            return
+
+        version_dir = Path(run_info.version_dir)
+        version_dir.mkdir(parents=True, exist_ok=True)
+
+        checkpoint_paths = {
+            "entities": [version_dir / "02_entities.json"],
+            "story_bible": [version_dir / "02_5_story_bible.json"],
+            "script": [version_dir / "03_script.json"],
+            "styled_script": [version_dir / "03_5_styled_script.json"],
+            "page_prompt": [version_dir / "04_page_prompt.txt"],
+        }
+
+        # The pipeline currently writes per-page checkpoint files.
+        checkpoint_patterns = {
+            "script": "03_script_page_*.json",
+            "styled_script": "03_5_styled_script_page_*.json",
+            "page_prompt": "04_page_*_prompt.txt",
+        }
+
+        checkpoints: list[str] = []
+        for key, paths in checkpoint_paths.items():
+            if any(path.exists() for path in paths):
+                checkpoints.append(key)
+                continue
+            pattern = checkpoint_patterns.get(key)
+            if pattern and any(version_dir.glob(pattern)):
+                checkpoints.append(key)
+
+        failed = [
+            key
+            for key in ("entities", "story_bible", "script", "styled_script", "page_prompt")
+            if key not in checkpoints
+        ]
+        if run_info.failed_phases:
+            failed = list(run_info.failed_phases)
+
+        status_blob = {
+            "status": run_info.status,
+            "campaign": run_info.config.campaign,
+            "version": run_info.version,
+            "version_dir": run_info.version_dir,
+            "checkpoints": checkpoints,
+            "failed": failed,
+            "errors": list(run_info.errors),
+            "error_details": list(run_info.error_details),
+        }
+
+        if output is not None and output.get("errors") is not None:
+            status_blob["errors"] = [str(err) for err in output.get("errors", [])]  # type: ignore[arg-type]
+            status_blob["error_details"] = [
+                str(err) for err in output.get("error_details", status_blob["errors"])
+            ]
+
+        run_status_path = version_dir / "run_status.json"
+        run_status_path.write_text(json.dumps(status_blob, indent=2), encoding="utf-8")
 
     def _on_run_finished(self, task: asyncio.Task[RunResult]) -> None:
         try:
@@ -186,3 +264,7 @@ class RunController:
         finally:
             self._active_task = None
             self._active_run = None
+
+
+def _format_exception_detail(exc: BaseException) -> str:
+    return "".join(traceback.format_exception(type(exc), exc, exc.__traceback__)).strip()

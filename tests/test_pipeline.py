@@ -1285,6 +1285,9 @@ async def test_script_failure_does_not_crash_pipeline(tmp_path):
     assert result["styled_script"] is None
     assert result["page_prompt"] is None
     assert result["errors"] == ["script: Continuity break"]
+    assert isinstance(result["error_details"], list)
+    assert len(cast(list[str], result["error_details"])) == 1
+    assert "ValueError: Continuity break" in cast(list[str], result["error_details"])[0]
     mock_prompts.assert_not_called()
     assert result["raw_text"] is not None
     assert result["entities"] is not None

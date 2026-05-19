@@ -1040,6 +1040,13 @@ def append_log_line(event_log: Any, source: str, message: str, _ft: Any) -> None
         latest_line.value = line
 
 
+def _snippet(text: str, limit: int = 180) -> str:
+    compact = " ".join(text.split())
+    if len(compact) <= limit:
+        return compact
+    return compact[: limit - 3] + "..."
+
+
 def append_pipeline_event(event_log: Any, event: PipelineEventUnion, _ft: Any) -> None:
     payload = event.to_dict()
     message = payload.get("message") or payload.get("warning") or payload.get("error") or payload["type"]
@@ -1050,6 +1057,17 @@ def append_pipeline_event(event_log: Any, event: PipelineEventUnion, _ft: Any) -
         source = f"Run/{phase}"
     else:
         source = "Run"
+
+    if isinstance(event, PhaseError):
+        detail = event.error or event.message or "unknown error"
+        message = f"{_snippet(detail)} See run_status.json for full details."
+    elif isinstance(event, PhasePartialFailure):
+        detail = event.error_detail or event.message or "partial failure"
+        message = f"{_snippet(detail)} See run_status.json for full details."
+    elif isinstance(event, RunCompleted) and event.status != "ok":
+        detail = event.error_messages[0] if event.error_messages else "Run completed with errors"
+        message = f"{_snippet(detail)} See run_status.json for full details."
+
     append_log_line(event_log, source, str(message), _ft)
 
 

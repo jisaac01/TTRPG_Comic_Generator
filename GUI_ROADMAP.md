@@ -215,7 +215,7 @@
   - Edit a campaign prompt and verify the next run uses the updated version.
   - Test error handling: invalid campaign, network timeout, API key missing, etc.
 
-- [ ] Error handling:
+- [x] Error handling:
   - Graceful handling of missing campaigns_root, invalid URLs, API key not set, backend unreachable.
   - User-facing error messages (not tracebacks) in the event log.
 

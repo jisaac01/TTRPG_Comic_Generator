@@ -20,7 +20,7 @@ from gui import (
     open_settings_dialog,
     _validate_art_template,
 )
-from pipeline_events import PhaseStarted
+from pipeline_events import PhasePartialFailure, PhaseStarted
 from repository_service import RepositoryService
 from run_controller import RunController
 
@@ -155,6 +155,26 @@ def test_gui_event_log_receives_pipeline_events(tmp_path):
     assert len(event_log.controls) == 2
     assert "Writing script..." in event_log.controls[-1].value
     assert "[Run/script]" in event_log.controls[-1].value
+
+
+def test_gui_event_log_failure_mentions_run_status(tmp_path):
+    page = _FakePage()
+    controls = build_main_layout(page, _services(tmp_path))
+    event_log = controls["event_log"]
+
+    append_pipeline_event(
+        event_log,
+        PhasePartialFailure(
+            phase="script",
+            message="Script generation failed",
+            skipped_phases=["style", "prompt"],
+            error_detail="KeyError: 'story_architecture' while normalizing story bible payload",
+        ),
+        __import__("flet"),
+    )
+
+    assert "See run_status.json for full details." in event_log.controls[-1].value
+    assert "story_architecture" in event_log.controls[-1].value
 
 
 # ---------------------------------------------------------------------------

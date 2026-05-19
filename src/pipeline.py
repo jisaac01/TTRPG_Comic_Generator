@@ -6,6 +6,7 @@ import json
 import re
 import shutil
 import tempfile
+import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Literal, cast
@@ -118,6 +119,10 @@ def _write_script_pages(paths: list[Path], checkpoints: list[ScriptCheckpoint]) 
 def _delete_matching(version_dir: Path, pattern: str) -> None:
     for path in version_dir.glob(pattern):
         path.unlink(missing_ok=True)
+
+
+def _format_exception_detail(exc: BaseException) -> str:
+    return "".join(traceback.format_exception(type(exc), exc, exc.__traceback__)).strip()
 
 # ---------------------------------------------------------------------------
 # Slug helpers
@@ -611,6 +616,7 @@ class ComicPipeline:
             version_dir,
         )
         errors: list[str] = []
+        error_details: list[str] = []
 
         if entities_path.exists():
             self._emit(
@@ -685,6 +691,7 @@ class ComicPipeline:
                 self._emit(PhaseCompleted(phase="beater", message="...done"))
             except Exception as exc:
                 errors.append(f"story_bible: {exc}")
+                error_details.append(f"story_bible: {_format_exception_detail(exc)}")
                 self._emit(
                     PhasePartialFailure(
                         phase="beater",
@@ -730,6 +737,7 @@ class ComicPipeline:
                 )
             except Exception as exc:
                 errors.append(f"script: {exc}")
+                error_details.append(f"script: {_format_exception_detail(exc)}")
                 self._emit(
                     PhasePartialFailure(
                         phase="script",
@@ -783,6 +791,7 @@ class ComicPipeline:
                     )
                 except Exception as exc:
                     errors.append(f"script: {exc}")
+                    error_details.append(f"script: {_format_exception_detail(exc)}")
                     self._emit(
                         PhasePartialFailure(
                             phase="script",
@@ -797,6 +806,7 @@ class ComicPipeline:
                 for generation_error in checkpoint.generation_errors:
                     error_prefix = "script" if len(script_pages) == 1 else f"script: page {page_number}"
                     errors.append(f"{error_prefix}: {generation_error}")
+                    error_details.append(f"{error_prefix}: {generation_error}")
                     self._emit(
                         PhaseWarning(
                             phase="script",
@@ -876,6 +886,7 @@ class ComicPipeline:
                         )
                         error_prefix = "style" if len(script_pages) == 1 else f"style: page {page_number}"
                         errors.append(f"{error_prefix}: {exc}")
+                        error_details.append(f"{error_prefix}: {_format_exception_detail(exc)}")
                         self._emit(
                             PhaseWarning(
                                 phase="style",
@@ -895,6 +906,7 @@ class ComicPipeline:
                 )
             except Exception as exc:
                 errors.append(f"style: {exc}")
+                error_details.append(f"style: {_format_exception_detail(exc)}")
                 self._emit(
                     PhasePartialFailure(
                         phase="style",
@@ -981,6 +993,7 @@ class ComicPipeline:
                     )
                 except Exception as exc:
                     errors.append(f"page_prompt: {exc}")
+                    error_details.append(f"page_prompt: {_format_exception_detail(exc)}")
                     self._emit(
                         PhaseError(
                             phase="prompt",
@@ -1043,6 +1056,7 @@ class ComicPipeline:
                 "prompt": page_prompt,
             } if page_prompt is not None else None,
             "errors": errors,
+            "error_details": error_details,
             "version": version_name,
             "version_dir": str(version_dir),
         }
@@ -1325,10 +1339,12 @@ async def _run_cli() -> None:
     try:
         result = await pipeline.run()
     except Exception as exc:
+        full_detail = _format_exception_detail(exc)
         status_blob = {
             "status": "failed",
             "campaign": args.campaign,
             "errors": [str(exc)],
+            "error_details": [full_detail],
         }
         status_json = json.dumps(status_blob, indent=2)
         print(status_json)
@@ -1352,6 +1368,7 @@ async def _run_cli() -> None:
         "checkpoints": [key for key in checkpoint_keys if result.get(key) is not None],
         "failed": failed,
         "errors": result.get("errors", []),
+        "error_details": result.get("error_details", []),
     }
     status_json = json.dumps(status_blob, indent=2)
     print(status_json)
