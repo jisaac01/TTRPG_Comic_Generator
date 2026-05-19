@@ -64,6 +64,7 @@ class _FakeRunController:
                 version_dir="campaigns/flail/ep-1/v001",
                 failed_phases=[],
                 errors=[],
+                error_details=[],
                 events=[],
                 output=None,
             )
@@ -218,6 +219,7 @@ def test_run_page_on_pipeline_event_appends_to_event_log() -> None:
     assert len(event_log.controls) == initial_count + 1
 
 
+
 def test_run_page_run_button_disabled_on_click() -> None:
     page = _FakePage()
     event_log = ft.ListView()
@@ -275,3 +277,26 @@ async def test_run_page_execute_run_reenables_button_on_completion() -> None:
 
     assert state["run_button"].disabled is False
     assert state["status_summary"].value == "✓ OK"
+
+
+@pytest.mark.asyncio
+async def test_run_page_execute_run_invokes_on_run_finished_after_task() -> None:
+    page = _FakePage()
+    event_log = ft.ListView()
+    fake_rc = _FakeRunController()
+    received_version_dirs: list[str | None] = []
+
+    def _on_finished(version_dir: str | None) -> None:
+        received_version_dirs.append(version_dir)
+
+    _container, state = build_run_page(
+        _services(fake_rc),
+        page,
+        event_log,
+        ft,
+        on_run_finished=_on_finished,
+    )
+
+    await state["execute_run"]()
+
+    assert len(received_version_dirs) == 1

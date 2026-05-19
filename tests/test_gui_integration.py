@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import sys
 from pathlib import Path
@@ -20,9 +21,9 @@ from gui import (
     open_settings_dialog,
     _validate_art_template,
 )
-from pipeline_events import PhasePartialFailure, PhaseStarted
+from pipeline_events import PhasePartialFailure, PhaseStarted, RunCompleted
 from repository_service import RepositoryService
-from run_controller import RunController
+from run_controller import RunController, RunResult
 
 
 class _FakeSession:
@@ -95,7 +96,7 @@ class _FakeSettingsService:
 def _services(tmp_path: Path) -> AppServices:
     return AppServices(
         repository=RepositoryService(tmp_path / "campaigns"),
-        settings=_FakeSettingsService(),
+        settings=_FakeSettingsService(),  # type: ignore[arg-type]
         run_controller=RunController(),
     )
 
@@ -175,6 +176,87 @@ def test_gui_event_log_failure_mentions_run_status(tmp_path):
 
     assert "See run_status.json for full details." in event_log.controls[-1].value
     assert "story_architecture" in event_log.controls[-1].value
+
+
+
+
+@pytest.mark.asyncio
+async def test_main_layout_run_completion_refreshes_output_file_list(tmp_path):
+    campaigns_root = _make_output_versions(tmp_path)
+    episode_dir = campaigns_root / "test_camp" / "episode-1"
+    v003 = episode_dir / "v003"
+    v003.mkdir(parents=True, exist_ok=True)
+    (v003 / "episode_meta.json").write_text(
+        json.dumps(
+            {
+                "slug": "episode-1",
+                "url": "https://example.com/story",
+                "title": "Episode 1",
+                "created_at": "2026-05-19T00:00:00Z",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    class _WritingFakeRunController:
+        """Emits RunCompleted, then writes run_status.json, then returns RunResult.
+
+        This faithfully models the real sequence: event fires before persistence,
+        but the file is present when RunResult is returned (and on_run_finished fires).
+        """
+
+        def launch_run(self, config: object, event_callback: object) -> "asyncio.Task[RunResult]":
+            async def _complete() -> RunResult:
+                import flet as _flet  # noqa: F401 – needed in the closure context
+                event_callback(  # type: ignore[operator]
+                    RunCompleted(
+                        status="failed",
+                        version="v003",
+                        version_dir=str(v003),
+                        checkpoints=[],
+                        failed_phases=["script"],
+                        error_messages=["script: error"],
+                    )
+                )
+                # Persistence happens AFTER pipeline.run() returns
+                (v003 / "run_status.json").write_text(
+                    json.dumps({"status": "failed", "errors": ["script: error"]}),
+                    encoding="utf-8",
+                )
+                return RunResult(
+                    status="failed",
+                    version="v003",
+                    version_dir=str(v003),
+                    failed_phases=["script"],
+                    errors=["script: error"],
+                    error_details=[],
+                    events=[],
+                    output=None,
+                )
+
+            return asyncio.ensure_future(_complete())
+
+        def current_run(self) -> None:
+            return None
+
+        def last_result(self) -> None:
+            return None
+
+    page = _FakePage()
+    services = AppServices(
+        repository=RepositoryService(campaigns_root),
+        settings=_FakeSettingsService(),  # type: ignore[arg-type]
+        run_controller=_WritingFakeRunController(),  # type: ignore[arg-type]
+    )
+    controls = build_main_layout(page, services)
+
+    await controls["run_page_state"]["execute_run"]()
+
+    assert controls["output_page_state"]["campaign_dropdown"].value == "test_camp"
+    assert controls["output_page_state"]["episode_dropdown"].value == "episode-1"
+    assert controls["output_page_state"]["version_dropdown"].value == "v003"
+    file_values = [radio.value for radio in controls["output_page_state"]["file_list"].content.controls]
+    assert "run_status.json" in file_values
 
 
 # ---------------------------------------------------------------------------

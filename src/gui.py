@@ -216,8 +216,6 @@ def build_run_page(
                     run_error_text.value = "\n".join(event.error_messages)
             if event.version_dir:
                 version_text.value = str(event.version_dir)
-            if callable(on_run_finished):
-                on_run_finished()
         append_pipeline_event(event_log, event, _ft)
         page.update()
 
@@ -225,7 +223,9 @@ def build_run_page(
         try:
             config = _build_config()
             task = services.run_controller.launch_run(config, on_pipeline_event)
-            await task
+            result = await task
+            if callable(on_run_finished):
+                on_run_finished(result.version_dir if result else None)
         except (RuntimeError, ValueError) as exc:
             status_summary.value = f"✗ {exc}"
             run_error_text.value = str(exc)
@@ -938,15 +938,21 @@ def build_output_page(
                     style_model=model,
                 )
 
+                final_status: list[str] = []
+
                 def _on_event(event: PipelineEventUnion) -> None:
                     if event_log is not None:
                         append_pipeline_event(event_log, event, _ft)
                     if isinstance(event, RunCompleted):
-                        output_status_text.value = f"Quick rerun finished: {event.status}"
+                        final_status.append(event.status)
+                    else:
                         _refresh_all()
                     page.update()
 
                 await services.run_controller.launch_run(config, _on_event)
+                # Refresh AFTER launch_run returns — run_status.json is now written
+                _refresh_all()
+                output_status_text.value = f"Quick rerun finished: {final_status[0] if final_status else 'done'}"
             except (RuntimeError, ValueError) as exc:
                 output_status_text.value = str(exc)
                 if event_log is not None:
@@ -1021,6 +1027,7 @@ def build_output_page(
         "quick_rerun_stage_dropdown": quick_rerun_stage_dropdown,
         "quick_rerun_button": quick_rerun_button,
         "refresh_campaigns": _refresh_campaign_options,
+        "refresh_episodes": _refresh_episodes,
         "refresh_all": _refresh_all,
     }
 
@@ -1176,13 +1183,33 @@ def build_main_layout(page: Any, services: AppServices) -> dict[str, Any]:
     prompt_view, prompt_page_state = build_prompt_page(services, page, ft)
     output_view, output_page_state = build_output_page(services, page, ft, event_log)
 
+    def _sync_output_to_version_dir(version_dir_value: str) -> None:
+        version_path = Path(version_dir_value)
+        try:
+            version = version_path.name
+            episode_slug = version_path.parent.name
+            campaign = version_path.parent.parent.name
+        except Exception:
+            return
+        output_page_state["refresh_campaigns"](campaign)
+        output_page_state["campaign_dropdown"].value = campaign
+        output_page_state["refresh_episodes"]()
+        output_page_state["episode_dropdown"].value = episode_slug
+        output_page_state["version_dropdown"].value = version
+        output_page_state["refresh_all"]()
+
     def _on_campaign_created(new_campaign: str) -> None:
         prompt_page_state["refresh_campaigns"](new_campaign)
         output_page_state["refresh_campaigns"](new_campaign)
         output_page_state["refresh_all"]()
+        page.update()
 
-    def _on_run_finished() -> None:
-        output_page_state["refresh_all"]()
+    def _on_run_finished(version_dir: str | None) -> None:
+        if version_dir:
+            _sync_output_to_version_dir(version_dir)
+        else:
+            output_page_state["refresh_all"]()
+        page.update()
 
     run_view, run_page_state = build_run_page(
         services,
