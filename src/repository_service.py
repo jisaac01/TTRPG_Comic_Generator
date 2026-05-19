@@ -74,6 +74,17 @@ class RepositoryService:
     def __init__(self, campaigns_root: Path) -> None:
         self.campaigns_root = campaigns_root
 
+    def create_campaign(self, campaign: str) -> Path:
+        name = campaign.strip()
+        if not name:
+            raise ValueError("campaign name cannot be empty")
+        if any(sep in name for sep in ("/", "\\")):
+            raise ValueError("campaign name cannot contain path separators")
+
+        path = self.campaigns_root / name
+        path.mkdir(parents=True, exist_ok=False)
+        return path
+
     def list_campaigns(self) -> list[str]:
         if not self.campaigns_root.exists():
             return []

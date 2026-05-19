@@ -17,6 +17,7 @@ import flet as ft
 
 from gui import AppServices, build_run_page
 from pipeline_events import PhaseStarted, RunCompleted
+from repository_service import Episode
 from run_controller import RunResult
 
 
@@ -88,8 +89,34 @@ class _FakeSettingsService:
 
 
 class _FakeRepositoryService:
+    def __init__(self) -> None:
+        self._campaigns = ["flail", "kingmaker"]
+
     def list_campaigns(self) -> list[str]:
-        return ["flail", "kingmaker"]
+        return list(self._campaigns)
+
+    def list_episodes(self, campaign: str) -> list[Episode]:
+        if campaign != "flail":
+            return []
+        return [
+            Episode(
+                campaign="flail",
+                slug="ep-1",
+                url="https://example.com/flail-ep-1",
+                title="Episode 1",
+                created_at="2026-05-18T00:00:00Z",
+                path=Path("campaigns/flail/ep-1"),
+            )
+        ]
+
+    def create_campaign(self, campaign: str) -> Path:
+        name = campaign.strip()
+        if not name:
+            raise ValueError("campaign name cannot be empty")
+        if name in self._campaigns:
+            raise FileExistsError(name)
+        self._campaigns.append(name)
+        return Path("campaigns") / name
 
 
 def _services(fake_rc: _FakeRunController | None = None) -> AppServices:
@@ -124,6 +151,8 @@ def test_run_page_build_config_maps_form_fields() -> None:
 
     state["url_field"].value = "https://example.com/story"
     state["campaign_dropdown"].value = "flail"
+    state["run_mode_dropdown"].value = "existing_episode"
+    state["episode_dropdown"].value = "ep-1"
     state["rerun_dropdown"].value = "script"
     state["recap_dropdown"].value = "short"
     state["skip_style_checkbox"].value = True
@@ -132,7 +161,7 @@ def test_run_page_build_config_maps_form_fields() -> None:
     state["model_field"].value = "gemini-3.2-flash"
 
     config = state["build_config"]()
-    assert config.url == "https://example.com/story"
+    assert config.url == "https://example.com/flail-ep-1"
     assert config.campaign == "flail"
     assert config.rerun_from == "script"
     assert config.recap_version == "short"
@@ -143,14 +172,15 @@ def test_run_page_build_config_maps_form_fields() -> None:
     assert config.script_model == "gemini-3.2-flash"
 
 
-def test_run_page_build_config_full_run_maps_to_none_rerun() -> None:
+def test_run_page_build_config_story_url_defaults_to_scrape() -> None:
     page = _FakePage()
     event_log = ft.ListView()
     _container, state = build_run_page(_services(), page, event_log, ft)
 
-    state["rerun_dropdown"].value = "full"
+    state["run_mode_dropdown"].value = "story_url"
+    state["url_field"].value = "https://example.com/story"
     config = state["build_config"]()
-    assert config.rerun_from is None
+    assert config.rerun_from == "scrape"
 
 
 def test_run_page_on_pipeline_event_updates_phase_badge() -> None:
@@ -160,7 +190,7 @@ def test_run_page_on_pipeline_event_updates_phase_badge() -> None:
 
     state["on_pipeline_event"](PhaseStarted(phase="script", message="Writing script..."))
 
-    assert "script" in state["phase_badge"].value
+    assert "Stage: script" in state["phase_badge"].value
     assert page.update_calls >= 1
 
 
@@ -211,12 +241,26 @@ async def test_run_page_execute_run_calls_launch_with_correct_config() -> None:
 
     state["url_field"].value = "https://example.com/story"
     state["campaign_dropdown"].value = "flail"
+    state["run_mode_dropdown"].value = "story_url"
 
     await state["execute_run"]()
 
     assert fake_rc.launched_config is not None
     assert fake_rc.launched_config.url == "https://example.com/story"
     assert fake_rc.launched_config.campaign == "flail"
+
+
+def test_run_page_add_campaign_updates_dropdown() -> None:
+    page = _FakePage()
+    event_log = ft.ListView()
+    _container, state = build_run_page(_services(), page, event_log, ft)
+
+    state["new_campaign_field"].value = "new-world"
+    state["campaign_add_button"].on_click(None)
+
+    option_keys = [o.key for o in state["campaign_dropdown"].options]
+    assert "new-world" in option_keys
+    assert state["campaign_dropdown"].value == "new-world"
 
 
 @pytest.mark.asyncio

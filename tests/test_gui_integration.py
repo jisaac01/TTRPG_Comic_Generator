@@ -53,6 +53,16 @@ class _FakePage:
     def set_clipboard(self, value: str) -> None:
         self.clipboard_text = value
 
+    def show_dialog(self, dialog: object) -> None:
+        self.dialog = dialog
+        setattr(dialog, "open", True)
+        self.update_calls += 1
+
+    def pop_dialog(self) -> None:
+        if self.dialog is not None:
+            setattr(self.dialog, "open", False)
+        self.update_calls += 1
+
 
 class _FakeSettingsService:
     def __init__(self) -> None:
@@ -119,6 +129,18 @@ def test_gui_settings_dialog_opens_and_closes(tmp_path):
     assert dialog.open is False
 
 
+def test_gui_settings_button_click_opens_dialog(tmp_path):
+    page = _FakePage()
+    controls = build_main_layout(page, _services(tmp_path))
+    dialog = controls["settings_dialog"]
+
+    assert dialog.open is False
+    controls["settings_button"].on_click(None)
+
+    assert dialog.open is True
+    assert page.dialog == dialog
+
+
 def test_gui_event_log_receives_pipeline_events(tmp_path):
     page = _FakePage()
     controls = build_main_layout(page, _services(tmp_path))
@@ -132,6 +154,7 @@ def test_gui_event_log_receives_pipeline_events(tmp_path):
 
     assert len(event_log.controls) == 2
     assert "Writing script..." in event_log.controls[-1].value
+    assert "[Run/script]" in event_log.controls[-1].value
 
 
 # ---------------------------------------------------------------------------
@@ -257,7 +280,6 @@ def test_prompt_page_builds_with_campaign_files(tmp_path):
 
 def test_prompt_page_load_reads_file_into_editor(tmp_path):
     import flet as ft
-    from prompt_templates import DEFAULT_PROMPTS_DIR
 
     campaigns_root = _make_campaign_prompts(tmp_path)
     page = _FakePage()
@@ -271,13 +293,11 @@ def test_prompt_page_load_reads_file_into_editor(tmp_path):
     )
     state["on_load"](None)
 
-    expected = (DEFAULT_PROMPTS_DIR / "scriptwriter_system.txt").read_text(encoding="utf-8")
-    assert state["editor"].value == expected
+    assert state["editor"].value == "default scriptwriter_system.txt"
 
 
 def test_prompt_page_radio_on_change_uses_control_value(tmp_path):
     import flet as ft
-    from prompt_templates import DEFAULT_PROMPTS_DIR
 
     campaigns_root = _make_campaign_prompts(tmp_path)
     page = _FakePage()
@@ -293,13 +313,11 @@ def test_prompt_page_radio_on_change_uses_control_value(tmp_path):
     state["file_list"].on_change(event)
 
     assert state["selected_key"][0] == "scriptwriter_system"
-    expected = (DEFAULT_PROMPTS_DIR / "scriptwriter_system.txt").read_text(encoding="utf-8")
-    assert state["editor"].value == expected
+    assert state["editor"].value == "default scriptwriter_system.txt"
 
 
-def test_prompt_page_default_source_is_top_level_before_any_run(tmp_path):
+def test_prompt_page_default_source_is_campaign_before_any_run(tmp_path):
     import flet as ft
-    from prompt_templates import DEFAULT_PROMPTS_DIR
 
     campaigns_root = _make_campaign_prompts(tmp_path)
     page = _FakePage()
@@ -308,7 +326,6 @@ def test_prompt_page_default_source_is_top_level_before_any_run(tmp_path):
 
     campaign_file = campaigns_root / "test_camp" / "scriptwriter_system.txt"
     campaign_file.write_text("campaign override", encoding="utf-8")
-    expected = (DEFAULT_PROMPTS_DIR / "scriptwriter_system.txt").read_text(encoding="utf-8")
 
     event = type(
         "RadioChangeEvent",
@@ -317,7 +334,103 @@ def test_prompt_page_default_source_is_top_level_before_any_run(tmp_path):
     )()
     state["file_list"].on_change(event)
 
-    assert state["editor"].value == expected
+    assert state["editor"].value == "campaign override"
+
+
+def test_prompt_page_campaign_switch_reloads_editor_content(tmp_path):
+    import flet as ft
+
+    campaigns_root = _make_campaign_prompts(tmp_path)
+    second = campaigns_root / "other_camp"
+    second.mkdir(parents=True, exist_ok=True)
+    for filename in (
+        "art_direction_template.json",
+        "master_beater_system.txt",
+        "master_beater_user.txt",
+        "scriptwriter_system.txt",
+        "scriptwriter_user.txt",
+        "style_integrator_system.txt",
+        "style_integrator_user.txt",
+        "page_prompt.txt",
+    ):
+        src = campaigns_root / "test_camp" / filename
+        dst = second / filename
+        dst.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+    (campaigns_root / "test_camp" / "scriptwriter_system.txt").write_text(
+        "script A", encoding="utf-8"
+    )
+    (second / "scriptwriter_system.txt").write_text("script B", encoding="utf-8")
+
+    page = _FakePage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_prompt_page(services, page, ft)
+
+    state["campaign_dropdown"].on_select(
+        type(
+            "CampaignChangeEvent",
+            (),
+            {"control": type("CampaignControl", (), {"value": "other_camp"})()},
+        )()
+    )
+    state["file_list"].on_change(
+        type(
+            "RadioChangeEvent",
+            (),
+            {"control": type("RadioControl", (), {"value": "scriptwriter_system"})()},
+        )()
+    )
+
+    assert state["editor"].value == "script B"
+
+
+def test_prompt_page_campaign_switch_uses_event_data(tmp_path):
+    import flet as ft
+
+    campaigns_root = _make_campaign_prompts(tmp_path)
+    second = campaigns_root / "other_camp"
+    second.mkdir(parents=True, exist_ok=True)
+    for filename in (
+        "art_direction_template.json",
+        "master_beater_system.txt",
+        "master_beater_user.txt",
+        "scriptwriter_system.txt",
+        "scriptwriter_user.txt",
+        "style_integrator_system.txt",
+        "style_integrator_user.txt",
+        "page_prompt.txt",
+    ):
+        src = campaigns_root / "test_camp" / filename
+        dst = second / filename
+        dst.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+    (second / "scriptwriter_system.txt").write_text("from event data", encoding="utf-8")
+
+    page = _FakePage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_prompt_page(services, page, ft)
+
+    state["campaign_dropdown"].on_select(
+        type(
+            "CampaignChangeEvent",
+            (),
+            {
+                "data": "other_camp",
+                "control": type("CampaignControl", (), {"value": None})(),
+            },
+        )()
+    )
+    state["file_list"].on_change(
+        type(
+            "RadioChangeEvent",
+            (),
+            {
+                "data": "scriptwriter_system",
+                "control": type("RadioControl", (), {"value": None})(),
+            },
+        )()
+    )
+
+    assert state["campaign_dropdown"].value == "other_camp"
+    assert state["editor"].value == "from event data"
 
 
 def test_prompt_page_default_source_is_campaign_after_any_run(tmp_path):
@@ -516,3 +629,160 @@ def test_output_page_run_status_shows_errors_and_warnings(tmp_path):
     assert "failed=[style]" in status_text
     assert "errors=[style timeout]" in status_text
     assert "warnings=[fallback used]" in status_text
+
+
+def test_output_page_defaults_to_run_status_when_latest_failed(tmp_path):
+    import flet as ft
+
+    campaigns_root = _make_output_versions(tmp_path)
+    page = _FakePage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+
+    assert state["file_list"].value == "run_status.json"
+    assert "status" in (state["preview"].value or "")
+
+
+def test_output_page_campaign_switch_updates_episode_and_version(tmp_path):
+    import flet as ft
+
+    campaigns_root = _make_output_versions(tmp_path)
+
+    other_episode = campaigns_root / "other_camp" / "other-episode"
+    other_v = other_episode / "v001"
+    other_v.mkdir(parents=True, exist_ok=True)
+    (other_episode / "episode_meta.json").write_text(
+        json.dumps(
+            {
+                "slug": "other-episode",
+                "url": "https://example.com/other",
+                "title": "Other Episode",
+                "created_at": "2026-05-19T00:00:00Z",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (other_v / "run_status.json").write_text(
+        json.dumps(
+            {
+                "status": "ok",
+                "checkpoints": ["scrape"],
+                "failed": [],
+                "errors": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (other_v / "04_page_prompt.txt").write_text("other prompt", encoding="utf-8")
+
+    page = _FakePage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+
+    state["campaign_dropdown"].on_select(
+        type(
+            "CampaignChangeEvent",
+            (),
+            {"control": type("CampaignControl", (), {"value": "other_camp"})()},
+        )()
+    )
+
+    assert state["campaign_dropdown"].value == "other_camp"
+    assert state["episode_dropdown"].value == "other-episode"
+    assert state["version_dropdown"].value == "v001"
+
+
+def test_output_page_campaign_switch_uses_event_data(tmp_path):
+    import flet as ft
+
+    campaigns_root = _make_output_versions(tmp_path)
+
+    other_episode = campaigns_root / "other_camp" / "z-episode"
+    older_episode = campaigns_root / "other_camp" / "a-episode"
+    for ep_dir, slug, created in (
+        (older_episode, "a-episode", "2026-05-18T00:00:00Z"),
+        (other_episode, "z-episode", "2026-05-19T00:00:00Z"),
+    ):
+        v001 = ep_dir / "v001"
+        v001.mkdir(parents=True, exist_ok=True)
+        (ep_dir / "episode_meta.json").write_text(
+            json.dumps(
+                {
+                    "slug": slug,
+                    "url": f"https://example.com/{slug}",
+                    "title": slug,
+                    "created_at": created,
+                }
+            ),
+            encoding="utf-8",
+        )
+        (v001 / "run_status.json").write_text(
+            json.dumps({"status": "ok", "checkpoints": [], "failed": [], "errors": []}),
+            encoding="utf-8",
+        )
+        (v001 / "04_page_prompt.txt").write_text(slug, encoding="utf-8")
+
+    page = _FakePage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+
+    state["campaign_dropdown"].on_select(
+        type(
+            "CampaignChangeEvent",
+            (),
+            {
+                "data": "other_camp",
+                "control": type("CampaignControl", (), {"value": None})(),
+            },
+        )()
+    )
+
+    assert state["campaign_dropdown"].value == "other_camp"
+    assert state["episode_dropdown"].value == "z-episode"
+    assert state["version_dropdown"].value == "v001"
+
+
+def test_output_page_campaign_switch_on_select_path(tmp_path):
+    import flet as ft
+
+    campaigns_root = _make_output_versions(tmp_path)
+    other_episode = campaigns_root / "other_camp" / "other-episode"
+    other_v = other_episode / "v001"
+    other_v.mkdir(parents=True, exist_ok=True)
+    (other_episode / "episode_meta.json").write_text(
+        json.dumps(
+            {
+                "slug": "other-episode",
+                "url": "https://example.com/other",
+                "title": "Other Episode",
+                "created_at": "2026-05-19T00:00:00Z",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (other_v / "run_status.json").write_text(
+        json.dumps({"status": "ok", "checkpoints": [], "failed": [], "errors": []}),
+        encoding="utf-8",
+    )
+    (other_v / "04_page_prompt.txt").write_text("other prompt", encoding="utf-8")
+
+    page = _FakePage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+
+    event = type(
+        "CampaignSelectEvent",
+        (),
+        {
+            "data": "other_camp",
+            "control": type("CampaignControl", (), {"value": "other_camp"})(),
+        },
+    )()
+
+    handler = state["campaign_dropdown"].on_select or state["campaign_dropdown"].on_change
+    handler(event)
+
+    assert state["campaign_dropdown"].value == "other_camp"
+    assert state["episode_dropdown"].value == "other-episode"
+    assert state["version_dropdown"].value == "v001"
+    assert "Loaded: other_camp / other-episode / v001" == state["output_status_text"].value

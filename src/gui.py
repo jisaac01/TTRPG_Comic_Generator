@@ -11,7 +11,13 @@ from typing import Any
 
 from model_defaults import DEFAULT_MODEL
 from pipeline_config import RunConfig
-from pipeline_events import PhaseStarted, RunCompleted, PipelineEventUnion
+from pipeline_events import (
+    PhaseError,
+    PhasePartialFailure,
+    PhaseStarted,
+    RunCompleted,
+    PipelineEventUnion,
+)
 from prompt_templates import DEFAULT_PROMPTS_DIR
 from prompter import ART_DIRECTION_TEMPLATE_FIELDS, ART_DIRECTION_TEMPLATE_FILENAME
 from repository_service import CampaignPrompts, RepositoryService
@@ -25,6 +31,16 @@ except ImportError:  # pragma: no cover - handled by smoke test skip path
 
 
 EVENT_LOG_LIMIT = 100
+LOADING_GIF_URL = "https://upload.wikimedia.org/wikipedia/commons/b/b1/Loading_icon.gif"
+
+_STAGE_LABELS: list[tuple[str, str]] = [
+    ("scrape", "Scrape"),
+    ("entities", "Entities"),
+    ("beater", "Beater"),
+    ("script", "Script"),
+    ("style", "Style"),
+    ("prompt", "Prompt"),
+]
 
 
 @dataclass(frozen=True)
@@ -43,7 +59,12 @@ def create_services(campaigns_root: Path = Path("campaigns")) -> AppServices:
 
 
 def build_run_page(
-    services: AppServices, page: Any, event_log: Any, _ft: Any
+    services: AppServices,
+    page: Any,
+    event_log: Any,
+    _ft: Any,
+    on_campaign_created: Any | None = None,
+    on_run_finished: Any | None = None,
 ) -> tuple[Any, dict[str, Any]]:
     """Build the Run workspace controls.
 
@@ -52,26 +73,28 @@ def build_run_page(
     """
     campaigns = services.repository.list_campaigns()
 
-    campaign_dropdown = _ft.Dropdown(
-        label="Campaign",
-        options=[_ft.dropdown.Option(c) for c in campaigns],
-        value=campaigns[0] if campaigns else None,
-        width=220,
+    campaign_dropdown = _ft.Dropdown(label="Campaign", options=[], width=220)
+    new_campaign_field = _ft.TextField(label="New campaign", width=220)
+    campaign_add_button = _ft.OutlinedButton("Add Campaign")
+    campaign_status_text = _ft.Text("", size=12)
+
+    run_mode_dropdown = _ft.Dropdown(
+        label="Run Mode",
+        value="story_url",
+        options=[
+            _ft.dropdown.Option("story_url", "Story URL"),
+            _ft.dropdown.Option("existing_episode", "Existing Episode"),
+        ],
+        width=200,
     )
     url_field = _ft.TextField(label="Story URL", expand=True, hint_text="https://...")
+    episode_dropdown = _ft.Dropdown(label="Episode", options=[], width=320, visible=False)
     rerun_dropdown = _ft.Dropdown(
-        label="Rerun from",
-        value="full",
-        options=[
-            _ft.dropdown.Option("full", "Full run"),
-            _ft.dropdown.Option("scrape", "Scrape"),
-            _ft.dropdown.Option("entities", "Entities"),
-            _ft.dropdown.Option("beater", "Beater"),
-            _ft.dropdown.Option("script", "Script"),
-            _ft.dropdown.Option("style", "Style"),
-            _ft.dropdown.Option("prompt", "Prompt"),
-        ],
-        width=160,
+        label="Start Stage",
+        value="scrape",
+        options=[_ft.dropdown.Option(stage, label) for stage, label in _STAGE_LABELS],
+        width=170,
+        disabled=True,
     )
     recap_dropdown = _ft.Dropdown(
         label="Recap",
@@ -94,16 +117,68 @@ def build_run_page(
     )
 
     run_button = _ft.Button("Run", disabled=False)
+    running_ring = _ft.ProgressRing(width=16, height=16, stroke_width=2, visible=False)
+    running_gif = _ft.Image(src=LOADING_GIF_URL, width=20, height=20, visible=False)
+    running_text = _ft.Text("Running...", size=12, visible=False)
     phase_badge = _ft.Text("", size=12, italic=True)
     status_summary = _ft.Text("", size=13, weight=_ft.FontWeight.W_600)
+    run_error_text = _ft.Text("", size=12, color=_ft.Colors.RED_700, selectable=True)
     version_text = _ft.Text("", size=11, selectable=True)
 
+    _episodes_by_slug: dict[str, Any] = {}
+
+    def _list_episodes(campaign: str) -> list[Any]:
+        lister = getattr(services.repository, "list_episodes", None)
+        if callable(lister):
+            episodes = lister(campaign)
+            return episodes if isinstance(episodes, list) else []
+        return []
+
+    def _refresh_campaign_options(selected: str | None = None) -> None:
+        current = selected if selected is not None else campaign_dropdown.value
+        campaigns_now = services.repository.list_campaigns()
+        campaign_dropdown.options = [_ft.dropdown.Option(c) for c in campaigns_now]
+        if current and current in campaigns_now:
+            campaign_dropdown.value = current
+        else:
+            campaign_dropdown.value = campaigns_now[0] if campaigns_now else None
+
+    def _refresh_episode_options() -> None:
+        _episodes_by_slug.clear()
+        episode_dropdown.options = []
+        campaign = campaign_dropdown.value or ""
+        episodes = _list_episodes(campaign)
+        for ep in episodes:
+            _episodes_by_slug[ep.slug] = ep
+            episode_dropdown.options.append(_ft.dropdown.Option(ep.slug))
+        if episodes:
+            episode_dropdown.value = episodes[-1].slug
+        else:
+            episode_dropdown.value = None
+
+    def _sync_mode_controls() -> None:
+        mode = run_mode_dropdown.value or "story_url"
+        is_story_url = mode == "story_url"
+        url_field.visible = is_story_url
+        episode_dropdown.visible = not is_story_url
+        rerun_dropdown.disabled = is_story_url
+        if is_story_url:
+            rerun_dropdown.value = "scrape"
+        elif rerun_dropdown.value == "scrape" or rerun_dropdown.value is None:
+            rerun_dropdown.value = "beater"
+
     def _build_config() -> RunConfig:
-        rerun_val = rerun_dropdown.value
-        rerun = None if rerun_val == "full" else rerun_val  # type: ignore[assignment]
+        mode = run_mode_dropdown.value or "story_url"
+        selected_episode = _episodes_by_slug.get(episode_dropdown.value or "")
+        if mode == "story_url":
+            url = url_field.value or ""
+            rerun = "scrape"
+        else:
+            url = selected_episode.url if selected_episode and selected_episode.url else (url_field.value or "")
+            rerun = rerun_dropdown.value or "beater"
         model = model_field.value or DEFAULT_MODEL
         return RunConfig(
-            url=url_field.value or "",
+            url=url,
             campaign=campaign_dropdown.value or "",
             rerun_from=rerun,
             recap_version=recap_dropdown.value or "standard",  # type: ignore[arg-type]
@@ -117,41 +192,121 @@ def build_run_page(
 
     def on_pipeline_event(event: PipelineEventUnion) -> None:
         if isinstance(event, PhaseStarted):
-            phase_badge.value = f"Phase: {event.phase} – {event.message}"
+            phase_badge.value = f"Stage: {event.phase} - {event.message}"
+        elif isinstance(event, PhaseError):
+            run_error_text.value = f"{event.phase} failed: {event.error or event.message}"
+        elif isinstance(event, PhasePartialFailure):
+            detail = event.error_detail or event.message
+            run_error_text.value = f"{event.phase} partial failure: {detail}"
         elif isinstance(event, RunCompleted):
             run_button.disabled = False
+            running_ring.visible = False
+            running_gif.visible = False
+            running_text.visible = False
             if event.status == "ok":
                 status_summary.value = "✓ OK"
+                run_error_text.value = ""
             elif event.status == "partial":
                 status_summary.value = "⚠ Partial"
+                if event.error_messages:
+                    run_error_text.value = "\n".join(event.error_messages)
             else:
                 status_summary.value = "✗ Failed"
+                if event.error_messages:
+                    run_error_text.value = "\n".join(event.error_messages)
             if event.version_dir:
                 version_text.value = str(event.version_dir)
+            if callable(on_run_finished):
+                on_run_finished()
         append_pipeline_event(event_log, event, _ft)
         page.update()
 
     async def _execute_run() -> None:
-        config = _build_config()
-        task = services.run_controller.launch_run(config, on_pipeline_event)
-        await task
-        run_button.disabled = False
-        page.update()
+        try:
+            config = _build_config()
+            task = services.run_controller.launch_run(config, on_pipeline_event)
+            await task
+        except (RuntimeError, ValueError) as exc:
+            status_summary.value = f"✗ {exc}"
+            run_error_text.value = str(exc)
+            append_log_line(event_log, "Run", str(exc), _ft)
+            run_button.disabled = False
+            running_ring.visible = False
+            running_gif.visible = False
+            running_text.visible = False
+            page.update()
+        finally:
+            run_button.disabled = False
+            running_ring.visible = False
+            running_gif.visible = False
+            running_text.visible = False
+            page.update()
 
     def on_run_click(_event: Any) -> None:
+        status_summary.value = ""
+        run_error_text.value = ""
         run_button.disabled = True
+        running_ring.visible = True
+        running_gif.visible = True
+        running_text.visible = True
         page.update()
         page.run_task(_execute_run)
 
+    def on_campaign_changed(event: Any) -> None:
+        selected = _extract_change_value(event)
+        if selected is not None:
+            campaign_dropdown.value = selected
+        _refresh_episode_options()
+        _sync_mode_controls()
+        page.update()
+
+    def on_mode_changed(_event: Any) -> None:
+        _sync_mode_controls()
+        page.update()
+
+    def on_add_campaign(_event: Any) -> None:
+        creator = getattr(services.repository, "create_campaign", None)
+        name = (new_campaign_field.value or "").strip()
+        if not callable(creator):
+            campaign_status_text.value = "Campaign creation is unavailable"
+            page.update()
+            return
+        try:
+            creator(name)
+        except FileExistsError:
+            campaign_status_text.value = "Campaign already exists"
+        except ValueError as exc:
+            campaign_status_text.value = str(exc)
+        except OSError as exc:
+            campaign_status_text.value = f"Unable to create campaign: {exc}"
+        else:
+            campaign_status_text.value = "Campaign created"
+            new_campaign_field.value = ""
+            _refresh_campaign_options(selected=name)
+            _refresh_episode_options()
+            if callable(on_campaign_created):
+                on_campaign_created(name)
+        page.update()
+
     run_button.on_click = on_run_click
+    _bind_dropdown_handler(campaign_dropdown, on_campaign_changed)
+    _bind_dropdown_handler(run_mode_dropdown, on_mode_changed)
+    campaign_add_button.on_click = on_add_campaign
+
+    _refresh_campaign_options(campaigns[0] if campaigns else None)
+    _refresh_episode_options()
+    _sync_mode_controls()
 
     container = _ft.Column(
         controls=[
             _ft.Text("Run", size=18, weight=_ft.FontWeight.W_600),
-            _ft.Row([campaign_dropdown, url_field], spacing=12),
+            _ft.Row([campaign_dropdown, new_campaign_field, campaign_add_button], spacing=12),
+            campaign_status_text,
+            _ft.Row([run_mode_dropdown, url_field, episode_dropdown], spacing=12),
             _ft.Row([rerun_dropdown, recap_dropdown, skip_style_checkbox], spacing=12),
             _ft.Row([panel_count_field, total_pages_field, model_field], spacing=12),
-            _ft.Row([run_button, phase_badge, status_summary], spacing=12),
+            _ft.Row([run_button, running_ring, running_gif, running_text, phase_badge, status_summary], spacing=12),
+            run_error_text,
             version_text,
         ],
         spacing=8,
@@ -159,7 +314,12 @@ def build_run_page(
 
     return container, {
         "campaign_dropdown": campaign_dropdown,
+        "new_campaign_field": new_campaign_field,
+        "campaign_add_button": campaign_add_button,
+        "campaign_status_text": campaign_status_text,
+        "run_mode_dropdown": run_mode_dropdown,
         "url_field": url_field,
+        "episode_dropdown": episode_dropdown,
         "rerun_dropdown": rerun_dropdown,
         "recap_dropdown": recap_dropdown,
         "skip_style_checkbox": skip_style_checkbox,
@@ -167,12 +327,17 @@ def build_run_page(
         "total_pages_field": total_pages_field,
         "model_field": model_field,
         "run_button": run_button,
+        "running_ring": running_ring,
+        "running_gif": running_gif,
+        "running_text": running_text,
         "phase_badge": phase_badge,
         "status_summary": status_summary,
+        "run_error_text": run_error_text,
         "version_text": version_text,
         "on_pipeline_event": on_pipeline_event,
         "build_config": _build_config,
         "execute_run": _execute_run,
+        "refresh_campaigns": _refresh_campaign_options,
     }
 
 
@@ -214,14 +379,14 @@ def build_prompt_page(
     Returns a ``(container, state)`` tuple where *state* exposes controls and
     hooks for tests.
     """
-    campaigns = services.repository.list_campaigns()
-
     campaign_dropdown = _ft.Dropdown(
         label="Campaign",
-        options=[_ft.dropdown.Option(c) for c in campaigns],
-        value=campaigns[0] if campaigns else None,
+        options=[],
+        value=None,
         width=220,
     )
+    loading_ring = _ft.ProgressRing(width=14, height=14, stroke_width=2, visible=False)
+    loading_text = _ft.Text("Reloading...", size=12, visible=False)
 
     file_list = _ft.RadioGroup(
         content=_ft.Column(spacing=2)
@@ -243,14 +408,18 @@ def build_prompt_page(
     # Maps field key -> resolved Path from current campaign prompts
     _paths: dict[str, Path] = {}
 
-    def _campaign_has_runs(campaign: str) -> bool:
-        if not campaign:
-            return False
-        episodes = services.repository.list_episodes(campaign)
-        for episode in episodes:
-            if services.repository.list_versions(campaign, episode.slug):
-                return True
-        return False
+    def _set_loading(loading: bool) -> None:
+        loading_ring.visible = loading
+        loading_text.visible = loading
+
+    def _refresh_campaign_options(selected: str | None = None) -> None:
+        current = selected if selected is not None else campaign_dropdown.value
+        campaigns = services.repository.list_campaigns()
+        campaign_dropdown.options = [_ft.dropdown.Option(c) for c in campaigns]
+        if current and current in campaigns:
+            campaign_dropdown.value = current
+        else:
+            campaign_dropdown.value = campaigns[0] if campaigns else None
 
     def _default_prompt_path_for_key(key: str) -> Path | None:
         filename = next((fn for k, fn in _PROMPT_FILE_LABELS if k == key), None)
@@ -279,14 +448,23 @@ def build_prompt_page(
                 _ft.Radio(value=key, label=f"{filename}{exists_mark}")
             )
 
+    def _select_default_file() -> None:
+        options = file_list.content.controls
+        if not options:
+            file_list.value = None
+            _selected_key[0] = ""
+            editor.value = ""
+            return
+        first_value = options[0].value
+        file_list.value = first_value
+        _selected_key[0] = first_value
+        _load_selected()
+
     def _load_selected() -> None:
         key = _selected_key[0]
         campaign_path = _paths.get(key)
-        campaign = campaign_dropdown.value or ""
-        source_path: Path | None
-        if _campaign_has_runs(campaign):
-            source_path = campaign_path
-        else:
+        source_path: Path | None = campaign_path
+        if not source_path or not source_path.exists():
             source_path = _default_prompt_path_for_key(key)
         validation_text.value = ""
         editor.border_color = None
@@ -296,7 +474,7 @@ def build_prompt_page(
         editor.value = source_path.read_text(encoding="utf-8")
 
     def _on_file_selected(e: Any) -> None:
-        selected = getattr(getattr(e, "control", None), "value", None)
+        selected = _extract_change_value(e)
         _selected_key[0] = selected or ""
         _load_selected()
         page.update()
@@ -304,7 +482,10 @@ def build_prompt_page(
     file_list.on_change = _on_file_selected
 
     def on_load(_e: Any) -> None:
+        _set_loading(True)
+        page.update()
         _load_selected()
+        _set_loading(False)
         page.update()
 
     def on_save(_e: Any) -> None:
@@ -341,22 +522,31 @@ def build_prompt_page(
         editor.border_color = None
         page.update()
 
-    def on_campaign_changed(_e: Any) -> None:
+    def on_campaign_changed(event: Any) -> None:
+        selected = _extract_change_value(event)
+        if selected is not None:
+            campaign_dropdown.value = selected
+        _set_loading(True)
+        page.update()
         _selected_key[0] = ""
         editor.value = ""
         validation_text.value = ""
         editor.border_color = None
         _refresh_file_list()
+        _select_default_file()
+        _set_loading(False)
         page.update()
 
-    campaign_dropdown.on_change = on_campaign_changed
+    _bind_dropdown_handler(campaign_dropdown, on_campaign_changed)
 
+    _refresh_campaign_options()
     _refresh_file_list()
+    _select_default_file()
 
     container = _ft.Column(
         controls=[
             _ft.Text("Prompts", size=18, weight=_ft.FontWeight.W_600),
-            campaign_dropdown,
+            _ft.Row([campaign_dropdown, loading_ring, loading_text], spacing=8),
             capture_preview_text,
             _ft.Row(
                 controls=[
@@ -406,6 +596,7 @@ def build_prompt_page(
         "on_load": on_load,
         "on_reset": on_reset,
         "refresh_file_list": _refresh_file_list,
+        "refresh_campaigns": _refresh_campaign_options,
         "selected_key": _selected_key,
         "paths": _paths,
     }
@@ -428,19 +619,52 @@ def _safe_set_clipboard(page: Any, text: str) -> None:
         setter(text)
 
 
-def build_output_page(
-    services: AppServices, page: Any, _ft: Any
-) -> tuple[Any, dict[str, Any]]:
-    campaigns = services.repository.list_campaigns()
+def _extract_change_value(event: Any) -> str | None:
+    data = getattr(event, "data", None)
+    if isinstance(data, str):
+        cleaned = data.strip()
+        if cleaned and cleaned.lower() not in {"none", "null"}:
+            return cleaned
+    control_value = getattr(getattr(event, "control", None), "value", None)
+    if isinstance(control_value, str):
+        cleaned = control_value.strip()
+        if cleaned:
+            return cleaned
+    return None
 
+
+def _bind_dropdown_handler(dropdown: Any, handler: Any) -> None:
+    # Flet 0.85 uses `on_select` for selection changes.
+    if hasattr(dropdown, "on_select"):
+        dropdown.on_select = handler
+    # Keep a fallback for older API behavior.
+    if hasattr(dropdown, "on_change"):
+        dropdown.on_change = handler
+
+
+def build_output_page(
+    services: AppServices, page: Any, _ft: Any, event_log: Any | None = None
+) -> tuple[Any, dict[str, Any]]:
     campaign_dropdown = _ft.Dropdown(
         label="Campaign",
-        options=[_ft.dropdown.Option(c) for c in campaigns],
-        value=campaigns[0] if campaigns else None,
+        options=[],
+        value=None,
         width=220,
     )
     episode_dropdown = _ft.Dropdown(label="Episode", options=[], width=320)
     version_dropdown = _ft.Dropdown(label="Version", options=[], width=140)
+    loading_ring = _ft.ProgressRing(width=14, height=14, stroke_width=2, visible=False)
+    loading_text = _ft.Text("Reloading...", size=12, visible=False)
+
+    quick_rerun_stage_dropdown = _ft.Dropdown(
+        label="Quick Rerun Stage",
+        value="beater",
+        options=[_ft.dropdown.Option(stage, label) for stage, label in _STAGE_LABELS],
+        width=190,
+    )
+    quick_rerun_button = _ft.OutlinedButton("Quick Rerun")
+    quick_rerun_gif = _ft.Image(src=LOADING_GIF_URL, width=20, height=20, visible=False)
+    quick_rerun_text = _ft.Text("Running...", size=12, visible=False)
 
     file_list = _ft.RadioGroup(content=_ft.Column(spacing=2))
     preview = _ft.TextField(
@@ -460,6 +684,19 @@ def build_output_page(
     _selected_version_dir: list[Path | None] = [None]
     _selected_files: dict[str, Path] = {}
 
+    def _set_loading(loading: bool) -> None:
+        loading_ring.visible = loading
+        loading_text.visible = loading
+
+    def _refresh_campaign_options(selected: str | None = None) -> None:
+        current = selected if selected is not None else campaign_dropdown.value
+        campaigns = services.repository.list_campaigns()
+        campaign_dropdown.options = [_ft.dropdown.Option(c) for c in campaigns]
+        if current and current in campaigns:
+            campaign_dropdown.value = current
+        else:
+            campaign_dropdown.value = campaigns[0] if campaigns else None
+
     def _refresh_episodes() -> None:
         campaign = campaign_dropdown.value or ""
         episodes = services.repository.list_episodes(campaign)
@@ -468,7 +705,7 @@ def build_output_page(
         for ep in episodes:
             _episodes_by_slug[ep.slug] = ep
             episode_dropdown.options.append(_ft.dropdown.Option(ep.slug))
-        episode_dropdown.value = episodes[0].slug if episodes else None
+        episode_dropdown.value = episodes[-1].slug if episodes else None
 
     def _refresh_versions() -> None:
         campaign = campaign_dropdown.value or ""
@@ -477,17 +714,17 @@ def build_output_page(
         version_dropdown.options = [_ft.dropdown.Option(v.version) for v in versions]
         version_dropdown.value = versions[-1].version if versions else None
 
-    def _set_run_status() -> None:
+    def _set_run_status() -> str | None:
         campaign = campaign_dropdown.value or ""
         episode_slug = episode_dropdown.value or ""
         version = version_dropdown.value or ""
         if not (campaign and episode_slug and version):
             run_status_text.value = ""
-            return
+            return None
         status = services.repository.run_status(campaign, episode_slug, version) or {}
         if not status:
             run_status_text.value = ""
-            return
+            return None
         status_value = status.get("status", "unknown")
         checkpoints = ", ".join(status.get("checkpoints", []))
         failed = ", ".join(status.get("failed", []))
@@ -503,6 +740,7 @@ def build_output_page(
         if warnings:
             parts.append(f"warnings=[{warnings}]")
         run_status_text.value = " | ".join(parts)
+        return str(status_value)
 
     def _list_version_files(version_dir: Path) -> list[Path]:
         preferred = [
@@ -528,7 +766,7 @@ def build_output_page(
         files.extend(extra)
         return files
 
-    def _refresh_file_list() -> None:
+    def _refresh_file_list(status_value: str | None = None) -> None:
         _selected_files.clear()
         rows = file_list.content
         rows.controls.clear()
@@ -554,6 +792,14 @@ def build_output_page(
             _selected_files[key] = path
             rows.controls.append(_ft.Radio(value=key, label=key))
 
+        preferred_default = "run_status.json" if status_value and status_value != "ok" else "04_page_prompt.txt"
+        if preferred_default in _selected_files:
+            file_list.value = preferred_default
+        elif rows.controls:
+            file_list.value = rows.controls[0].value
+        else:
+            file_list.value = None
+
     def _load_selected_file() -> None:
         selected = file_list.value
         if not selected:
@@ -573,28 +819,50 @@ def build_output_page(
 
     def _refresh_all() -> None:
         _refresh_versions()
-        _refresh_file_list()
-        _set_run_status()
+        status_value = _set_run_status()
+        _refresh_file_list(status_value)
         _load_selected_file()
+        campaign = campaign_dropdown.value or "-"
+        episode = episode_dropdown.value or "-"
+        version = version_dropdown.value or "-"
+        output_status_text.value = f"Loaded: {campaign} / {episode} / {version}"
 
-    def on_campaign_changed(_e: Any) -> None:
+    def on_campaign_changed(event: Any) -> None:
+        selected = _extract_change_value(event)
+        if selected is not None:
+            campaign_dropdown.value = selected
+        _set_loading(True)
+        page.update()
         _refresh_episodes()
         _refresh_all()
+        _set_loading(False)
         page.update()
 
-    def on_episode_changed(_e: Any) -> None:
+    def on_episode_changed(event: Any) -> None:
+        selected = _extract_change_value(event)
+        if selected is not None:
+            episode_dropdown.value = selected
+        _set_loading(True)
+        page.update()
         _refresh_all()
+        _set_loading(False)
         page.update()
 
-    def on_version_changed(_e: Any) -> None:
-        _refresh_file_list()
-        _set_run_status()
+    def on_version_changed(event: Any) -> None:
+        selected = _extract_change_value(event)
+        if selected is not None:
+            version_dropdown.value = selected
+        _set_loading(True)
+        page.update()
+        status_value = _set_run_status()
+        _refresh_file_list(status_value)
         _load_selected_file()
+        _set_loading(False)
         page.update()
 
-    campaign_dropdown.on_change = on_campaign_changed
-    episode_dropdown.on_change = on_episode_changed
-    version_dropdown.on_change = on_version_changed
+    _bind_dropdown_handler(campaign_dropdown, on_campaign_changed)
+    _bind_dropdown_handler(episode_dropdown, on_episode_changed)
+    _bind_dropdown_handler(version_dropdown, on_version_changed)
 
     def on_open_version(_e: Any) -> None:
         version_dir = _selected_version_dir[0]
@@ -637,13 +905,70 @@ def build_output_page(
             output_status_text.value = "Copied latest script path"
         page.update()
 
+    def on_quick_rerun_click(_e: Any) -> None:
+        campaign = campaign_dropdown.value or ""
+        episode_slug = episode_dropdown.value or ""
+        stage = quick_rerun_stage_dropdown.value or "beater"
+        episode = _episodes_by_slug.get(episode_slug)
+        url = episode.url if episode and episode.url else ""
+
+        if not campaign or not episode_slug:
+            output_status_text.value = "Select campaign and episode for quick rerun"
+            page.update()
+            return
+
+        async def _run_quick_rerun() -> None:
+            quick_rerun_button.disabled = True
+            quick_rerun_gif.visible = True
+            quick_rerun_text.visible = True
+            output_status_text.value = "Quick rerun started"
+            page.update()
+            try:
+                model = services.settings.get_default_model() or DEFAULT_MODEL
+                config = RunConfig(
+                    url=url,
+                    campaign=campaign,
+                    rerun_from=stage,  # type: ignore[arg-type]
+                    recap_version="standard",
+                    skip_style=False,
+                    panel_count=6,
+                    total_pages=1,
+                    beater_model=model,
+                    script_model=model,
+                    style_model=model,
+                )
+
+                def _on_event(event: PipelineEventUnion) -> None:
+                    if event_log is not None:
+                        append_pipeline_event(event_log, event, _ft)
+                    if isinstance(event, RunCompleted):
+                        output_status_text.value = f"Quick rerun finished: {event.status}"
+                        _refresh_all()
+                    page.update()
+
+                await services.run_controller.launch_run(config, _on_event)
+            except (RuntimeError, ValueError) as exc:
+                output_status_text.value = str(exc)
+                if event_log is not None:
+                    append_log_line(event_log, "Run", str(exc), _ft)
+            finally:
+                quick_rerun_button.disabled = False
+                quick_rerun_gif.visible = False
+                quick_rerun_text.visible = False
+                page.update()
+
+        page.run_task(_run_quick_rerun)
+
+    quick_rerun_button.on_click = on_quick_rerun_click
+
+    _refresh_campaign_options()
     _refresh_episodes()
     _refresh_all()
 
     container = _ft.Column(
         controls=[
             _ft.Text("Output", size=18, weight=_ft.FontWeight.W_600),
-            _ft.Row([campaign_dropdown, episode_dropdown, version_dropdown], spacing=12),
+            _ft.Row([campaign_dropdown, episode_dropdown, version_dropdown, loading_ring, loading_text], spacing=12),
             version_path_text,
             _ft.Row(
                 controls=[
@@ -653,6 +978,7 @@ def build_output_page(
                 ],
                 spacing=8,
             ),
+            _ft.Row([quick_rerun_stage_dropdown, quick_rerun_button, quick_rerun_gif, quick_rerun_text], spacing=10),
             output_status_text,
             _ft.Text("Run status", weight=_ft.FontWeight.W_600),
             run_status_text,
@@ -692,6 +1018,9 @@ def build_output_page(
         "run_status_text": run_status_text,
         "version_path_text": version_path_text,
         "output_status_text": output_status_text,
+        "quick_rerun_stage_dropdown": quick_rerun_stage_dropdown,
+        "quick_rerun_button": quick_rerun_button,
+        "refresh_campaigns": _refresh_campaign_options,
         "refresh_all": _refresh_all,
     }
 
@@ -702,26 +1031,45 @@ def format_log_line(source: str, message: str) -> str:
 
 
 def append_log_line(event_log: Any, source: str, message: str, _ft: Any) -> None:
-    event_log.controls.append(_ft.Text(format_log_line(source, message), selectable=True, size=12))
+    line = format_log_line(source, message)
+    event_log.controls.append(_ft.Text(line, selectable=True, size=12))
     if len(event_log.controls) > EVENT_LOG_LIMIT:
         event_log.controls[:] = event_log.controls[-EVENT_LOG_LIMIT:]
+    latest_line = getattr(event_log, "latest_line_control", None)
+    if latest_line is not None:
+        latest_line.value = line
 
 
 def append_pipeline_event(event_log: Any, event: PipelineEventUnion, _ft: Any) -> None:
     payload = event.to_dict()
     message = payload.get("message") or payload.get("warning") or payload.get("error") or payload["type"]
-    append_log_line(event_log, "Run", str(message), _ft)
+    phase = payload.get("phase")
+    if isinstance(event, RunCompleted):
+        source = "Run/completed"
+    elif phase:
+        source = f"Run/{phase}"
+    else:
+        source = "Run"
+    append_log_line(event_log, source, str(message), _ft)
 
 
 def open_settings_dialog(page: Any, dialog: Any) -> None:
-    page.dialog = dialog
-    dialog.open = True
-    page.update()
+    show_dialog = getattr(page, "show_dialog", None)
+    if callable(show_dialog):
+        show_dialog(dialog)
+    else:
+        page.dialog = dialog
+        dialog.open = True
+        page.update()
 
 
 def close_settings_dialog(page: Any, dialog: Any) -> None:
-    dialog.open = False
-    page.update()
+    pop_dialog = getattr(page, "pop_dialog", None)
+    if callable(pop_dialog):
+        pop_dialog()
+    else:
+        dialog.open = False
+        page.update()
 
 
 def build_main_layout(page: Any, services: AppServices) -> dict[str, Any]:
@@ -733,6 +1081,20 @@ def build_main_layout(page: Any, services: AppServices) -> dict[str, Any]:
     page.padding = 16
 
     event_log = ft.ListView(expand=True, auto_scroll=True, spacing=4, height=180)
+    latest_log_line = ft.Text("No events yet", size=12, selectable=True)
+    setattr(event_log, "latest_line_control", latest_log_line)
+    event_log_container = ft.Container(content=event_log, height=180, visible=False)
+    event_log_toggle_label = ft.Text("Show Event Log")
+    event_log_toggle = ft.TextButton(content=event_log_toggle_label)
+
+    def toggle_event_log(_e: Any) -> None:
+        event_log_container.visible = not event_log_container.visible
+        event_log_toggle_label.value = (
+            "Hide Event Log" if event_log_container.visible else "Show Event Log"
+        )
+        page.update()
+
+    event_log_toggle.on_click = toggle_event_log
 
     gemini_key_input = ft.TextField(
         label="Gemini API Key",
@@ -793,9 +1155,25 @@ def build_main_layout(page: Any, services: AppServices) -> dict[str, Any]:
         on_click=lambda _e: open_settings_dialog(page, settings_dialog),
     )
 
-    run_view, run_page_state = build_run_page(services, page, event_log, ft)
     prompt_view, prompt_page_state = build_prompt_page(services, page, ft)
-    output_view, output_page_state = build_output_page(services, page, ft)
+    output_view, output_page_state = build_output_page(services, page, ft, event_log)
+
+    def _on_campaign_created(new_campaign: str) -> None:
+        prompt_page_state["refresh_campaigns"](new_campaign)
+        output_page_state["refresh_campaigns"](new_campaign)
+        output_page_state["refresh_all"]()
+
+    def _on_run_finished() -> None:
+        output_page_state["refresh_all"]()
+
+    run_view, run_page_state = build_run_page(
+        services,
+        page,
+        event_log,
+        ft,
+        on_campaign_created=_on_campaign_created,
+        on_run_finished=_on_run_finished,
+    )
     prompt_view.visible = False
     output_view.visible = False
 
@@ -826,8 +1204,10 @@ def build_main_layout(page: Any, services: AppServices) -> dict[str, Any]:
             prompt_view,
             output_view,
             ft.Divider(),
-            ft.Text("Event Log", weight=ft.FontWeight.W_600),
-            event_log,
+            ft.Text("Latest Event", weight=ft.FontWeight.W_600),
+            latest_log_line,
+            event_log_toggle,
+            event_log_container,
             status_text,
         ],
         expand=True,
