@@ -11,12 +11,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
+from app_paths import default_campaigns_root
 from model_defaults import DEFAULT_MODEL
 
 RerunFrom = Literal["scrape", "entities", "beater", "script", "style", "prompt"]
 RecapVersion = Literal["short", "standard", "alternate", "long"]
 
-CAMPAIGNS_ROOT = Path("campaigns")
+CAMPAIGNS_ROOT = default_campaigns_root()
 
 
 @dataclass

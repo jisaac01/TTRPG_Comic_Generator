@@ -15,9 +15,52 @@ Each run is isolated in its own version folder. Prior runs are never overwritten
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install playwright pydantic instructor ollama openai keyring pytest pytest-asyncio black
+pip install playwright pydantic instructor ollama openai keyring pytest pytest-asyncio black flet
 playwright install chromium
 ```
+
+**Windows only:** Playwright requires the Visual C++ Redistributable. If you get a `DLL load failed` error when scraping, install it:
+
+```
+winget install Microsoft.VCRedist.2015+.x64
+```
+
+Then restart your terminal and re-run `playwright install chromium`.
+
+## Windows build and runtime paths
+
+Build a Windows package with:
+
+```bash
+flet build windows
+```
+
+Runtime behavior for packaged builds:
+
+- Campaign data is stored in the user data directory, not beside the executable.
+  - Windows: `%LOCALAPPDATA%/TTRPG_Comic_Generator/campaigns`
+  - macOS: `~/Library/Application Support/TTRPG_Comic_Generator/campaigns`
+  - Linux: `${XDG_DATA_HOME:-~/.local/share}/TTRPG_Comic_Generator/campaigns`
+- Settings are stored in the same app data root as `settings.json`.
+- Default prompt templates are loaded from the packaged `prompts/` directory and copied into campaign folders on first run.
+
+Optional overrides:
+
+- `COMIC_GENERATOR_CAMPAIGNS_ROOT`
+- `COMIC_GENERATOR_PROMPTS_DIR`
+- `COMIC_GENERATOR_CONFIG_PATH`
+- `COMIC_GENERATOR_APP_DATA_ROOT`
+
+Playwright prerequisites for Windows users:
+
+- Install browser binaries: `playwright install chromium`
+- Install VC++ runtime if needed:
+
+```powershell
+winget install Microsoft.VCRedist.2015+.x64
+```
+
+The GUI shows a startup warning when Playwright runtime prerequisites appear to be missing.
 
 If you are using Gemini, set `GEMINI_API_KEY` in your environment or in a local `.env` file.
 

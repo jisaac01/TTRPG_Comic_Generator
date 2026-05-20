@@ -8,7 +8,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
-from playwright.async_api import TimeoutError as PlaywrightTimeoutError, async_playwright
 from pydantic import BaseModel, Field
 
 DEFAULT_STORY_SELECTOR = "div.mt-3 div.text-left.text-sm"
@@ -712,6 +711,8 @@ async def scrape_scrybequill(
     author_selector: str = ".author",
     timeout_ms: int = 45000,
 ) -> RawTextCheckpoint:
+    from playwright.async_api import TimeoutError as PlaywrightTimeoutError, async_playwright
+
     selected_recap = normalize_recap_version(recap_version)
 
     async with async_playwright() as pw:

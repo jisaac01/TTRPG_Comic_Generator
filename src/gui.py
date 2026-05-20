@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from app_paths import default_campaigns_root
 from model_defaults import DEFAULT_MODEL
 from pipeline_config import RunConfig
 from pipeline_events import (
@@ -50,12 +51,45 @@ class AppServices:
     run_controller: RunController
 
 
-def create_services(campaigns_root: Path = Path("campaigns")) -> AppServices:
+def create_services(campaigns_root: Path | None = None) -> AppServices:
+    resolved_campaigns_root = campaigns_root or default_campaigns_root()
+
     return AppServices(
-        repository=RepositoryService(campaigns_root),
+        repository=RepositoryService(resolved_campaigns_root),
         settings=SettingsService(),
         run_controller=RunController(),
     )
+
+
+def _playwright_preflight_warnings() -> list[str]:
+    warnings: list[str] = []
+
+    try:
+        from playwright.sync_api import sync_playwright
+    except Exception:
+        return [
+            "Playwright is not installed. Install dependencies and run `playwright install chromium`."
+        ]
+
+    try:
+        with sync_playwright() as pw:
+            chromium_binary = Path(pw.chromium.executable_path)
+        if not chromium_binary.exists():
+            warnings.append(
+                "Playwright Chromium browser is missing. Run `playwright install chromium`."
+            )
+    except Exception as exc:
+        detail = str(exc).lower()
+        if "dll load failed" in detail or "vcruntime" in detail or "msvcp" in detail:
+            warnings.append(
+                "Playwright runtime dependency missing. On Windows install Microsoft Visual C++ Redistributable (x64)."
+            )
+        else:
+            warnings.append(
+                "Playwright preflight check failed. If scraping errors occur, reinstall browser runtime with `playwright install chromium`."
+            )
+
+    return warnings
 
 
 def build_run_page(
@@ -1105,6 +1139,15 @@ def build_main_layout(page: Any, services: AppServices) -> dict[str, Any]:
     page.theme_mode = ft.ThemeMode.LIGHT
     page.padding = 16
 
+    preflight_warnings = _playwright_preflight_warnings()
+    preflight_text = ft.Text(
+        "\n".join(preflight_warnings),
+        color=ft.Colors.AMBER_900,
+        size=12,
+        visible=bool(preflight_warnings),
+        selectable=True,
+    )
+
     event_log = ft.ListView(expand=True, auto_scroll=True, spacing=4, height=180)
     latest_log_line = ft.Text("No events yet", size=12, selectable=True)
     setattr(event_log, "latest_line_control", latest_log_line)
@@ -1244,6 +1287,7 @@ def build_main_layout(page: Any, services: AppServices) -> dict[str, Any]:
                 controls=[ft.Text("TTRPG Comic Generator", size=20, weight=ft.FontWeight.W_700), settings_button],
                 alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
             ),
+            preflight_text,
             nav_row,
             run_view,
             prompt_view,

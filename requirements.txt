@@ -1,0 +1,7 @@
+flet
+playwright
+pydantic
+instructor
+ollama
+openai
+keyring

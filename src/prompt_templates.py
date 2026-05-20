@@ -3,8 +3,10 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
+from app_paths import default_prompts_dir
 
-DEFAULT_PROMPTS_DIR = Path(__file__).resolve().parents[1] / "prompts"
+
+DEFAULT_PROMPTS_DIR = default_prompts_dir()
 MASTER_BEATER_SYSTEM_PROMPT_FILENAME = "master_beater_system.txt"
 MASTER_BEATER_USER_PROMPT_FILENAME = "master_beater_user.txt"
 SCRIPTWRITER_SYSTEM_PROMPT_FILENAME = "scriptwriter_system.txt"

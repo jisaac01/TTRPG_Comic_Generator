@@ -8,13 +8,14 @@ from pathlib import Path
 
 import keyring
 
+from app_paths import default_config_path
 from model_defaults import DEFAULT_MODEL
 
 
 KEYRING_SERVICE_NAME = "TTRPG_Comic_Generator"
 KEYRING_USERNAME = "gemini_api_key"
 DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434/v1"
-DEFAULT_CONFIG_PATH = Path.home() / ".comic_generator_config.json"
+DEFAULT_CONFIG_PATH = default_config_path()
 
 
 class SettingsService:
