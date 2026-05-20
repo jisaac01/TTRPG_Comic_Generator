@@ -16,7 +16,14 @@ Each run is isolated in its own version folder. Prior runs are never overwritten
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install playwright pydantic instructor ollama openai keyring pytest pytest-asyncio black flet
-playwright install chromium
+python -m playwright install chromium
+```
+
+On Windows PowerShell, activate the virtual environment with:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\.venv\Scripts\Activate.ps1
 ```
 
 **Windows only:** Playwright requires the Visual C++ Redistributable. If you get a `DLL load failed` error when scraping, install it:
@@ -25,7 +32,7 @@ playwright install chromium
 winget install Microsoft.VCRedist.2015+.x64
 ```
 
-Then restart your terminal and re-run `playwright install chromium`.
+Then restart your terminal and re-run `python -m playwright install chromium`.
 
 ## Building for Windows
 
@@ -38,20 +45,25 @@ The build must be run **on a Windows machine**. Prerequisites (one-time):
    ```
 
 Flutter SDK is required by `flet build` but does **not** need to be installed manually — on first run, `flet build` will detect it is missing and offer to download it automatically.
+To install, you may need windows certificates:
+```powershell
+pip install pip-system-certs
+```
 
 Build command (run from project root):
 
 ```powershell
+# Bundle Chromium into the packaged app (run in the same venv used for build)
+$env:PLAYWRIGHT_BROWSERS_PATH="0"
+python -m playwright install chromium
+
+# Build the EXE
 flet build windows
 ```
 
 Output is placed in `build/windows/`. The build configuration is in `pyproject.toml` — the `src/` directory is packaged as the application root, with `src/main.py` as the entry point.
 
-After distributing the app, users who want to use the scraper must also run:
-
-```powershell
-playwright install chromium
-```
+With the commands above, Chromium is bundled into the app, so end users do not need to run Playwright install commands.
 
 ## Runtime paths
 
@@ -73,7 +85,6 @@ Optional overrides:
 
 Playwright prerequisites for Windows users:
 
-- Install browser binaries: `playwright install chromium`
 - Install VC++ runtime if needed:
 
 ```powershell
@@ -99,27 +110,27 @@ Each campaign has its own folder under `campaigns/`. On the first pipeline run, 
 - `style_integrator_user.txt`
 - `page_prompt.txt`
 
-All five files are copied from the shared `prompts/` directory. Edit the campaign copies when you want campaign-specific behavior.
+All default files are copied from the shared `src/prompts/` directory. Edit the campaign copies when you want campaign-specific behavior.
 
 If you want to pre-seed defaults manually, copy them the same way:
 
 ```bash
 mkdir -p campaigns/dreadmarsh
-cp prompts/art_direction_template.json campaigns/dreadmarsh/art_direction_template.json
-cp prompts/master_beater_system.txt campaigns/dreadmarsh/master_beater_system.txt
-cp prompts/master_beater_user.txt campaigns/dreadmarsh/master_beater_user.txt
-cp prompts/scriptwriter_system.txt campaigns/dreadmarsh/scriptwriter_system.txt
-cp prompts/scriptwriter_user.txt campaigns/dreadmarsh/scriptwriter_user.txt
-cp prompts/style_integrator_system.txt campaigns/dreadmarsh/style_integrator_system.txt
-cp prompts/style_integrator_user.txt campaigns/dreadmarsh/style_integrator_user.txt
-cp prompts/page_prompt.txt campaigns/dreadmarsh/page_prompt.txt
+cp src/prompts/art_direction_template.json campaigns/dreadmarsh/art_direction_template.json
+cp src/prompts/master_beater_system.txt campaigns/dreadmarsh/master_beater_system.txt
+cp src/prompts/master_beater_user.txt campaigns/dreadmarsh/master_beater_user.txt
+cp src/prompts/scriptwriter_system.txt campaigns/dreadmarsh/scriptwriter_system.txt
+cp src/prompts/scriptwriter_user.txt campaigns/dreadmarsh/scriptwriter_user.txt
+cp src/prompts/style_integrator_system.txt campaigns/dreadmarsh/style_integrator_system.txt
+cp src/prompts/style_integrator_user.txt campaigns/dreadmarsh/style_integrator_user.txt
+cp src/prompts/page_prompt.txt campaigns/dreadmarsh/page_prompt.txt
 ```
 
 Different campaigns can have completely different art styles:
 
 ```bash
 mkdir -p campaigns/belowdown
-cp prompts/art_direction_template.json campaigns/belowdown/art_direction_template.json
+cp src/prompts/art_direction_template.json campaigns/belowdown/art_direction_template.json
 # Then edit campaigns/belowdown/art_direction_template.json for a different style.
 ```
 

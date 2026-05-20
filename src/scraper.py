@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -711,6 +712,10 @@ async def scrape_scrybequill(
     author_selector: str = ".author",
     timeout_ms: int = 45000,
 ) -> RawTextCheckpoint:
+    # Use package-local browser binaries when available (installed with
+    # PLAYWRIGHT_BROWSERS_PATH=0 during build prep), so packaged EXE users do
+    # not need a separate Playwright browser install step.
+    os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", "0")
     from playwright.async_api import TimeoutError as PlaywrightTimeoutError, async_playwright
 
     selected_recap = normalize_recap_version(recap_version)
