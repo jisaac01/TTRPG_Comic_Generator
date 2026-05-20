@@ -209,7 +209,7 @@ class RunController:
             "story_bible": [version_dir / "02_5_story_bible.json"],
             "script": [version_dir / "03_script.json"],
             "styled_script": [version_dir / "03_5_styled_script.json"],
-            "page_prompt": [version_dir / "04_page_prompt.txt"],
+            "page_prompt": [version_dir / "04_page_1_prompt.txt"],
         }
 
         # The pipeline currently writes per-page checkpoint files.

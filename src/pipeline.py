@@ -617,7 +617,7 @@ class ComicPipeline:
         self._ensure_campaign_prompt_templates()
         entities_path = version_dir / "02_entities.json"
         story_bible_path = version_dir / "02_5_story_bible.json"
-        prompts_path = version_dir / "04_page_prompt.txt"
+        prompts_path = version_dir / "04_page_1_prompt.txt"
         story_bible_page_paths = [
             _story_bible_page_path(version_dir, page_number)
             for page_number in range(1, self.total_pages + 1)

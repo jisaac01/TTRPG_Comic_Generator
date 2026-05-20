@@ -164,7 +164,7 @@ def generate_page_prompt(
     art_style_template_path: Path = Path(
         f"campaigns/<campaign>/{ART_DIRECTION_TEMPLATE_FILENAME}"
     ),
-    output_path: Path = Path("campaigns/<campaign>/<episode>/v001/04_page_prompt.txt"),
+    output_path: Path = Path("campaigns/<campaign>/<episode>/v001/04_page_1_prompt.txt"),
     page_prompt_template_path: Path | None = None,
 ) -> str:
     script = ScriptCheckpoint.model_validate_json(
@@ -221,7 +221,7 @@ def _run_cli() -> None:
     parser.add_argument(
         "--output",
         required=True,
-        help="Output page prompt text file path (e.g. campaigns/<campaign>/<episode>/v001/04_page_prompt.txt)",
+        help="Output page prompt text file path (e.g. campaigns/<campaign>/<episode>/v001/04_page_1_prompt.txt)",
     )
     parser.add_argument(
         "--page-prompt-template",

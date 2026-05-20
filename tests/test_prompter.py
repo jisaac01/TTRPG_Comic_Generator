@@ -112,7 +112,7 @@ def _write_inputs(tmp_path: Path) -> tuple[Path, Path, Path]:
 
 def test_generate_page_prompt_writes_checkpoint(tmp_path):
     entities_path, script_path, template_path = _write_inputs(tmp_path)
-    output_path = tmp_path / "04_page_prompt.txt"
+    output_path = tmp_path / "04_page_1_prompt.txt"
 
     prompt_text = prompter.generate_page_prompt(
         script_checkpoint_path=script_path,
@@ -132,7 +132,7 @@ def test_generate_page_prompt_contains_interpolated_fields(tmp_path):
         script_checkpoint_path=script_path,
         entities_checkpoint_path=entities_path,
         art_style_template_path=template_path,
-        output_path=tmp_path / "04_page_prompt.txt",
+        output_path=tmp_path / "04_page_1_prompt.txt",
     )
 
     assert prompt_text.startswith("Swamp Trouble\n\nBase Style: Brutalist ink style with heavy shadows.")
@@ -161,7 +161,7 @@ def test_generate_page_prompt_uses_page_number_on_later_pages(tmp_path):
         script_checkpoint_path=script_path,
         entities_checkpoint_path=entities_path,
         art_style_template_path=template_path,
-        output_path=tmp_path / "04_page_prompt.txt",
+        output_path=tmp_path / "04_page_1_prompt.txt",
     )
 
     assert prompt_text.startswith("Swamp Trouble\n\nBase Style: Brutalist ink style with heavy shadows.")
@@ -177,7 +177,7 @@ def test_generate_page_prompt_fails_when_template_missing(tmp_path):
             script_checkpoint_path=script_path,
             entities_checkpoint_path=entities_path,
             art_style_template_path=tmp_path / "missing_template.json",
-            output_path=tmp_path / "04_page_prompt.txt",
+            output_path=tmp_path / "04_page_1_prompt.txt",
         )
 
 
@@ -193,7 +193,7 @@ def test_generate_page_prompt_uses_custom_page_prompt_template(tmp_path):
         script_checkpoint_path=script_path,
         entities_checkpoint_path=entities_path,
         art_style_template_path=template_path,
-        output_path=tmp_path / "04_page_prompt.txt",
+        output_path=tmp_path / "04_page_1_prompt.txt",
         page_prompt_template_path=custom_template,
     )
 

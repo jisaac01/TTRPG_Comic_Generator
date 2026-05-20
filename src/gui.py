@@ -749,7 +749,7 @@ def build_output_page(
             "02_5_story_bible.json",
             "03_script.json",
             "03_5_styled_script.json",
-            "04_page_prompt.txt",
+            "04_page_1_prompt.txt",
             "run_status.json",
             "art_direction_template.json",
         ]
@@ -792,7 +792,7 @@ def build_output_page(
             _selected_files[key] = path
             rows.controls.append(_ft.Radio(value=key, label=key))
 
-        preferred_default = "run_status.json" if status_value and status_value != "ok" else "04_page_prompt.txt"
+        preferred_default = "run_status.json" if status_value == "failed" else "04_page_1_prompt.txt"
         if preferred_default in _selected_files:
             file_list.value = preferred_default
         elif rows.controls:

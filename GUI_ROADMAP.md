@@ -182,7 +182,7 @@
 - [x] `OutputPage` component:
   - Campaign and episode selectors.
   - Version selector (dropdown of all versions, with latest pre-selected).
-  - File browser: clickable list of checkpoint files present in the version (01_raw_text.json, 02_entities.json, 03_script.json, 03_5_styled_script.json, 04_page_prompt.txt, etc.).
+  - File browser: clickable list of checkpoint files present in the version (01_raw_text.json, 02_entities.json, 03_script.json, 03_5_styled_script.json, 04_page_1_prompt.txt, etc.).
   - Preview pane: show selected file content (JSON formatted/pretty-printed, text as-is).
   - Run status display: parse and display run_status.json (status, checkpoints, failed stages, errors/warnings as a list).
   - Quick-action buttons: Open Version Folder, Copy Latest Prompt Path, Copy Latest Script Path (for copy-paste into image generation tools).

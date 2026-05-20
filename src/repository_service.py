@@ -160,7 +160,7 @@ class RepositoryService:
             story_bible=self._path_if_exists(version_dir / "02_5_story_bible.json"),
             script=self._path_if_exists(version_dir / "03_script.json"),
             styled_script=self._path_if_exists(version_dir / "03_5_styled_script.json"),
-            page_prompt=self._path_if_exists(version_dir / "04_page_prompt.txt"),
+            page_prompt=self._path_if_exists(version_dir / "04_page_1_prompt.txt"),
             art_direction_template=self._path_if_exists(
                 version_dir / ART_DIRECTION_TEMPLATE_FILENAME
             ),

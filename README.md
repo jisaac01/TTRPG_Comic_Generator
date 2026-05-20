@@ -173,7 +173,7 @@ campaigns/
         02_5_story_bible.json
         03_script.json
         03_5_styled_script.json
-        04_page_prompt.txt
+        04_page_1_prompt.txt
         art_direction_template.json
         master_beater_system.txt
         master_beater_user.txt
@@ -245,14 +245,14 @@ python src/prompter.py \
   --script-input campaigns/dreadmarsh/<episode>/v001/03_5_styled_script.json \
   --entities-input campaigns/dreadmarsh/<episode>/v001/02_entities.json \
   --art-style-template campaigns/dreadmarsh/art_direction_template.json \
-  --output campaigns/dreadmarsh/<episode>/v001/04_page_prompt.txt
+  --output campaigns/dreadmarsh/<episode>/v001/04_page_1_prompt.txt
 
 # Skip-style flow (pipeline --skip-style):
 python src/prompter.py \
   --script-input campaigns/dreadmarsh/<episode>/v001/03_script.json \
   --entities-input campaigns/dreadmarsh/<episode>/v001/02_entities.json \
   --art-style-template campaigns/dreadmarsh/art_direction_template.json \
-  --output campaigns/dreadmarsh/<episode>/v001/04_page_prompt.txt
+  --output campaigns/dreadmarsh/<episode>/v001/04_page_1_prompt.txt
 ```
 
 ## Running tests
@@ -269,6 +269,6 @@ pytest
 | `02_entities.json` | Characters, locations, story beats |
 | `03_script.json` | Panelized comic script with continuity fields |
 | `03_5_styled_script.json` | Script checkpoint with art-direction-infused panel descriptions |
-| `04_page_prompt.txt` | Single composite image prompt for one multi-panel comic page |
+| `04_page_1_prompt.txt` | Single composite image prompt for one multi-panel comic page |
 | `episode_meta.json` | Episode URL, display slug, creation timestamp |
 | `campaigns/index.json` | Global campaign+URL → episode folder lookup |

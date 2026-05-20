@@ -16,7 +16,7 @@ def _write_version(version_dir: Path, status: str = "ok") -> None:
     (version_dir / "02_5_story_bible.json").write_text("{}", encoding="utf-8")
     (version_dir / "03_script.json").write_text("{}", encoding="utf-8")
     (version_dir / "03_5_styled_script.json").write_text("{}", encoding="utf-8")
-    (version_dir / "04_page_prompt.txt").write_text("prompt", encoding="utf-8")
+    (version_dir / "04_page_1_prompt.txt").write_text("prompt", encoding="utf-8")
     (version_dir / "art_direction_template.json").write_text("{}", encoding="utf-8")
     prompts_dir = version_dir / "prompts"
     prompts_dir.mkdir(exist_ok=True)
@@ -93,7 +93,7 @@ def test_repository_service_discovers_campaigns_episodes_versions_and_prompts(tm
 
     files = service.get_version_files("dreadmarsh", "dreadmarsh-crossing", "v002")
     assert files.raw_text == episode_dir / "v002" / "01_raw_text.json"
-    assert files.page_prompt == episode_dir / "v002" / "04_page_prompt.txt"
+    assert files.page_prompt == episode_dir / "v002" / "04_page_1_prompt.txt"
     assert files.prompts_dir == episode_dir / "v002" / "prompts"
 
     campaign_prompts = service.get_campaign_prompts("dreadmarsh")

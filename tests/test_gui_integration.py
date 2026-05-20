@@ -327,7 +327,7 @@ def _make_output_versions(tmp_path: Path, campaign: str = "test_camp") -> Path:
 
     (v001 / "01_raw_text.json").write_text('{"a":1}', encoding="utf-8")
     (v001 / "03_script.json").write_text('{"script":"old"}', encoding="utf-8")
-    (v001 / "04_page_prompt.txt").write_text("old prompt", encoding="utf-8")
+    (v001 / "04_page_1_prompt.txt").write_text("old prompt", encoding="utf-8")
     (v001 / "run_status.json").write_text(
         json.dumps(
             {
@@ -342,7 +342,7 @@ def _make_output_versions(tmp_path: Path, campaign: str = "test_camp") -> Path:
 
     (v002 / "01_raw_text.json").write_text('{"a":2,"b":[1,2]}', encoding="utf-8")
     (v002 / "03_script.json").write_text('{"script":"new"}', encoding="utf-8")
-    (v002 / "04_page_prompt.txt").write_text("new prompt", encoding="utf-8")
+    (v002 / "04_page_1_prompt.txt").write_text("new prompt", encoding="utf-8")
     (v002 / "run_status.json").write_text(
         json.dumps(
             {
@@ -695,7 +695,7 @@ def test_output_page_lists_files_for_selected_version(tmp_path):
     labels = [radio.label for radio in state["file_list"].content.controls]
     assert "01_raw_text.json" in labels
     assert "03_script.json" in labels
-    assert "04_page_prompt.txt" in labels
+    assert "04_page_1_prompt.txt" in labels
 
 
 def test_output_page_json_preview_is_pretty(tmp_path):
@@ -737,6 +737,13 @@ def test_output_page_defaults_to_run_status_when_latest_failed(tmp_path):
     import flet as ft
 
     campaigns_root = _make_output_versions(tmp_path)
+    episode_dir = campaigns_root / "test_camp" / "episode-1"
+    v003 = episode_dir / "v003"
+    v003.mkdir(parents=True, exist_ok=True)
+    (v003 / "run_status.json").write_text(
+        json.dumps({"status": "failed", "checkpoints": [], "failed": ["beater"], "errors": ["fatal"]}),
+        encoding="utf-8",
+    )
     page = _FakePage()
     services = _prompt_services(campaigns_root)
     _view, state = build_output_page(services, page, ft)
@@ -775,7 +782,7 @@ def test_output_page_campaign_switch_updates_episode_and_version(tmp_path):
         ),
         encoding="utf-8",
     )
-    (other_v / "04_page_prompt.txt").write_text("other prompt", encoding="utf-8")
+    (other_v / "04_page_1_prompt.txt").write_text("other prompt", encoding="utf-8")
 
     page = _FakePage()
     services = _prompt_services(campaigns_root)
@@ -822,7 +829,7 @@ def test_output_page_campaign_switch_uses_event_data(tmp_path):
             json.dumps({"status": "ok", "checkpoints": [], "failed": [], "errors": []}),
             encoding="utf-8",
         )
-        (v001 / "04_page_prompt.txt").write_text(slug, encoding="utf-8")
+        (v001 / "04_page_1_prompt.txt").write_text(slug, encoding="utf-8")
 
     page = _FakePage()
     services = _prompt_services(campaigns_root)
@@ -866,7 +873,7 @@ def test_output_page_campaign_switch_on_select_path(tmp_path):
         json.dumps({"status": "ok", "checkpoints": [], "failed": [], "errors": []}),
         encoding="utf-8",
     )
-    (other_v / "04_page_prompt.txt").write_text("other prompt", encoding="utf-8")
+    (other_v / "04_page_1_prompt.txt").write_text("other prompt", encoding="utf-8")
 
     page = _FakePage()
     services = _prompt_services(campaigns_root)

@@ -66,7 +66,7 @@ Primary workflow surface for launching and monitoring runs.
 │  │                                                           │   │
 │  │  ✓ 01_raw_text.json          ✓ 03_script.json           │   │
 │  │  ✓ 02_entities.json          ✓ 03_5_styled_script.json  │   │
-│  │  ✓ 02_5_story_bible.json     ✓ 04_page_prompt.txt       │   │
+│  │  ✓ 02_5_story_bible.json     ✓ 04_page_1_prompt.txt     │   │
 │  │                                                           │   │
 │  └─────────────────────────────────────────────────────────┘   │
 │                                                                   │
@@ -222,7 +222,7 @@ Browse and preview versioned outputs.
 │  │  ✓ 02_5_story_bible.json        (scene breakdown)      │   │
 │  │  ✓ 03_script.json               (panels + dialogue)    │   │
 │  │  ✓ 03_5_styled_script.json      (art-integrated)      │   │
-│  │  ✓ 04_page_prompt.txt           (image generation)    │   │
+│  │  ✓ 04_page_1_prompt.txt         (image generation)    │   │
 │  │  📁 prompts/                     (captured prompts)     │   │
 │  │     - master_beater_system_FINAL.txt                    │   │
 │  │     - scriptwriter_system_FINAL_page_001.txt            │   │
