@@ -65,11 +65,9 @@ def default_prompts_dir() -> Path:
     if configured:
         return Path(configured).expanduser()
 
-    candidates = [
-        resource_root() / PROMPTS_DIRNAME,
-        project_root() / PROMPTS_DIRNAME,
-    ]
-    for candidate in candidates:
-        if candidate.exists():
-            return candidate
-    return candidates[0]
+    # Adjacent to this module file: works in dev (src/prompts/) and in packaged
+    # builds where serious_python extracts src/ to a flat temp directory.
+    adjacent = Path(__file__).resolve().parent / PROMPTS_DIRNAME
+    if adjacent.exists():
+        return adjacent
+    return adjacent
