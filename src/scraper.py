@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import html
+import importlib.util
 import json
 import os
 import re
@@ -11,6 +12,12 @@ from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, Field
+
+try:
+    from playwright.async_api import TimeoutError as PlaywrightTimeoutError, async_playwright
+except Exception:  # pragma: no cover - Playwright is optional outside scraping paths.
+    PlaywrightTimeoutError = TimeoutError
+    async_playwright = None
 
 DEFAULT_STORY_SELECTOR = "div.mt-3 div.text-left.text-sm"
 
@@ -704,11 +711,59 @@ def save_checkpoint(checkpoint: RawTextCheckpoint, checkpoint_path: Path) -> Non
     )
 
 
-def configure_playwright_runtime() -> None:
-    """Use package-local Playwright browsers in packaged desktop builds."""
+def packaged_playwright_browsers_path() -> Path | None:
+    configured = os.environ.get("PLAYWRIGHT_BROWSERS_PATH", "").strip()
+    if configured and configured != "0":
+        candidate = Path(configured).expanduser()
+        return candidate if candidate.exists() else None
 
-    if getattr(sys, "frozen", False):
-        os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", "0")
+    spec = importlib.util.find_spec("playwright")
+    if spec is None or spec.origin is None:
+        return None
+
+    package_root = Path(spec.origin).resolve().parent
+    candidate = package_root / "driver" / "package" / ".local-browsers"
+    if candidate.exists():
+        return candidate
+    return None
+
+
+def playwright_browser_executable(browser_root: Path | None = None) -> Path | None:
+    root = browser_root or packaged_playwright_browsers_path()
+    if root is None:
+        return None
+
+    if sys.platform == "win32":
+        names = ("chrome-headless-shell.exe", "chrome.exe")
+    else:
+        names = ("chrome-headless-shell", "chrome")
+
+    for name in names:
+        matches = sorted(root.rglob(name))
+        if matches:
+            return matches[0]
+    return None
+
+
+def configure_playwright_runtime() -> Path | None:
+    """Point Playwright at package-local browsers when they are available."""
+
+    browser_root = packaged_playwright_browsers_path()
+    if browser_root is not None:
+        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(browser_root)
+    return browser_root
+
+
+def _ensure_async_playwright_loaded() -> None:
+    global PlaywrightTimeoutError, async_playwright
+
+    if async_playwright is not None:
+        return
+
+    from playwright.async_api import TimeoutError as _PlaywrightTimeoutError, async_playwright as _async_playwright
+
+    PlaywrightTimeoutError = _PlaywrightTimeoutError
+    async_playwright = _async_playwright
 
 
 async def scrape_scrybequill(
@@ -721,7 +776,9 @@ async def scrape_scrybequill(
     timeout_ms: int = 45000,
 ) -> RawTextCheckpoint:
     configure_playwright_runtime()
-    from playwright.async_api import TimeoutError as PlaywrightTimeoutError, async_playwright
+    _ensure_async_playwright_loaded()
+    if async_playwright is None:
+        raise RuntimeError("Playwright is not installed.")
 
     selected_recap = normalize_recap_version(recap_version)
 

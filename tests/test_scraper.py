@@ -1,4 +1,5 @@
 import json
+from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
@@ -118,6 +119,36 @@ def test_extract_text_recap_from_rendered_text():
     recap = scraper.extract_text_recap(body_text)
 
     assert recap == "First paragraph of recap.\nSecond paragraph of recap."
+
+
+def test_configure_playwright_runtime_uses_package_local_browsers(monkeypatch, tmp_path):
+    package_root = tmp_path / "site-packages" / "playwright"
+    browser_root = package_root / "driver" / "package" / ".local-browsers"
+    browser_root.mkdir(parents=True)
+
+    monkeypatch.delenv("PLAYWRIGHT_BROWSERS_PATH", raising=False)
+    monkeypatch.setattr(
+        scraper.importlib.util,
+        "find_spec",
+        lambda name: SimpleNamespace(origin=str(package_root / "__init__.py")),
+    )
+
+    resolved = scraper.configure_playwright_runtime()
+
+    assert resolved == browser_root
+    assert scraper.os.environ["PLAYWRIGHT_BROWSERS_PATH"] == str(browser_root)
+
+
+def test_playwright_browser_executable_prefers_headless_shell(monkeypatch, tmp_path):
+    browser_root = tmp_path / ".local-browsers"
+    shell = browser_root / "chromium_headless_shell-1234" / "chrome-headless-shell-win64"
+    shell.mkdir(parents=True)
+    executable = shell / "chrome-headless-shell.exe"
+    executable.write_text("", encoding="utf-8")
+
+    monkeypatch.setattr(scraper.sys, "platform", "win32")
+
+    assert scraper.playwright_browser_executable(browser_root) == executable
 
 
 def test_extract_recap_variants_from_rendered_text():

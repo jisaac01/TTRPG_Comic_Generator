@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime
@@ -24,7 +23,7 @@ from prompt_templates import DEFAULT_PROMPTS_DIR
 from prompter import ART_DIRECTION_TEMPLATE_FIELDS, ART_DIRECTION_TEMPLATE_FILENAME
 from repository_service import CampaignPrompts, RepositoryService
 from run_controller import RunController
-from scraper import configure_playwright_runtime
+from scraper import configure_playwright_runtime, playwright_browser_executable
 from settings_service import SettingsService
 
 try:
@@ -65,34 +64,34 @@ def create_services(campaigns_root: Path | None = None) -> AppServices:
 
 def _playwright_preflight_warnings() -> list[str]:
     warnings: list[str] = []
-    configure_playwright_runtime()
+    browser_root = configure_playwright_runtime()
 
     try:
-        from playwright.sync_api import sync_playwright
+        import playwright.async_api  # noqa: F401
     except Exception:
         return [
             "Playwright is not installed. Install dependencies before building the app."
         ]
 
+    executable = playwright_browser_executable(browser_root)
+    if executable is None or not executable.exists():
+        return [
+            "Playwright Chromium browser is missing from this app bundle. Rebuild after running `python -m playwright install chromium` with `PLAYWRIGHT_BROWSERS_PATH=0` in the build environment."
+        ]
+
     try:
-        with sync_playwright() as pw:
-            chromium_binary = Path(pw.chromium.executable_path)
-            if chromium_binary.exists():
-                browser = pw.chromium.launch(headless=True)
-                browser.close()
-        if not chromium_binary.exists():
-            warnings.append(
-                "Playwright Chromium browser is missing from this app bundle. Rebuild after running `python -m playwright install chromium` with `PLAYWRIGHT_BROWSERS_PATH=0` in the build environment."
-            )
+        subprocess.run(
+            [str(executable), "--version"],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=10,
+        )
     except Exception as exc:
         detail = str(exc).lower()
         if "dll load failed" in detail or "vcruntime" in detail or "msvcp" in detail:
             warnings.append(
                 "Playwright runtime dependency missing. On Windows install Microsoft Visual C++ Redistributable (x64)."
-            )
-        elif "executable doesn't exist" in detail or "browserType.launch" in detail:
-            warnings.append(
-                "Playwright Chromium browser is missing from this app bundle. Rebuild after running `python -m playwright install chromium` with `PLAYWRIGHT_BROWSERS_PATH=0` in the build environment."
             )
         else:
             warnings.append(
