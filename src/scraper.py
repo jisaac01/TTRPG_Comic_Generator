@@ -5,6 +5,7 @@ import html
 import json
 import os
 import re
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
@@ -703,6 +704,13 @@ def save_checkpoint(checkpoint: RawTextCheckpoint, checkpoint_path: Path) -> Non
     )
 
 
+def configure_playwright_runtime() -> None:
+    """Use package-local Playwright browsers in packaged desktop builds."""
+
+    if getattr(sys, "frozen", False):
+        os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", "0")
+
+
 async def scrape_scrybequill(
     url: str,
     checkpoint_path: Path = Path("campaigns/<campaign>/<episode>/v001/01_raw_text.json"),
@@ -712,10 +720,7 @@ async def scrape_scrybequill(
     author_selector: str = ".author",
     timeout_ms: int = 45000,
 ) -> RawTextCheckpoint:
-    # Use package-local browser binaries when available (installed with
-    # PLAYWRIGHT_BROWSERS_PATH=0 during build prep), so packaged EXE users do
-    # not need a separate Playwright browser install step.
-    os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", "0")
+    configure_playwright_runtime()
     from playwright.async_api import TimeoutError as PlaywrightTimeoutError, async_playwright
 
     selected_recap = normalize_recap_version(recap_version)

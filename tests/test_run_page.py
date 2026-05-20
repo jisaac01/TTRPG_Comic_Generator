@@ -78,6 +78,29 @@ class _FakeRunController:
         return None
 
 
+class _FailingRunController:
+    def launch_run(self, config: Any, event_callback: Any) -> "asyncio.Task[RunResult]":
+        async def _complete() -> RunResult:
+            return RunResult(
+                status="failed",
+                version="v001",
+                version_dir="campaigns/flail/ep-1/v001",
+                failed_phases=["scrape"],
+                errors=["scrape failed"],
+                error_details=["browserType.launch: Executable doesn't exist"],
+                events=[],
+                output=None,
+            )
+
+        return asyncio.ensure_future(_complete())
+
+    def current_run(self) -> None:
+        return None
+
+    def last_result(self) -> None:
+        return None
+
+
 class _FakeSettingsService:
     def get_default_model(self) -> str:
         return "gemini-3.1-flash-lite"
@@ -120,7 +143,7 @@ class _FakeRepositoryService:
         return Path("campaigns") / name
 
 
-def _services(fake_rc: _FakeRunController | None = None) -> AppServices:
+def _services(fake_rc: Any | None = None) -> AppServices:
     from repository_service import RepositoryService
 
     return AppServices(
@@ -277,6 +300,18 @@ async def test_run_page_execute_run_reenables_button_on_completion() -> None:
 
     assert state["run_button"].disabled is False
     assert state["status_summary"].value == "✓ OK"
+
+
+@pytest.mark.asyncio
+async def test_run_page_execute_run_surfaces_failed_result_without_event() -> None:
+    page = _FakePage()
+    event_log = ft.ListView()
+    _container, state = build_run_page(_services(_FailingRunController()), page, event_log, ft)
+
+    await state["execute_run"]()
+
+    assert state["status_summary"].value == "✗ Failed"
+    assert "browserType.launch" in state["run_error_text"].value
 
 
 @pytest.mark.asyncio

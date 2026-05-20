@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime
@@ -23,6 +24,7 @@ from prompt_templates import DEFAULT_PROMPTS_DIR
 from prompter import ART_DIRECTION_TEMPLATE_FIELDS, ART_DIRECTION_TEMPLATE_FILENAME
 from repository_service import CampaignPrompts, RepositoryService
 from run_controller import RunController
+from scraper import configure_playwright_runtime
 from settings_service import SettingsService
 
 try:
@@ -63,20 +65,24 @@ def create_services(campaigns_root: Path | None = None) -> AppServices:
 
 def _playwright_preflight_warnings() -> list[str]:
     warnings: list[str] = []
+    configure_playwright_runtime()
 
     try:
         from playwright.sync_api import sync_playwright
     except Exception:
         return [
-            "Playwright is not installed. Install dependencies and run `playwright install chromium`."
+            "Playwright is not installed. Install dependencies before building the app."
         ]
 
     try:
         with sync_playwright() as pw:
             chromium_binary = Path(pw.chromium.executable_path)
+            if chromium_binary.exists():
+                browser = pw.chromium.launch(headless=True)
+                browser.close()
         if not chromium_binary.exists():
             warnings.append(
-                "Playwright Chromium browser is missing. Run `playwright install chromium`."
+                "Playwright Chromium browser is missing from this app bundle. Rebuild after running `python -m playwright install chromium` with `PLAYWRIGHT_BROWSERS_PATH=0` in the build environment."
             )
     except Exception as exc:
         detail = str(exc).lower()
@@ -84,9 +90,13 @@ def _playwright_preflight_warnings() -> list[str]:
             warnings.append(
                 "Playwright runtime dependency missing. On Windows install Microsoft Visual C++ Redistributable (x64)."
             )
+        elif "executable doesn't exist" in detail or "browserType.launch" in detail:
+            warnings.append(
+                "Playwright Chromium browser is missing from this app bundle. Rebuild after running `python -m playwright install chromium` with `PLAYWRIGHT_BROWSERS_PATH=0` in the build environment."
+            )
         else:
             warnings.append(
-                "Playwright preflight check failed. If scraping errors occur, reinstall browser runtime with `playwright install chromium`."
+                f"Playwright preflight check failed: {exc}"
             )
 
     return warnings
@@ -258,6 +268,17 @@ def build_run_page(
             config = _build_config()
             task = services.run_controller.launch_run(config, on_pipeline_event)
             result = await task
+            if result and result.status != "ok":
+                details = result.error_details or result.errors
+                if result.status == "partial":
+                    status_summary.value = "⚠ Partial"
+                elif result.status == "cancelled":
+                    status_summary.value = "✗ Cancelled"
+                else:
+                    status_summary.value = "✗ Failed"
+                if details:
+                    run_error_text.value = "\n".join(details)
+                page.update()
             if callable(on_run_finished):
                 on_run_finished(result.version_dir if result else None)
         except (RuntimeError, ValueError) as exc:
