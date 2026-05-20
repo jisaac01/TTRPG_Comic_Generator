@@ -27,13 +27,33 @@ winget install Microsoft.VCRedist.2015+.x64
 
 Then restart your terminal and re-run `playwright install chromium`.
 
-## Windows build and runtime paths
+## Building for Windows
 
-Build a Windows package with:
+The build must be run **on a Windows machine**. Prerequisites (one-time):
 
-```bash
+1. Install **Visual Studio 2022+** with the "Desktop development with C++" workload.
+2. Install the VC++ Redistributable (also required at runtime for Playwright):
+   ```powershell
+   winget install Microsoft.VCRedist.2015+.x64
+   ```
+
+Flutter SDK is required by `flet build` but does **not** need to be installed manually — on first run, `flet build` will detect it is missing and offer to download it automatically.
+
+Build command (run from project root):
+
+```powershell
 flet build windows
 ```
+
+Output is placed in `build/windows/`. The build configuration is in `pyproject.toml` — the `src/` directory is packaged as the application root, with `src/main.py` as the entry point.
+
+After distributing the app, users who want to use the scraper must also run:
+
+```powershell
+playwright install chromium
+```
+
+## Runtime paths
 
 Runtime behavior for packaged builds:
 
