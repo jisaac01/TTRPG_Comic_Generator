@@ -54,7 +54,7 @@ Build command (run from project root):
 
 ```powershell
 # Bundle Chromium into the packaged app (run in the same venv used for build)
-$env:PLAYWRIGHT_BROWSERS_PATH="0"
+$env:PLAYWRIGHT_BROWSERS_PATH="src/playwright-browsers"
 python -m playwright install chromium
 
 # Build the EXE

@@ -20,6 +20,7 @@ except Exception:  # pragma: no cover - Playwright is optional outside scraping 
     async_playwright = None
 
 DEFAULT_STORY_SELECTOR = "div.mt-3 div.text-left.text-sm"
+PLAYWRIGHT_BROWSERS_DIRNAME = "playwright-browsers"
 
 RecapVersion = Literal["short", "standard", "alternate", "long"]
 
@@ -716,6 +717,11 @@ def packaged_playwright_browsers_path() -> Path | None:
     if configured and configured != "0":
         candidate = Path(configured).expanduser()
         return candidate if candidate.exists() else None
+
+    # Primary runtime location: bundled alongside app source as src/playwright-browsers.
+    adjacent = Path(__file__).resolve().parent / PLAYWRIGHT_BROWSERS_DIRNAME
+    if adjacent.exists():
+        return adjacent
 
     spec = importlib.util.find_spec("playwright")
     if spec is None or spec.origin is None:

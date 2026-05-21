@@ -76,7 +76,7 @@ def _playwright_preflight_warnings() -> list[str]:
     executable = playwright_browser_executable(browser_root)
     if executable is None or not executable.exists():
         return [
-            "Playwright Chromium browser is missing from this app bundle. Rebuild after running `python -m playwright install chromium` with `PLAYWRIGHT_BROWSERS_PATH=0` in the build environment."
+            "Playwright Chromium browser is missing from this app bundle. Rebuild after running `python -m playwright install chromium` with `PLAYWRIGHT_BROWSERS_PATH=src/playwright-browsers` in the build environment."
         ]
 
     try:

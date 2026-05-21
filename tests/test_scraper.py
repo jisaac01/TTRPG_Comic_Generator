@@ -139,6 +139,22 @@ def test_configure_playwright_runtime_uses_package_local_browsers(monkeypatch, t
     assert scraper.os.environ["PLAYWRIGHT_BROWSERS_PATH"] == str(browser_root)
 
 
+def test_configure_playwright_runtime_prefers_adjacent_app_browsers(monkeypatch, tmp_path):
+    app_root = tmp_path / "src"
+    app_root.mkdir(parents=True)
+    app_browser_root = app_root / "playwright-browsers"
+    app_browser_root.mkdir(parents=True)
+
+    monkeypatch.delenv("PLAYWRIGHT_BROWSERS_PATH", raising=False)
+    monkeypatch.setattr(scraper, "__file__", str(app_root / "scraper.py"))
+    monkeypatch.setattr(scraper.importlib.util, "find_spec", lambda _name: None)
+
+    resolved = scraper.configure_playwright_runtime()
+
+    assert resolved == app_browser_root
+    assert scraper.os.environ["PLAYWRIGHT_BROWSERS_PATH"] == str(app_browser_root)
+
+
 def test_playwright_browser_executable_prefers_headless_shell(monkeypatch, tmp_path):
     browser_root = tmp_path / ".local-browsers"
     shell = browser_root / "chromium_headless_shell-1234" / "chrome-headless-shell-win64"
