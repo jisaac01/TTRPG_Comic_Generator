@@ -45,10 +45,6 @@ The build must be run **on a Windows machine**. Prerequisites (one-time):
    ```
 
 Flutter SDK is required by `flet build` but does **not** need to be installed manually — on first run, `flet build` will detect it is missing and offer to download it automatically.
-To install, you may need windows certificates:
-```powershell
-pip install pip-system-certs
-```
 
 Build command (run from project root):
 
@@ -59,6 +55,12 @@ python -m playwright install chromium
 
 # Build the EXE
 flet build windows
+```
+
+Verify Chromium was bundled into the build output:
+
+```powershell
+Get-ChildItem -Recurse .\build\windows -Filter chrome-headless-shell.exe
 ```
 
 Output is placed in `build/windows/`. The build configuration is in `pyproject.toml` — the `src/` directory is packaged as the application root, with `src/main.py` as the entry point.

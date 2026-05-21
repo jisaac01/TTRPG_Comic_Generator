@@ -167,6 +167,26 @@ def test_playwright_browser_executable_prefers_headless_shell(monkeypatch, tmp_p
     assert scraper.playwright_browser_executable(browser_root) == executable
 
 
+def test_discover_playwright_browsers_path_from_runtime_tree(monkeypatch, tmp_path):
+    runtime_root = tmp_path / "flet" / "app"
+    executable_dir = (
+        runtime_root
+        / "playwright-browsers"
+        / "chromium_headless_shell-1223"
+        / "chrome-headless-shell-win64"
+    )
+    executable_dir.mkdir(parents=True)
+    executable = executable_dir / "chrome-headless-shell.exe"
+    executable.write_text("", encoding="utf-8")
+
+    monkeypatch.setattr(scraper.sys, "platform", "win32")
+    monkeypatch.setattr(scraper, "_runtime_search_roots", lambda: [runtime_root])
+
+    discovered = scraper.discover_playwright_browsers_path()
+
+    assert discovered == runtime_root / "playwright-browsers"
+
+
 def test_extract_recap_variants_from_rendered_text():
     body_text = """
     Session Title

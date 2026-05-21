@@ -731,6 +731,50 @@ def packaged_playwright_browsers_path() -> Path | None:
     candidate = package_root / "driver" / "package" / ".local-browsers"
     if candidate.exists():
         return candidate
+
+    discovered = discover_playwright_browsers_path()
+    if discovered is not None:
+        return discovered
+    return None
+
+
+def _runtime_search_roots() -> list[Path]:
+    roots = [Path(__file__).resolve().parent]
+    if getattr(sys, "frozen", False):
+        roots.append(Path(sys.executable).resolve().parent)
+
+    unique: list[Path] = []
+    seen: set[Path] = set()
+    for root in roots:
+        if root not in seen and root.exists():
+            unique.append(root)
+            seen.add(root)
+    return unique
+
+
+def _infer_browser_root_from_executable(executable: Path) -> Path | None:
+    current = executable.parent
+    while current != current.parent:
+        if current.name in {"playwright-browsers", ".local-browsers"}:
+            return current
+        if re.match(r"^(chromium|chromium_headless_shell|firefox|webkit)(-|_)", current.name):
+            return current.parent
+        current = current.parent
+    return None
+
+
+def discover_playwright_browsers_path() -> Path | None:
+    if sys.platform == "win32":
+        targets = ("chrome-headless-shell.exe", "chrome.exe")
+    else:
+        targets = ("chrome-headless-shell", "chrome")
+
+    for root in _runtime_search_roots():
+        for target in targets:
+            for executable in root.rglob(target):
+                inferred = _infer_browser_root_from_executable(executable)
+                if inferred is not None and inferred.exists():
+                    return inferred
     return None
 
 
