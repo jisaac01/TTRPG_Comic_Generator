@@ -1191,23 +1191,10 @@ def build_main_layout(page: Any, services: AppServices) -> dict[str, Any]:
         can_reveal_password=True,
         expand=True,
     )
-    ollama_url_input = ft.TextField(
-        label="Ollama Base URL",
-        value=services.settings.get_ollama_base_url(),
-        expand=True,
-    )
     default_model_input = ft.TextField(
         label="Default Model",
         value=services.settings.get_default_model(),
         expand=True,
-    )
-    backend_dropdown = ft.Dropdown(
-        label="Backend",
-        value="gemini" if services.settings.get_default_model().startswith("gemini-") else "ollama",
-        options=[
-            ft.dropdown.Option("gemini", "Gemini"),
-            ft.dropdown.Option("ollama", "Ollama"),
-        ],
     )
 
     status_text = ft.Text("Ready", size=12)
@@ -1215,7 +1202,6 @@ def build_main_layout(page: Any, services: AppServices) -> dict[str, Any]:
     def on_save_settings(_event: Any) -> None:
         if gemini_key_input.value:
             services.settings.set_gemini_api_key(gemini_key_input.value)
-        services.settings.set_ollama_base_url(ollama_url_input.value or "")
         services.settings.set_default_model(default_model_input.value or "")
         services.settings.apply_to_environment()
         status_text.value = "Settings saved"
@@ -1226,7 +1212,7 @@ def build_main_layout(page: Any, services: AppServices) -> dict[str, Any]:
         modal=False,
         title=ft.Text("Settings"),
         content=ft.Column(
-            controls=[gemini_key_input, ollama_url_input, default_model_input, backend_dropdown],
+            controls=[gemini_key_input, default_model_input],
             tight=True,
             width=520,
         ),
