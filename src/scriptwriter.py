@@ -95,12 +95,26 @@ def _build_instructor_client(model: str):
     return build_instructor_client(model)
 
 
+def _format_character_details(character: Character) -> str:
+    details = [f"- {character.name}: {character.description}"]
+    extras: list[str] = []
+    if character.class_name:
+        extras.append(f"Class: {character.class_name}")
+    if character.race:
+        extras.append(f"Race: {character.race}")
+    if character.physical_description:
+        extras.append(f"Physical: {character.physical_description}")
+    if extras:
+        details.append("  " + "; ".join(extras))
+    return "\n".join(details)
+
+
 def _format_entities_for_prompt(world: WorldStateInput) -> str:
     pc_blob = "\n".join(
-        f"- {char.name}: {char.description}" for char in world.player_characters
+        _format_character_details(char) for char in world.player_characters
     )
     npc_blob = "\n".join(
-        f"- {char.name}: {char.description}" for char in world.npcs
+        _format_character_details(char) for char in world.npcs
     )
     locations_blob = "\n".join(
         f"- {location.name}: {location.appearance}" for location in world.locations

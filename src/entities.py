@@ -4,7 +4,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from scraper import RawTextCheckpoint
 
@@ -15,8 +15,18 @@ from scraper import RawTextCheckpoint
 
 
 class Character(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     name: str = Field(min_length=1)
     description: str = Field(min_length=1)
+    class_name: str | None = Field(
+        default=None,
+        validation_alias="class",
+        serialization_alias="class",
+    )
+    race: str | None = None
+    physical_description: str | None = None
+    aliases: list[str] = Field(default_factory=list)
 
 
 class Location(BaseModel):

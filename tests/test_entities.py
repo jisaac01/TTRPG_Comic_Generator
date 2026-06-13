@@ -115,7 +115,7 @@ def test_build_player_characters_fallback_description_when_whitespace_only():
     assert chars[0].description == "No source description provided."
 
 
-def test_build_player_characters_has_only_name_and_description_fields():
+def test_build_player_characters_exposes_optional_continuity_fields_with_defaults():
     raw = _make_raw(
         player_characters=[ScrapedEntity(name="Del", description="A druid")]
     )
@@ -123,7 +123,29 @@ def test_build_player_characters_has_only_name_and_description_fields():
     assert chars[0].model_dump() == {
         "name": "Del",
         "description": "A druid",
+        "class_name": None,
+        "race": None,
+        "physical_description": None,
+        "aliases": [],
     }
+
+
+def test_character_accepts_alias_field_names_for_continuity_metadata():
+    char = Character.model_validate(
+        {
+            "name": "Wulf",
+            "description": "A sharp-eyed sailor.",
+            "class": "Ranger",
+            "race": "Human",
+            "physical_description": "Tall and weather-beaten.",
+            "aliases": ["Wolf"],
+        }
+    )
+
+    assert char.class_name == "Ranger"
+    assert char.race == "Human"
+    assert char.physical_description == "Tall and weather-beaten."
+    assert char.aliases == ["Wolf"]
 
 
 def test_build_player_characters_empty_when_no_entities():

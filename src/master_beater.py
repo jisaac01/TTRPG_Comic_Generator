@@ -34,12 +34,26 @@ class StoryBibleCheckpoint(BaseModel):
 StoryBibleGenerator = Callable[[str, WorldStateCheckpoint, str, int], str]
 
 
+def _format_character_details(character: WorldStateCheckpoint.model_fields["player_characters"].annotation.__args__[0] | WorldStateCheckpoint.model_fields["npcs"].annotation.__args__[0]) -> str:
+    details = [f"- {character.name}: {character.description}"]
+    extras: list[str] = []
+    if character.class_name:
+        extras.append(f"Class: {character.class_name}")
+    if character.race:
+        extras.append(f"Race: {character.race}")
+    if character.physical_description:
+        extras.append(f"Physical: {character.physical_description}")
+    if extras:
+        details.append("  " + "; ".join(extras))
+    return "\n".join(details)
+
+
 def _format_entities_for_prompt(world: WorldStateCheckpoint) -> str:
     pc_lines = "\n".join(
-        f"- {character.name}: {character.description}" for character in world.player_characters
+        _format_character_details(character) for character in world.player_characters
     )
     npc_lines = "\n".join(
-        f"- {character.name}: {character.description}" for character in world.npcs
+        _format_character_details(character) for character in world.npcs
     )
     location_lines = "\n".join(
         f"- {location.name}: {location.appearance}" for location in world.locations

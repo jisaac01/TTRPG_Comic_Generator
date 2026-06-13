@@ -52,11 +52,23 @@ def _character_is_referenced(name: str, panel_text: str) -> bool:
 def _format_character_details(world: WorldStateCheckpoint, script: ScriptCheckpoint) -> str:
     panel_text = _collect_panel_text(script)
     all_characters = list(world.player_characters) + list(world.npcs)
-    details = [
-        f"{character.name}: {character.description}"
-        for character in all_characters
-        if _character_is_referenced(character.name, panel_text)
-    ]
+    details = []
+    for character in all_characters:
+        if not _character_is_referenced(character.name, panel_text):
+            continue
+
+        parts = [f"{character.name}: {character.description}"]
+        extras = []
+        if character.class_name:
+            extras.append(f"class {character.class_name}")
+        if character.race:
+            extras.append(f"race {character.race}")
+        if character.physical_description:
+            extras.append(f"physical {character.physical_description}")
+        if extras:
+            parts.append("(" + "; ".join(extras) + ")")
+        details.append(" ".join(parts))
+
     return " | ".join(details)
 
 

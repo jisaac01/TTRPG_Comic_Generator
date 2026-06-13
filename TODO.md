@@ -1,145 +1,48 @@
 ## Pipeline & Core
 
+- [ ] Campaign level entity caching
 - [ ] Add race & class to entities
 - [ ] Add a second pass for continuity and fun
 - [ ] character description merging and sync?
-
+- [ ] remove validation (e.g. carried items)
+- [ ] panel stitching
 ---
 
-## GUI Implementation (see GUI_ROADMAP.md & GUI_DESIGN.md)
+### Entities bible / continuity plan
 
-### Phase 0: Foundation — Pipeline Events & Config Model
+- [x] Step 1: Add continuity metadata to entities and update consumers
+  - Added optional character fields for `class`, `race`, `physical_description`, and `aliases` in [src/entities.py](src/entities.py).
+  - Updated prompt consumers in [src/master_beater.py](src/master_beater.py), [src/scriptwriter.py](src/scriptwriter.py), and [src/prompter.py](src/prompter.py) to render the richer character context.
+  - Added tests for the richer schema in [tests/test_entities.py](tests/test_entities.py).
 
-- [x] Create `src/pipeline_config.py` with `RunConfig` dataclass
-- [x] Create `src/pipeline_events.py` with `PipelineEvent` union and event types
-- [x] Refactor `src/pipeline.py` to emit `PipelineEvent` instead of print()
-- [x] Update CLI to consume events as presentation layer
-- [x] Add event emission tests in `tests/test_pipeline.py`
-- [x] Verify all existing pipeline tests still pass
+- [ ] Step 2: Define what “merge” really means
+  - This is not a simple file union or deterministic dedupe pass.
+  - The real continuity merge needs an LLM-assisted synthesis step that compares:
+    1. the current episode’s extracted entities (`02_entities.json`),
+    2. the existing campaign-root `entities_bible.json`, and
+    3. the current episode text where names/aliases appear.
+  - The model should propose a canonical campaign bible entry for each character/NPC, including the best available description, class, race, aliases, and physical notes.
+  - Exact-name matches can be handled deterministically, but contradictory or fuzzy cases need model judgment and warnings.
 
-### Phase 1: Services Layer
+- [ ] Step 3: Implement the campaign-root entities bible stage
+  - Create or update `campaigns/<campaign>/entities_bible.json`.
+  - Keep `02_entities.json` as the episode-local snapshot.
+  - Copy the campaign bible into the current episode version directory for downstream use.
+  - Emit warnings for contradictory descriptions, ambiguous names, and alias collisions.
 
-- [x] Create `src/repository_service.py` with RepositoryService class
-  - [x] list_campaigns()
-  - [x] list_episodes()
-  - [x] latest_version()
-  - [x] list_versions()
-  - [x] get_version_files()
-  - [x] get_campaign_prompts()
-  - [x] get_version_prompts()
-  - [x] run_status()
-- [x] Create `src/settings_service.py` with SettingsService class
-  - [x] get/set_gemini_api_key() (OS keyring)
-  - [x] get/set_ollama_base_url()
-  - [x] get/set_default_model()
-  - [x] apply_to_environment()
-- [x] Add `tests/test_repository_service.py` with functional tests
-- [x] Add `tests/test_settings_service.py` with unit tests
-- [x] Verify all existing tests still pass
+- [ ] Step 4: Use the bible in downstream generation
+  - Feed the merged bible into the master-beater/story-bible path.
+  - Add conservative alias-based name normalization before the master beater sees the raw text.
+  - Keep the existing episode-local entities file for traceability, but make the downstream consumers use the richer bible-backed entity context.
 
-### Phase 2: Run Controller & Event Streaming
+- [ ] Step 5: Add tests for merge behavior and warnings
+  - Merge exact-name and alias matches.
+  - Detect contradictory descriptions and near-duplicate names.
+  - Verify alias replacement is conservative (e.g. “Wulf” / “Wolf” without corrupting “Sea Wolf”).
+  - Verify the pipeline creates the campaign bible and version-local copy.
 
-- [x] Create `src/run_controller.py` with RunController class
-  - [x] launch_run()
-  - [x] current_run()
-  - [x] cancel_run()
-- [x] Add `tests/test_run_controller.py` with unit tests
-- [x] Add integration test (RepositoryService + RunController)
-- [x] Verify all tests pass
+### Notes
+- I now believe the merge step should be a small LLM-backed continuity pass, not just a mechanical JSON merge.
+- The deterministic part is still useful for exact-name normalization and fallback behavior, but the real conflict resolution will need model reasoning.
+- The current step 1 implementation is complete; the remaining work is the actual bible merge stage and its validation/warning path.
 
-### Phase 3: Flet UI Shell & Navigation
-
-- [x] Create `src/gui.py` main Flet application
-- [x] Implement three-tab workspace navigation
-- [x] Implement shared event log view
-- [x] Implement Settings panel/dialog
-  - [x] API key configuration
-  - [x] Backend selection
-  - [x] Default model selection
-- [x] Add placeholder workspace pages (RunPage, PromptPage, OutputPage)
-- [x] Add `tests/test_gui_integration.py` smoke tests
-- [x] Verify app starts without errors
-
-### Phase 4: Run Workspace
-
-- [x] Implement RunPage component
-  - [x] Campaign dropdown (via RepositoryService)
-  - [x] Story URL text field
-  - [x] Rerun stage dropdown
-  - [x] Recap version dropdown
-  - [x] Skip style toggle
-  - [x] Panel count / total pages spinners
-  - [x] Model selectors (default or per-stage)
-- [x] Implement Run status panel
-  - [x] Status indicator
-  - [x] Current phase badge
-  - [ ] Checkpoint readiness list
-  - [x] Latest version path display
-- [x] Implement Run button & disable logic
-- [x] State management for RunPage
-- [x] Implement event callback → UI update flow
-- [x] Add unit tests for RunPage state & button behavior
-- [x] Test end-to-end with mocked pipeline
-
-### Phase 5: Prompt Workspace
-
-- [ ] Implement PromptPage component
-  - [ ] Campaign dropdown
-  - [ ] Template file list (radio/clickable)
-  - [ ] Load / Save / Reset buttons
-- [ ] Implement text editor pane
-- [ ] Implement art_direction_template.json validation
-  - [ ] Required field checks (base_style, characters, color_palette, layout_and_composition, lettering_and_dialog, text_rendering_guide)
-  - [ ] Show ✓/✗ feedback
-  - [ ] Prevent save on invalid JSON
-- [ ] Implement preview section (list of files to be captured)
-- [ ] State management for PromptPage
-- [ ] Add unit tests for validation & file operations
-- [ ] Test save/load/reset flows with mock RepositoryService
-
-### Phase 6: Output Workspace
-
-- [ ] Implement OutputPage component
-  - [ ] Campaign dropdown
-  - [ ] Episode dropdown
-  - [ ] Version dropdown (pre-select latest)
-- [ ] Implement run status panel (parse run_status.json)
-- [ ] Implement file browser list
-- [ ] Implement preview pane
-  - [ ] JSON pretty-printing
-  - [ ] Text file display as-is
-- [ ] Implement quick-action buttons
-  - [ ] Copy to Clipboard
-  - [ ] Open Version Folder
-- [ ] State management for OutputPage
-- [ ] Add unit tests for file listing & preview
-- [ ] Test with mock RepositoryService
-
-### Phase 7: Polish, Testing & Packaging
-
-- [ ] Create comprehensive integration test suite
-  - [ ] Multi-campaign temp setup
-  - [ ] Launch run via GUI, verify output discovery
-  - [ ] Edit campaign prompt, verify next run uses it
-  - [ ] Error handling: missing campaign, invalid URL, API key not set
-- [ ] Add graceful error handling across all workspaces
-- [ ] Add user-facing error messages (not tracebacks) to event log
-- [ ] Update README.md with GUI quickstart & screenshots
-- [ ] Create GUI_TROUBLESHOOTING.md if needed
-- [ ] Implement Windows packaging proof-of-concept
-  - [ ] Verify Playwright/browser bundling strategy
-  - [ ] Build Windows .exe locally or via Windows CI
-  - [ ] Smoke test .exe with real campaign folder
-  - [ ] Verify API keys are not visible in plain text
-- [ ] Final integration test suite run (all tests pass)
-- [ ] Document GUI usage & packaging notes in README.md
-
----
-
-## Milestones
-
-- [x] **Milestone 1** (End of Phase 1): Services are testable in isolation; CLI works
-- [ ] **Milestone 2** (End of Phase 3): Flet app starts, tabs navigate, Settings dialog works
-- [ ] **Milestone 3** (End of Phase 4): Run workspace is functional, user can launch mocked run
-- [ ] **Milestone 4** (End of Phase 6): All workspaces feature-complete, full workflow usable
-- [ ] **Milestone 5** (End of Phase 7): Windows .exe is produced, tested, and documented 
