@@ -14,6 +14,7 @@ from typing import Callable, Literal, cast
 from entities import (
     WorldStateCheckpoint,
     build_entities_from_raw,
+    write_entities_bible,
 )
 from model_defaults import DEFAULT_MODEL
 from pipeline_config import RunConfig, RerunFrom, CAMPAIGNS_ROOT
@@ -656,7 +657,27 @@ class ComicPipeline:
                 output_path=entities_path,
                 model_label="scraper-direct",
             )
+            if not entities_path.exists():
+                entities_path.write_text(
+                    entities.model_dump_json(indent=2),
+                    encoding="utf-8",
+                )
             self._emit(PhaseCompleted(phase="entities", message="...done"))
+
+        bible_path, version_bible_path, bible_entities, bible_warnings = write_entities_bible(
+            campaign_root=self.campaigns_root / self.campaign,
+            version_dir=version_dir,
+            entities_path=entities_path,
+        )
+        if bible_warnings:
+            for warning in bible_warnings:
+                self._emit(
+                    PhaseWarning(
+                        phase="entities",
+                        message="Entities continuity warning",
+                        warning=warning,
+                    )
+                )
 
         story_bible: StoryBibleCheckpoint | None = None
         if story_bible_path.exists():

@@ -95,10 +95,10 @@ def merge_entities_for_bible(
 ) -> tuple[WorldStateCheckpoint, list[str]]:
     """Merge two world-state checkpoints into a canonical bible view.
 
-    The merge is deterministic for exact-name matches and conservative for
-    near-duplicates. It preserves existing richer values when conflicts arise,
-    unions aliases, and emits warnings for contradictory descriptions and
-    ambiguous similar names.
+    This is the current deterministic fallback for continuity: it keeps the
+    richer description for exact-name matches, unions aliases, and warns on
+    near-duplicate names. The real LLM-assisted synthesis pass is still
+    planned for later, so the helper intentionally stays conservative.
     """
 
     merged_characters: list[Character] = []
@@ -171,6 +171,135 @@ def merge_entities_for_bible(
     )
 
     return merged, warnings
+
+
+def _latest_version_dir(episode_dir: Path) -> Path | None:
+    version_dirs = sorted(
+        (
+            path
+            for path in episode_dir.iterdir()
+            if path.is_dir() and path.name.startswith("v") and path.name[1:].isdigit()
+        ),
+        key=lambda path: int(path.name[1:]),
+        reverse=True,
+    )
+    return version_dirs[0] if version_dirs else None
+
+
+def _previous_version_dir(episode_dir: Path, current_version_dir: Path) -> Path | None:
+    version_dirs = sorted(
+        (
+            path
+            for path in episode_dir.iterdir()
+            if path.is_dir() and path.name.startswith("v") and path.name[1:].isdigit()
+        ),
+        key=lambda path: int(path.name[1:]),
+    )
+    try:
+        current_index = version_dirs.index(current_version_dir)
+    except ValueError:
+        return None
+    return version_dirs[current_index - 1] if current_index > 0 else None
+
+
+def _episode_created_at(episode_dir: Path) -> datetime | None:
+    meta_path = episode_dir / "episode_meta.json"
+    if not meta_path.exists():
+        return None
+    try:
+        created_at = json.loads(meta_path.read_text(encoding="utf-8")).get("created_at")
+        return datetime.fromisoformat(created_at) if created_at else None
+    except (TypeError, ValueError, OSError, json.JSONDecodeError):
+        return None
+
+
+def _find_previous_episode_dir(campaign_root: Path, episode_dir: Path) -> Path | None:
+    current_created_at = _episode_created_at(episode_dir)
+    if current_created_at is None:
+        return None
+
+    candidates = []
+    for candidate in campaign_root.iterdir():
+        if not candidate.is_dir() or candidate == episode_dir:
+            continue
+        created_at = _episode_created_at(candidate)
+        if created_at is not None and created_at < current_created_at:
+            candidates.append((created_at, candidate))
+
+    return max(candidates, key=lambda item: item[0])[1] if candidates else None
+
+
+def _resolve_bible_source(
+    campaign_root: Path,
+    version_dir: Path,
+    incoming: WorldStateCheckpoint,
+) -> WorldStateCheckpoint:
+    bible_path = campaign_root / "entities_bible.json"
+    if bible_path.exists():
+        return WorldStateCheckpoint.model_validate_json(bible_path.read_text(encoding="utf-8"))
+
+    current_episode_dir = version_dir.parent
+    previous_version_dir = _previous_version_dir(current_episode_dir, version_dir)
+    if previous_version_dir is not None:
+        previous_entities_path = previous_version_dir / "02_entities.json"
+        if previous_entities_path.exists():
+            return WorldStateCheckpoint.model_validate_json(
+                previous_entities_path.read_text(encoding="utf-8")
+            )
+
+    previous_episode_dir = _find_previous_episode_dir(campaign_root, current_episode_dir)
+    if previous_episode_dir is not None:
+        latest_previous_version_dir = _latest_version_dir(previous_episode_dir)
+        if latest_previous_version_dir is not None:
+            previous_episode_entities_path = latest_previous_version_dir / "02_entities.json"
+            if previous_episode_entities_path.exists():
+                return WorldStateCheckpoint.model_validate_json(
+                    previous_episode_entities_path.read_text(encoding="utf-8")
+                )
+
+    return incoming
+
+
+def write_entities_bible(
+    *,
+    campaign_root: Path,
+    version_dir: Path,
+    entities_path: Path,
+) -> tuple[Path, Path, WorldStateCheckpoint, list[str]]:
+    """Create/update the campaign-root entities bible and the version-local copy.
+
+    Source precedence is:
+    1. the existing campaign bible itself,
+    2. the previous version's 02_entities.json in the current episode,
+    3. the latest 02_entities.json from the most recently created previous episode,
+    4. the current version's entities checkpoint.
+
+    """
+    if not entities_path.exists():
+        raise FileNotFoundError(f"Entities checkpoint not found at {entities_path}.")
+
+    incoming = WorldStateCheckpoint.model_validate_json(
+        entities_path.read_text(encoding="utf-8")
+    )
+    bible_path = campaign_root / "entities_bible.json"
+    version_copy_path = version_dir / "02_5_entities_bible.json"
+
+    existing = _resolve_bible_source(campaign_root, version_dir, incoming)
+    merged, warnings = merge_entities_for_bible(existing, incoming)
+
+    bible_path.parent.mkdir(parents=True, exist_ok=True)
+    bible_path.write_text(
+        json.dumps(merged.model_dump(mode="json"), indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    version_copy_path.parent.mkdir(parents=True, exist_ok=True)
+    version_copy_path.write_text(
+        json.dumps(merged.model_dump(mode="json"), indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    return bible_path, version_copy_path, merged, warnings
 
 
 def _build_player_characters(raw: RawTextCheckpoint) -> list[Character]:

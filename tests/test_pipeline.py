@@ -489,6 +489,34 @@ async def test_first_run_creates_campaign_episode_version(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_first_run_writes_entities_bible_artifacts(tmp_path):
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=2,
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
+        patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
+        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT),
+    ):
+        result = await pipeline.run()
+
+    version_dir = _version_dir_from_result(result)
+    campaign_bible = tmp_path / "dreadmarsh" / "entities_bible.json"
+    version_copy = version_dir / "02_5_entities_bible.json"
+
+    assert campaign_bible.exists()
+    assert version_copy.exists()
+    assert json.loads(campaign_bible.read_text(encoding="utf-8"))["player_characters"][0]["name"] == "Del"
+
+
+@pytest.mark.asyncio
 async def test_first_run_bootstraps_campaign_prompt_templates_and_copies_version_prompts(tmp_path):
     pipeline = ComicPipeline(
         url="https://example.test/story",

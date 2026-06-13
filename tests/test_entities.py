@@ -12,6 +12,7 @@ from entities import (
     StoryBeat,
     WorldStateCheckpoint,
     _build_beats,
+    write_entities_bible,
     _build_npcs,
     _build_player_characters,
     _build_locations,
@@ -471,6 +472,234 @@ def test_merge_entities_for_bible_merges_exact_names_and_keeps_richer_details():
     assert merged.player_characters[0].description == "A weathered sailor with a red scarf."
     assert merged.player_characters[0].class_name == "Ranger"
     assert set(merged.player_characters[0].aliases) == {"Wolf", "Wolfie"}
+    assert any("description" in warning.lower() for warning in warnings)
+
+
+def test_write_entities_bible_prefers_existing_bible_before_previous_versions(tmp_path):
+    campaign_root = tmp_path / "campaigns" / "flail"
+    episode_dir = campaign_root / "flail-the-curse-of-the-dreadmarsh-witch-pt-1"
+    version_dir = episode_dir / "v002"
+    previous_dir = episode_dir / "v001"
+    version_dir.mkdir(parents=True)
+    previous_dir.mkdir(parents=True)
+
+    existing_bible = WorldStateCheckpoint(
+        url="https://example.test/story",
+        title="Dreadmarsh Crossing",
+        author="GM",
+        model="bible",
+        player_characters=[
+            Character(name="Wulf", description="Bible description.", class_name="Ranger", race="Human")
+        ],
+        npcs=[],
+        locations=[],
+        beats=[],
+        analyzed_at="2026-05-04T00:00:00+00:00",
+    )
+    (campaign_root / "entities_bible.json").write_text(
+        existing_bible.model_dump_json(indent=2),
+        encoding="utf-8",
+    )
+    (previous_dir / "02_entities.json").write_text(
+        WorldStateCheckpoint(
+            url="https://example.test/story-previous",
+            title="Previous Episode",
+            author="GM",
+            model="scraper-direct",
+            player_characters=[Character(name="Wulf", description="Previous version.")],
+            npcs=[],
+            locations=[],
+            beats=[],
+            analyzed_at="2026-05-04T00:00:00+00:00",
+        ).model_dump_json(indent=2),
+        encoding="utf-8",
+    )
+    incoming = WorldStateCheckpoint(
+        url="https://example.test/story-current",
+        title="Current Episode",
+        author="GM",
+        model="scraper-direct",
+        player_characters=[Character(name="Wulf", description="Current version.")],
+        npcs=[],
+        locations=[],
+        beats=[],
+        analyzed_at="2026-05-04T00:00:00+00:00",
+    )
+    entities_path = version_dir / "02_entities.json"
+    entities_path.write_text(incoming.model_dump_json(indent=2), encoding="utf-8")
+
+    _, _, merged, _ = write_entities_bible(
+        campaign_root=campaign_root,
+        version_dir=version_dir,
+        entities_path=entities_path,
+    )
+
+    assert merged.player_characters[0].class_name == "Ranger"
+
+
+def test_write_entities_bible_uses_previous_version_entities_when_bible_missing(tmp_path):
+    campaign_root = tmp_path / "campaigns" / "flail"
+    episode_dir = campaign_root / "flail-the-curse-of-the-dreadmarsh-witch-pt-1"
+    version_dir = episode_dir / "v002"
+    previous_dir = episode_dir / "v001"
+    version_dir.mkdir(parents=True)
+    previous_dir.mkdir(parents=True)
+
+    previous_entities = WorldStateCheckpoint(
+        url="https://example.test/story-previous",
+        title="Previous Episode",
+        author="GM",
+        model="scraper-direct",
+        player_characters=[Character(name="Wulf", description="Previous version.", class_name="Ranger")],
+        npcs=[],
+        locations=[],
+        beats=[],
+        analyzed_at="2026-05-04T00:00:00+00:00",
+    )
+    (previous_dir / "02_entities.json").write_text(
+        previous_entities.model_dump_json(indent=2),
+        encoding="utf-8",
+    )
+
+    incoming = WorldStateCheckpoint(
+        url="https://example.test/story-current",
+        title="Current Episode",
+        author="GM",
+        model="scraper-direct",
+        player_characters=[Character(name="Wulf", description="Current version.")],
+        npcs=[],
+        locations=[],
+        beats=[],
+        analyzed_at="2026-05-04T00:00:00+00:00",
+    )
+    entities_path = version_dir / "02_entities.json"
+    entities_path.write_text(incoming.model_dump_json(indent=2), encoding="utf-8")
+
+    _, _, merged, _ = write_entities_bible(
+        campaign_root=campaign_root,
+        version_dir=version_dir,
+        entities_path=entities_path,
+    )
+
+    assert merged.player_characters[0].class_name == "Ranger"
+
+
+def test_write_entities_bible_uses_latest_previous_episode_when_no_local_history(tmp_path):
+    campaign_root = tmp_path / "campaigns" / "flail"
+    current_episode = campaign_root / "flail-the-curse-of-the-dreadmarsh-witch-pt-2"
+    previous_episode = campaign_root / "flail-the-curse-of-the-dreadmarsh-witch-pt-1"
+    current_version = current_episode / "v001"
+    previous_version = previous_episode / "v002"
+    current_version.mkdir(parents=True)
+    previous_version.mkdir(parents=True)
+
+    (current_episode / "episode_meta.json").write_text(
+        json.dumps({"slug": current_episode.name, "title": "Current", "created_at": "2026-06-02T00:00:00+00:00"}),
+        encoding="utf-8",
+    )
+    (previous_episode / "episode_meta.json").write_text(
+        json.dumps({"slug": previous_episode.name, "title": "Previous", "created_at": "2026-06-01T00:00:00+00:00"}),
+        encoding="utf-8",
+    )
+    (previous_version / "02_entities.json").write_text(
+        WorldStateCheckpoint(
+            url="https://example.test/story-previous",
+            title="Previous Episode",
+            author="GM",
+            model="scraper-direct",
+            player_characters=[Character(name="Wulf", description="Previous episode.", class_name="Ranger")],
+            npcs=[],
+            locations=[],
+            beats=[],
+            analyzed_at="2026-05-04T00:00:00+00:00",
+        ).model_dump_json(indent=2),
+        encoding="utf-8",
+    )
+
+    incoming = WorldStateCheckpoint(
+        url="https://example.test/story-current",
+        title="Current Episode",
+        author="GM",
+        model="scraper-direct",
+        player_characters=[Character(name="Wulf", description="Current episode.")],
+        npcs=[],
+        locations=[],
+        beats=[],
+        analyzed_at="2026-05-04T00:00:00+00:00",
+    )
+    entities_path = current_version / "02_entities.json"
+    entities_path.write_text(incoming.model_dump_json(indent=2), encoding="utf-8")
+
+    _, _, merged, _ = write_entities_bible(
+        campaign_root=campaign_root,
+        version_dir=current_version,
+        entities_path=entities_path,
+    )
+
+    assert merged.player_characters[0].class_name == "Ranger"
+
+
+def test_write_entities_bible_creates_campaign_root_and_version_copy(tmp_path):
+    campaign_root = tmp_path / "campaigns" / "flail"
+    episode_dir = campaign_root / "flail-the-curse-of-the-dreadmarsh-witch-pt-1"
+    version_dir = episode_dir / "v001"
+    version_dir.mkdir(parents=True)
+
+    existing_bible = WorldStateCheckpoint(
+        url="https://example.test/story",
+        title="Dreadmarsh Crossing",
+        author="GM",
+        model="bible",
+        player_characters=[
+            Character(
+                name="Wulf",
+                description="A weathered sailor.",
+                class_name="Ranger",
+                race="Human",
+                aliases=["Wolf"],
+            )
+        ],
+        npcs=[],
+        locations=[],
+        beats=[],
+        analyzed_at="2026-05-04T00:00:00+00:00",
+    )
+    (campaign_root / "entities_bible.json").write_text(
+        existing_bible.model_dump_json(indent=2),
+        encoding="utf-8",
+    )
+
+    incoming = WorldStateCheckpoint(
+        url="https://example.test/story-2",
+        title="Another Episode",
+        author="GM",
+        model="scraper-direct",
+        player_characters=[
+            Character(
+                name="wulf",
+                description="A weathered sailor with a red scarf.",
+                aliases=["Wolfie"],
+            )
+        ],
+        npcs=[],
+        locations=[],
+        beats=[],
+        analyzed_at="2026-05-04T00:00:00+00:00",
+    )
+    entities_path = version_dir / "02_entities.json"
+    entities_path.write_text(incoming.model_dump_json(indent=2), encoding="utf-8")
+
+    bible_path, version_copy_path, merged, warnings = write_entities_bible(
+        campaign_root=campaign_root,
+        version_dir=version_dir,
+        entities_path=entities_path,
+    )
+
+    assert bible_path == campaign_root / "entities_bible.json"
+    assert version_copy_path == version_dir / "02_5_entities_bible.json"
+    assert version_copy_path.exists()
+    assert merged.player_characters[0].name == "Wulf"
+    assert merged.player_characters[0].description == "A weathered sailor with a red scarf."
     assert any("description" in warning.lower() for warning in warnings)
 
 
