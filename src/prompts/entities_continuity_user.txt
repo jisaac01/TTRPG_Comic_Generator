@@ -4,9 +4,6 @@ Existing entities bible:
 Current episode entities:
 {incoming_entities_json}
 
-Raw story text for context:
-{raw_story_text}
-
 Return JSON with this shape:
 {{
   "player_characters": [
