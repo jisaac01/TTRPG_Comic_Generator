@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -76,7 +77,7 @@ def _playwright_preflight_warnings() -> list[str]:
     executable = playwright_browser_executable(browser_root)
     if executable is None or not executable.exists():
         return [
-            "Playwright Chromium browser is missing from this app bundle. Rebuild after running `python -m playwright install chromium` with `PLAYWRIGHT_BROWSERS_PATH=src/playwright-browsers` in the build environment."
+            "Playwright Chromium browser was not found in `src/playwright-browsers` or the standard Playwright browser cache. Install with `python -m playwright install chromium`, or rebuild with `PLAYWRIGHT_BROWSERS_PATH=src/playwright-browsers` in the build environment."
         ]
 
     try:
@@ -425,6 +426,16 @@ _PROMPT_FILE_LABELS: list[tuple[str, str]] = [
 ]
 
 
+def _open_in_file_manager(path: Path) -> None:
+    if sys.platform == "darwin":
+        subprocess.run(["open", str(path)], check=False)
+        return
+    if sys.platform == "win32":
+        subprocess.run(["explorer", str(path)], check=False)
+        return
+    subprocess.run(["xdg-open", str(path)], check=False)
+
+
 def build_prompt_page(
     services: AppServices, page: Any, _ft: Any
 ) -> tuple[Any, dict[str, Any]]:
@@ -456,11 +467,14 @@ def build_prompt_page(
 
     validation_text = _ft.Text("", color=_ft.Colors.RED_700, size=12)
     capture_preview_text = _ft.Text("Next run will capture: all campaign prompts + art template", size=12)
+    source_dir_text = _ft.Text("Source directory: -", size=12, selectable=True)
 
     # Tracks which field key is selected (e.g. "art_direction_template")
     _selected_key: list[str] = [""]
-    # Maps field key -> resolved Path from current campaign prompts
+    # Maps field key -> campaign target path for saving
     _paths: dict[str, Path] = {}
+    # Tracks the directory currently used for loading selected prompt
+    _active_source_dir: list[Path | None] = [None]
 
     def _set_loading(loading: bool) -> None:
         loading_ring.visible = loading
@@ -487,17 +501,23 @@ def build_prompt_page(
             return None
         return services.repository.get_campaign_prompts(campaign)
 
+    def _resolve_source_path_for_key(key: str) -> Path | None:
+        campaign_path = _paths.get(key)
+        if campaign_path and campaign_path.exists():
+            return campaign_path
+        return _default_prompt_path_for_key(key)
+
     def _refresh_file_list() -> None:
-        prompts = _get_prompts()
         rows = file_list.content
         rows.controls.clear()
         _paths.clear()
-        if prompts is None:
-            return
+        prompts = _get_prompts()
         for key, filename in _PROMPT_FILE_LABELS:
-            path: Path = getattr(prompts, key)
-            _paths[key] = path
-            exists_mark = "" if path.exists() else " ✗"
+            if prompts is not None:
+                path: Path = getattr(prompts, key)
+                _paths[key] = path
+            source_path = _resolve_source_path_for_key(key)
+            exists_mark = "" if (source_path and source_path.exists()) else " ✗"
             rows.controls.append(
                 _ft.Radio(value=key, label=f"{filename}{exists_mark}")
             )
@@ -516,16 +536,17 @@ def build_prompt_page(
 
     def _load_selected() -> None:
         key = _selected_key[0]
-        campaign_path = _paths.get(key)
-        source_path: Path | None = campaign_path
-        if not source_path or not source_path.exists():
-            source_path = _default_prompt_path_for_key(key)
+        source_path = _resolve_source_path_for_key(key)
         validation_text.value = ""
         editor.border_color = None
         if not source_path or not source_path.exists():
             editor.value = ""
+            _active_source_dir[0] = None
+            source_dir_text.value = "Source directory: -"
             return
         editor.value = source_path.read_text(encoding="utf-8")
+        _active_source_dir[0] = source_path.parent
+        source_dir_text.value = f"Source directory: {source_path.parent}"
 
     def _on_file_selected(e: Any) -> None:
         selected = _extract_change_value(e)
@@ -559,6 +580,7 @@ def build_prompt_page(
         editor.border_color = None
         path.write_text(text, encoding="utf-8")
         _refresh_file_list()
+        _load_selected()
         page.update()
 
     def on_reset(_e: Any) -> None:
@@ -572,9 +594,23 @@ def build_prompt_page(
         if not default_path.exists():
             return
         editor.value = default_path.read_text(encoding="utf-8")
+        _active_source_dir[0] = default_path.parent
+        source_dir_text.value = f"Source directory: {default_path.parent}"
         validation_text.value = ""
         editor.border_color = None
         page.update()
+
+    def on_open_prompts_folder(_e: Any) -> None:
+        source_dir = _active_source_dir[0]
+        if not source_dir or not source_dir.exists():
+            source_dir_text.value = "Source directory: unavailable"
+            page.update()
+            return
+        try:
+            _open_in_file_manager(source_dir)
+        except OSError:
+            source_dir_text.value = f"Source directory: {source_dir} (open failed)"
+            page.update()
 
     def on_campaign_changed(event: Any) -> None:
         selected = _extract_change_value(event)
@@ -584,6 +620,8 @@ def build_prompt_page(
         page.update()
         _selected_key[0] = ""
         editor.value = ""
+        _active_source_dir[0] = None
+        source_dir_text.value = "Source directory: -"
         validation_text.value = ""
         editor.border_color = None
         _refresh_file_list()
@@ -602,6 +640,13 @@ def build_prompt_page(
             _ft.Text("Prompts", size=18, weight=_ft.FontWeight.W_600),
             _ft.Row([campaign_dropdown, loading_ring, loading_text], spacing=8),
             capture_preview_text,
+            _ft.Row(
+                controls=[
+                    source_dir_text,
+                    _ft.OutlinedButton("Open Prompts Folder", on_click=on_open_prompts_folder),
+                ],
+                spacing=8,
+            ),
             _ft.Row(
                 controls=[
                     _ft.Container(
@@ -646,9 +691,11 @@ def build_prompt_page(
         "editor": editor,
         "validation_text": validation_text,
         "capture_preview_text": capture_preview_text,
+        "source_dir_text": source_dir_text,
         "on_save": on_save,
         "on_load": on_load,
         "on_reset": on_reset,
+        "on_open_prompts_folder": on_open_prompts_folder,
         "refresh_file_list": _refresh_file_list,
         "refresh_campaigns": _refresh_campaign_options,
         "selected_key": _selected_key,

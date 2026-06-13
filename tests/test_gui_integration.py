@@ -557,6 +557,43 @@ def test_prompt_page_default_source_is_campaign_after_any_run(tmp_path):
     assert state["editor"].value == "campaign after run"
 
 
+def test_prompt_page_uses_src_prompts_when_no_campaign_selected(tmp_path):
+    import flet as ft
+    from prompt_templates import DEFAULT_PROMPTS_DIR
+
+    campaigns_root = tmp_path / "campaigns"
+    campaigns_root.mkdir(parents=True, exist_ok=True)
+    page = _FakePage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_prompt_page(services, page, ft)
+
+    assert state["campaign_dropdown"].value is None
+    assert len(state["file_list"].content.controls) == 8
+    assert state["editor"].value == (
+        DEFAULT_PROMPTS_DIR / "art_direction_template.json"
+    ).read_text(encoding="utf-8")
+    assert str(DEFAULT_PROMPTS_DIR) in state["source_dir_text"].value
+
+
+def test_prompt_page_shows_campaign_source_dir_for_campaign_file(tmp_path):
+    import flet as ft
+
+    campaigns_root = _make_campaign_prompts(tmp_path)
+    page = _FakePage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_prompt_page(services, page, ft)
+
+    event = type(
+        "RadioChangeEvent",
+        (),
+        {"control": type("RadioControl", (), {"value": "scriptwriter_system"})()},
+    )()
+    state["file_list"].on_change(event)
+
+    expected_dir = campaigns_root / "test_camp"
+    assert str(expected_dir) in state["source_dir_text"].value
+
+
 def test_prompt_page_save_writes_file(tmp_path):
     import flet as ft
 

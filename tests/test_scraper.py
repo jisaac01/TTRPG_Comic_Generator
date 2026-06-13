@@ -155,6 +155,25 @@ def test_configure_playwright_runtime_prefers_adjacent_app_browsers(monkeypatch,
     assert scraper.os.environ["PLAYWRIGHT_BROWSERS_PATH"] == str(app_browser_root)
 
 
+def test_packaged_playwright_browsers_path_uses_standard_cache(monkeypatch, tmp_path):
+    app_root = tmp_path / "src"
+    app_root.mkdir(parents=True)
+
+    standard_cache_root = tmp_path / "cache" / "ms-playwright"
+    standard_cache_root.mkdir(parents=True)
+
+    monkeypatch.delenv("PLAYWRIGHT_BROWSERS_PATH", raising=False)
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    monkeypatch.setattr(scraper, "__file__", str(app_root / "scraper.py"))
+    monkeypatch.setattr(scraper.sys, "platform", "linux")
+    monkeypatch.setattr(scraper.importlib.util, "find_spec", lambda _name: None)
+    monkeypatch.setattr(scraper, "discover_playwright_browsers_path", lambda: None)
+
+    resolved = scraper.packaged_playwright_browsers_path()
+
+    assert resolved == standard_cache_root
+
+
 def test_playwright_browser_executable_prefers_headless_shell(monkeypatch, tmp_path):
     browser_root = tmp_path / ".local-browsers"
     shell = browser_root / "chromium_headless_shell-1234" / "chrome-headless-shell-win64"

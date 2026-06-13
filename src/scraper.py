@@ -724,18 +724,40 @@ def packaged_playwright_browsers_path() -> Path | None:
         return adjacent
 
     spec = importlib.util.find_spec("playwright")
-    if spec is None or spec.origin is None:
-        return None
+    if spec is not None and spec.origin is not None:
+        package_root = Path(spec.origin).resolve().parent
+        candidate = package_root / "driver" / "package" / ".local-browsers"
+        if candidate.exists():
+            return candidate
 
-    package_root = Path(spec.origin).resolve().parent
-    candidate = package_root / "driver" / "package" / ".local-browsers"
-    if candidate.exists():
-        return candidate
+    standard = standard_playwright_browsers_path()
+    if standard is not None:
+        return standard
 
     discovered = discover_playwright_browsers_path()
     if discovered is not None:
         return discovered
     return None
+
+
+def standard_playwright_browsers_path() -> Path | None:
+    if sys.platform == "win32":
+        local_appdata = os.environ.get("LOCALAPPDATA", "").strip()
+        if local_appdata:
+            candidate = Path(local_appdata).expanduser() / "ms-playwright"
+        else:
+            candidate = Path.home() / "AppData" / "Local" / "ms-playwright"
+    elif sys.platform == "darwin":
+        candidate = Path.home() / "Library" / "Caches" / "ms-playwright"
+    else:
+        cache_home = os.environ.get("XDG_CACHE_HOME", "").strip()
+        if cache_home:
+            cache_root = Path(cache_home).expanduser()
+        else:
+            cache_root = Path.home() / ".cache"
+        candidate = cache_root / "ms-playwright"
+
+    return candidate if candidate.exists() else None
 
 
 def _runtime_search_roots() -> list[Path]:
