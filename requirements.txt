@@ -5,3 +5,4 @@ instructor
 ollama
 openai
 keyring
+Pillow
