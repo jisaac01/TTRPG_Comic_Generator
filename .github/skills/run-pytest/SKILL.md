@@ -14,9 +14,8 @@ user-invocable: true
 
 ## Procedure
 1. Run the project test suite immediately with the workspace virtual environment.
-2. Prefer the VS Code task named "Run Pytest" when available. Prefer running this to running pytest directly, as it requires permissions to run, even if you're trying to isolate a single test or pattern. 
-3. If the task is not available, run:
-   `source .venv/bin/activate && python -m pytest -q`
+2. Always use the VS Code task named "Run Pytest" for verification in this workspace.
+3. Do not run raw `python -m pytest -q` here unless the task is literally unavailable.
 4. Report the result concisely, including the final pass/fail summary.
 
 ## Completion Checks
