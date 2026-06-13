@@ -43,6 +43,8 @@ from prompt_saver import (
 )
 from prompt_templates import (
     DEFAULT_PROMPTS_DIR,
+    ENTITIES_CONTINUITY_SYSTEM_PROMPT_FILENAME,
+    ENTITIES_CONTINUITY_USER_PROMPT_FILENAME,
     PAGE_PROMPT_TEMPLATE_FILENAME,
     PROMPT_TEMPLATE_FILENAMES,
     MASTER_BEATER_SYSTEM_PROMPT_FILENAME,
@@ -454,6 +456,12 @@ class ComicPipeline:
             or self._campaign_prompt_path(STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME),
             STYLE_INTEGRATOR_USER_PROMPT_FILENAME: self.style_integrator_user_prompt
             or self._campaign_prompt_path(STYLE_INTEGRATOR_USER_PROMPT_FILENAME),
+            ENTITIES_CONTINUITY_SYSTEM_PROMPT_FILENAME: self._campaign_prompt_path(
+                ENTITIES_CONTINUITY_SYSTEM_PROMPT_FILENAME
+            ),
+            ENTITIES_CONTINUITY_USER_PROMPT_FILENAME: self._campaign_prompt_path(
+                ENTITIES_CONTINUITY_USER_PROMPT_FILENAME
+            ),
             PAGE_PROMPT_TEMPLATE_FILENAME: self.page_prompt_template
             or self._campaign_prompt_path(PAGE_PROMPT_TEMPLATE_FILENAME),
         }

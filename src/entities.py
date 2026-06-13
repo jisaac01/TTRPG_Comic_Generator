@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from datetime import datetime, timezone
-from difflib import SequenceMatcher
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from llm_client import build_openai_client
+from model_defaults import DEFAULT_MODEL
+from prompt_templates import render_prompt_template
 from scraper import RawTextCheckpoint
 
 
@@ -41,6 +44,12 @@ class StoryBeat(BaseModel):
     highlights: list[str] = Field(min_length=1)
 
 
+class ContinuityMergePayload(BaseModel):
+    player_characters: list[Character] = Field(default_factory=list)
+    npcs: list[Character] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
 class WorldStateCheckpoint(BaseModel):
     url: str
     title: str | None = None
@@ -62,21 +71,8 @@ def _normalize_name(value: str) -> str:
     return " ".join(value.split()).strip().lower()
 
 
-def _similarity_score(left: str, right: str) -> float:
-    left_norm = _normalize_name(left)
-    right_norm = _normalize_name(right)
-    if not left_norm or not right_norm:
-        return 0.0
-    if left_norm == right_norm:
-        return 1.0
-    ratio = SequenceMatcher(None, left_norm, right_norm).ratio()
-    if ratio >= 0.75:
-        return ratio
-    return 0.0
-
-
 def _dedupe_by_name(
-    items: list[tuple[str, str | None]],
+    items: Sequence[tuple[str, str | None]],
 ) -> list[tuple[str, str | None]]:
     seen: set[str] = set()
     deduped: list[tuple[str, str | None]] = []
@@ -89,88 +85,55 @@ def _dedupe_by_name(
     return deduped
 
 
-def merge_entities_for_bible(
+def _merge_entities_with_llm(
     existing: WorldStateCheckpoint,
     incoming: WorldStateCheckpoint,
+    *,
+    model: str = DEFAULT_MODEL,
 ) -> tuple[WorldStateCheckpoint, list[str]]:
-    """Merge two world-state checkpoints into a canonical bible view.
+    """Use the configured LLM to merge and enrich entity continuity data."""
 
-    This is the current deterministic fallback for continuity: it keeps the
-    richer description for exact-name matches, unions aliases, and warns on
-    near-duplicate names. The real LLM-assisted synthesis pass is still
-    planned for later, so the helper intentionally stays conservative.
-    """
+    system_prompt = render_prompt_template(name="entities_continuity_system.txt")
+    user_prompt = render_prompt_template(
+        name="entities_continuity_user.txt",
+        existing_entities_json=json.dumps(existing.model_dump(mode="json"), indent=2, ensure_ascii=False),
+        incoming_entities_json=json.dumps(incoming.model_dump(mode="json"), indent=2, ensure_ascii=False),
+    )
 
-    merged_characters: list[Character] = []
-    warnings: list[str] = []
+    client = build_openai_client(model)
+    response = client.chat.completions.create(
+        model=model,
+        temperature=0.2,
+        response_format={"type": "json_object"},
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+    )
 
-    existing_by_name = { _normalize_name(character.name): character for character in existing.player_characters }
-    incoming_by_name = { _normalize_name(character.name): character for character in incoming.player_characters }
+    content = response.choices[0].message.content
+    if not content:
+        raise ValueError("LLM continuity merge returned no content.")
 
-    merged_characters = list(existing.player_characters)
+    try:
+        payload = json.loads(content)
+    except json.JSONDecodeError as exc:
+        raise ValueError("LLM continuity merge returned invalid JSON.") from exc
 
-    for incoming_character in incoming.player_characters:
-        key = _normalize_name(incoming_character.name)
-        existing_character = existing_by_name.get(key)
-        if existing_character is not None:
-            merged_description = incoming_character.description
-            if len(incoming_character.description.strip()) < len(existing_character.description.strip()):
-                merged_description = existing_character.description
-
-            if incoming_character.description.strip().lower() != existing_character.description.strip().lower():
-                warnings.append(
-                    f"Description conflict for {existing_character.name}: keeping the richer canonical description."
-                )
-
-            merged_aliases = list(dict.fromkeys([*existing_character.aliases, *incoming_character.aliases]))
-            merged_character = Character(
-                name=existing_character.name,
-                description=merged_description.strip() or existing_character.description,
-                class_name=existing_character.class_name or incoming_character.class_name,
-                race=existing_character.race or incoming_character.race,
-                physical_description=existing_character.physical_description or incoming_character.physical_description,
-                aliases=merged_aliases,
-            )
-            merged_characters = [
-                merged_character if _normalize_name(character.name) == key else character
-                for character in merged_characters
-            ]
-            continue
-
-        similar = [
-            character
-            for character in existing.player_characters
-            if _similarity_score(character.name, incoming_character.name) >= 0.75
-        ]
-        if similar:
-            warnings.append(
-                f"Ambiguous similar name for {incoming_character.name}: matched {', '.join(character.name for character in similar)}."
-            )
-
-        merged_characters.append(
-            Character(
-                name=incoming_character.name,
-                description=incoming_character.description,
-                class_name=incoming_character.class_name,
-                race=incoming_character.race,
-                physical_description=incoming_character.physical_description,
-                aliases=list(dict.fromkeys(incoming_character.aliases)),
-            )
-        )
-
+    merge_payload = ContinuityMergePayload.model_validate(payload)
     merged = WorldStateCheckpoint(
-        url=existing.url,
+        url=existing.url or incoming.url,
         title=existing.title or incoming.title,
         author=existing.author or incoming.author,
-        model=existing.model or incoming.model,
-        player_characters=merged_characters,
-        npcs=list(existing.npcs) + list(incoming.npcs),
+        model=model,
+        player_characters=merge_payload.player_characters or list(existing.player_characters),
+        npcs=merge_payload.npcs or list(existing.npcs),
         locations=list(existing.locations) + list(incoming.locations),
         beats=list(existing.beats) + list(incoming.beats),
         analyzed_at=existing.analyzed_at or incoming.analyzed_at,
     )
 
-    return merged, warnings
+    return merged, merge_payload.warnings
 
 
 def _latest_version_dir(episode_dir: Path) -> Path | None:
@@ -285,7 +248,7 @@ def write_entities_bible(
     version_copy_path = version_dir / "02_5_entities_bible.json"
 
     existing = _resolve_bible_source(campaign_root, version_dir, incoming)
-    merged, warnings = merge_entities_for_bible(existing, incoming)
+    merged, warnings = _merge_entities_with_llm(existing, incoming)
 
     bible_path.parent.mkdir(parents=True, exist_ok=True)
     bible_path.write_text(

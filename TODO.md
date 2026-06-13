@@ -40,6 +40,22 @@
   - If neither history source exists, fall back to the current version’s `02_entities.json`.
   - Merge the chosen source with the current version using the current deterministic helper, and keep this as the placeholder until the later LLM continuity merge is added.
 
+- [ ] Step 3.2: Implement the LLM-powered continuity and enrichment stage
+  - This stage replaces the deterministic merge logic from Step 3.1.
+  - The LLM will be responsible for both merging entities and enriching them.
+  - **Inputs**:
+    1. The chosen entities source bible (from the precedence rules in 3.1).
+    2. The current episode's `02_entities.json`.
+  - **Process**:
+    1.  The model will receive the source bible and the new entities.
+    2.  For each entity, the model will compare the description from the bible with the new description from the episode, using the raw text for context.
+    3.  It will then generate a new, canonical description that synthesizes the information from both sources.
+    4.  Simultaneously, the model will parse the descriptions (both old and new) to extract and populate the `class`, `race`, and `physical_description` fields.
+  - **Output**: A new `entities_bible.json` with the merged and enriched entities.
+  - This single LLM call will handle both the continuity merge and the extraction of structured character attributes, eliminating the need for separate steps or fallback logic.
+  - The LLM output should also contain any merging challenges encountered (which should be added as warnings similar to how merge_entities_for_bible does it)
+  - add a new prompt to the prompts directory. Be sure to include this prompt in any versioning and campaign overrides similar to other prompts
+
 - [ ] Step 4: Use the bible in downstream generation
   - Feed the merged bible into the master-beater/story-bible path.
   - Add conservative alias-based name normalization before the master beater sees the raw text.

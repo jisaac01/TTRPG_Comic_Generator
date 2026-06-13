@@ -17,8 +17,8 @@ from entities import (
     _build_player_characters,
     _build_locations,
     _dedupe_by_name,
+    _normalize_name,
     build_entities_from_raw,
-    merge_entities_for_bible,
 )
 from scraper import RawTextCheckpoint, ScrapedEntity, ScrapedQuote
 
@@ -26,6 +26,38 @@ from scraper import RawTextCheckpoint, ScrapedEntity, ScrapedQuote
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _fake_continuity_merge(existing, incoming, model="test-model"):
+    merged = existing.model_copy(deep=True)
+    if not incoming.player_characters:
+        return merged, []
+
+    existing_by_name = {_normalize_name(character.name): character for character in existing.player_characters}
+    merged_characters = []
+    for incoming_character in incoming.player_characters:
+        existing_character = existing_by_name.get(_normalize_name(incoming_character.name))
+        if existing_character is None:
+            merged_characters.append(incoming_character)
+            continue
+
+        description = existing_character.description
+        if len(incoming_character.description) > len(existing_character.description):
+            description = incoming_character.description
+
+        merged_characters.append(
+            Character(
+                name=existing_character.name,
+                description=description,
+                class_name=existing_character.class_name or incoming_character.class_name,
+                race=existing_character.race or incoming_character.race,
+                physical_description=existing_character.physical_description or incoming_character.physical_description,
+                aliases=list(dict.fromkeys([*existing_character.aliases, *incoming_character.aliases])),
+            )
+        )
+
+    merged.player_characters = merged_characters
+    return merged, ["description continuity warning"]
 
 
 def _make_raw(
@@ -418,64 +450,8 @@ def test_build_entities_from_raw_no_quotes_leaves_empty_beat_quotes(tmp_path):
     assert len(checkpoint.beats) == 1
 
 
-def test_build_entities_from_raw_custom_model_label(tmp_path):
-    raw = _make_raw()
-    raw_path = _write_raw(tmp_path, raw)
-    output_path = tmp_path / "02_entities.json"
 
-    checkpoint = build_entities_from_raw(raw_path, output_path, model_label="test-label")
-
-    assert checkpoint.model == "test-label"
-
-
-def test_merge_entities_for_bible_merges_exact_names_and_keeps_richer_details():
-    existing = WorldStateCheckpoint(
-        url="https://example.test/story",
-        title="Dreadmarsh Crossing",
-        author="GM",
-        model="bible",
-        player_characters=[
-            Character(
-                name="Wulf",
-                description="A weathered sailor.",
-                class_name="Ranger",
-                race="Human",
-                aliases=["Wolf"],
-            )
-        ],
-        npcs=[],
-        locations=[],
-        beats=[],
-        analyzed_at="2026-05-04T00:00:00+00:00",
-    )
-    incoming = WorldStateCheckpoint(
-        url="https://example.test/story-2",
-        title="Another Episode",
-        author="GM",
-        model="scraper-direct",
-        player_characters=[
-            Character(
-                name="wulf",
-                description="A weathered sailor with a red scarf.",
-                aliases=["Wolfie"],
-            )
-        ],
-        npcs=[],
-        locations=[],
-        beats=[],
-        analyzed_at="2026-05-04T00:00:00+00:00",
-    )
-
-    merged, warnings = merge_entities_for_bible(existing, incoming)
-
-    assert [char.name for char in merged.player_characters] == ["Wulf"]
-    assert merged.player_characters[0].description == "A weathered sailor with a red scarf."
-    assert merged.player_characters[0].class_name == "Ranger"
-    assert set(merged.player_characters[0].aliases) == {"Wolf", "Wolfie"}
-    assert any("description" in warning.lower() for warning in warnings)
-
-
-def test_write_entities_bible_prefers_existing_bible_before_previous_versions(tmp_path):
+def test_write_entities_bible_prefers_existing_bible_before_previous_versions(monkeypatch, tmp_path):
     campaign_root = tmp_path / "campaigns" / "flail"
     episode_dir = campaign_root / "flail-the-curse-of-the-dreadmarsh-witch-pt-1"
     version_dir = episode_dir / "v002"
@@ -528,6 +504,8 @@ def test_write_entities_bible_prefers_existing_bible_before_previous_versions(tm
     entities_path = version_dir / "02_entities.json"
     entities_path.write_text(incoming.model_dump_json(indent=2), encoding="utf-8")
 
+    monkeypatch.setattr("entities._merge_entities_with_llm", _fake_continuity_merge)
+
     _, _, merged, _ = write_entities_bible(
         campaign_root=campaign_root,
         version_dir=version_dir,
@@ -537,7 +515,7 @@ def test_write_entities_bible_prefers_existing_bible_before_previous_versions(tm
     assert merged.player_characters[0].class_name == "Ranger"
 
 
-def test_write_entities_bible_uses_previous_version_entities_when_bible_missing(tmp_path):
+def test_write_entities_bible_uses_previous_version_entities_when_bible_missing(monkeypatch, tmp_path):
     campaign_root = tmp_path / "campaigns" / "flail"
     episode_dir = campaign_root / "flail-the-curse-of-the-dreadmarsh-witch-pt-1"
     version_dir = episode_dir / "v002"
@@ -575,6 +553,8 @@ def test_write_entities_bible_uses_previous_version_entities_when_bible_missing(
     entities_path = version_dir / "02_entities.json"
     entities_path.write_text(incoming.model_dump_json(indent=2), encoding="utf-8")
 
+    monkeypatch.setattr("entities._merge_entities_with_llm", _fake_continuity_merge)
+
     _, _, merged, _ = write_entities_bible(
         campaign_root=campaign_root,
         version_dir=version_dir,
@@ -584,7 +564,7 @@ def test_write_entities_bible_uses_previous_version_entities_when_bible_missing(
     assert merged.player_characters[0].class_name == "Ranger"
 
 
-def test_write_entities_bible_uses_latest_previous_episode_when_no_local_history(tmp_path):
+def test_write_entities_bible_uses_latest_previous_episode_when_no_local_history(monkeypatch, tmp_path):
     campaign_root = tmp_path / "campaigns" / "flail"
     current_episode = campaign_root / "flail-the-curse-of-the-dreadmarsh-witch-pt-2"
     previous_episode = campaign_root / "flail-the-curse-of-the-dreadmarsh-witch-pt-1"
@@ -630,6 +610,8 @@ def test_write_entities_bible_uses_latest_previous_episode_when_no_local_history
     entities_path = current_version / "02_entities.json"
     entities_path.write_text(incoming.model_dump_json(indent=2), encoding="utf-8")
 
+    monkeypatch.setattr("entities._merge_entities_with_llm", _fake_continuity_merge)
+
     _, _, merged, _ = write_entities_bible(
         campaign_root=campaign_root,
         version_dir=current_version,
@@ -639,7 +621,75 @@ def test_write_entities_bible_uses_latest_previous_episode_when_no_local_history
     assert merged.player_characters[0].class_name == "Ranger"
 
 
-def test_write_entities_bible_creates_campaign_root_and_version_copy(tmp_path):
+def test_write_entities_bible_uses_llm_continuity_merge(monkeypatch, tmp_path):
+    campaign_root = tmp_path / "campaigns" / "flail"
+    episode_dir = campaign_root / "flail-the-curse-of-the-dreadmarsh-witch-pt-1"
+    version_dir = episode_dir / "v001"
+    version_dir.mkdir(parents=True)
+
+    existing = WorldStateCheckpoint(
+        url="https://example.test/story",
+        title="Dreadmarsh Crossing",
+        author="GM",
+        model="bible",
+        player_characters=[Character(name="Wulf", description="Canonical sailor.", class_name="Ranger")],
+        npcs=[],
+        locations=[],
+        beats=[],
+        analyzed_at="2026-05-04T00:00:00+00:00",
+    )
+    incoming = WorldStateCheckpoint(
+        url="https://example.test/story-2",
+        title="Another Episode",
+        author="GM",
+        model="scraper-direct",
+        player_characters=[Character(name="Wulf", description="Episode sailor.")],
+        npcs=[],
+        locations=[],
+        beats=[],
+        analyzed_at="2026-05-04T00:00:00+00:00",
+    )
+    merged = WorldStateCheckpoint(
+        url="https://example.test/story",
+        title="Dreadmarsh Crossing",
+        author="GM",
+        model="bible",
+        player_characters=[Character(name="Wulf", description="LLM merged sailor.", class_name="Ranger", race="Human")],
+        npcs=[],
+        locations=[],
+        beats=[],
+        analyzed_at="2026-05-04T00:00:00+00:00",
+    )
+
+    (campaign_root / "entities_bible.json").write_text(
+        existing.model_dump_json(indent=2),
+        encoding="utf-8",
+    )
+
+    def fake_llm_merge(existing_checkpoint, incoming_checkpoint, model="test-model"):
+        assert existing_checkpoint == existing
+        assert incoming_checkpoint == incoming
+        return merged, ["LLM warning"]
+
+    monkeypatch.setattr("entities._merge_entities_with_llm", fake_llm_merge)
+
+    entities_path = version_dir / "02_entities.json"
+    entities_path.write_text(incoming.model_dump_json(indent=2), encoding="utf-8")
+
+    bible_path, version_copy_path, result, warnings = write_entities_bible(
+        campaign_root=campaign_root,
+        version_dir=version_dir,
+        entities_path=entities_path,
+    )
+
+    assert bible_path.exists()
+    assert version_copy_path.exists()
+    assert result == merged
+    assert warnings == ["LLM warning"]
+    assert json.loads(bible_path.read_text(encoding="utf-8"))["player_characters"][0]["description"] == "LLM merged sailor."
+
+
+def test_write_entities_bible_creates_campaign_root_and_version_copy(monkeypatch, tmp_path):
     campaign_root = tmp_path / "campaigns" / "flail"
     episode_dir = campaign_root / "flail-the-curse-of-the-dreadmarsh-witch-pt-1"
     version_dir = episode_dir / "v001"
@@ -689,6 +739,8 @@ def test_write_entities_bible_creates_campaign_root_and_version_copy(tmp_path):
     entities_path = version_dir / "02_entities.json"
     entities_path.write_text(incoming.model_dump_json(indent=2), encoding="utf-8")
 
+    monkeypatch.setattr("entities._merge_entities_with_llm", _fake_continuity_merge)
+
     bible_path, version_copy_path, merged, warnings = write_entities_bible(
         campaign_root=campaign_root,
         version_dir=version_dir,
@@ -702,32 +754,3 @@ def test_write_entities_bible_creates_campaign_root_and_version_copy(tmp_path):
     assert merged.player_characters[0].description == "A weathered sailor with a red scarf."
     assert any("description" in warning.lower() for warning in warnings)
 
-
-def test_merge_entities_for_bible_warns_on_ambiguous_similar_names():
-    existing = WorldStateCheckpoint(
-        url="https://example.test/story",
-        title="Dreadmarsh Crossing",
-        author="GM",
-        model="bible",
-        player_characters=[Character(name="Wulf", description="A sailor.")],
-        npcs=[],
-        locations=[],
-        beats=[],
-        analyzed_at="2026-05-04T00:00:00+00:00",
-    )
-    incoming = WorldStateCheckpoint(
-        url="https://example.test/story-2",
-        title="Another Episode",
-        author="GM",
-        model="scraper-direct",
-        player_characters=[Character(name="Wolf", description="A different sailor.")],
-        npcs=[],
-        locations=[],
-        beats=[],
-        analyzed_at="2026-05-04T00:00:00+00:00",
-    )
-
-    merged, warnings = merge_entities_for_bible(existing, incoming)
-
-    assert [char.name for char in merged.player_characters] == ["Wulf", "Wolf"]
-    assert any("similar" in warning.lower() or "ambiguous" in warning.lower() for warning in warnings)

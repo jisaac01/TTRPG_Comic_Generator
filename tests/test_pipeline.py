@@ -29,6 +29,14 @@ import scraper
 import scriptwriter
 import master_beater
 from pipeline_events import PhaseWarning
+
+
+@pytest.fixture(autouse=True)
+def _patch_entities_continuity_merge(monkeypatch):
+    def fake_merge(existing, incoming, model=DEFAULT_MODEL):
+        return existing.model_copy(deep=True), ["continuity fixture warning"]
+
+    monkeypatch.setattr(entities, "_merge_entities_with_llm", fake_merge)
 from style_integrator import StyleIntegrationPartialFailure
 from pipeline import (
     ComicPipeline,

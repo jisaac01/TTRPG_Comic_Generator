@@ -1,0 +1,33 @@
+Existing entities bible:
+{existing_entities_json}
+
+Current episode entities:
+{incoming_entities_json}
+
+Raw story text for context:
+{raw_story_text}
+
+Return JSON with this shape:
+{{
+  "player_characters": [
+    {{
+      "name": "...",
+      "description": "...",
+      "class": "...",
+      "race": "...",
+      "physical_description": "...",
+      "aliases": ["..."]
+    }}
+  ],
+  "npcs": [
+    {{
+      "name": "...",
+      "description": "...",
+      "class": "...",
+      "race": "...",
+      "physical_description": "...",
+      "aliases": ["..."]
+    }}
+  ],
+  "warnings": ["..."]
+}}
