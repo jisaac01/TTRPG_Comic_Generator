@@ -17,6 +17,7 @@ from entities import (
     _build_locations,
     _dedupe_by_name,
     build_entities_from_raw,
+    merge_entities_for_bible,
 )
 from scraper import RawTextCheckpoint, ScrapedEntity, ScrapedQuote
 
@@ -424,3 +425,80 @@ def test_build_entities_from_raw_custom_model_label(tmp_path):
     checkpoint = build_entities_from_raw(raw_path, output_path, model_label="test-label")
 
     assert checkpoint.model == "test-label"
+
+
+def test_merge_entities_for_bible_merges_exact_names_and_keeps_richer_details():
+    existing = WorldStateCheckpoint(
+        url="https://example.test/story",
+        title="Dreadmarsh Crossing",
+        author="GM",
+        model="bible",
+        player_characters=[
+            Character(
+                name="Wulf",
+                description="A weathered sailor.",
+                class_name="Ranger",
+                race="Human",
+                aliases=["Wolf"],
+            )
+        ],
+        npcs=[],
+        locations=[],
+        beats=[],
+        analyzed_at="2026-05-04T00:00:00+00:00",
+    )
+    incoming = WorldStateCheckpoint(
+        url="https://example.test/story-2",
+        title="Another Episode",
+        author="GM",
+        model="scraper-direct",
+        player_characters=[
+            Character(
+                name="wulf",
+                description="A weathered sailor with a red scarf.",
+                aliases=["Wolfie"],
+            )
+        ],
+        npcs=[],
+        locations=[],
+        beats=[],
+        analyzed_at="2026-05-04T00:00:00+00:00",
+    )
+
+    merged, warnings = merge_entities_for_bible(existing, incoming)
+
+    assert [char.name for char in merged.player_characters] == ["Wulf"]
+    assert merged.player_characters[0].description == "A weathered sailor with a red scarf."
+    assert merged.player_characters[0].class_name == "Ranger"
+    assert set(merged.player_characters[0].aliases) == {"Wolf", "Wolfie"}
+    assert any("description" in warning.lower() for warning in warnings)
+
+
+def test_merge_entities_for_bible_warns_on_ambiguous_similar_names():
+    existing = WorldStateCheckpoint(
+        url="https://example.test/story",
+        title="Dreadmarsh Crossing",
+        author="GM",
+        model="bible",
+        player_characters=[Character(name="Wulf", description="A sailor.")],
+        npcs=[],
+        locations=[],
+        beats=[],
+        analyzed_at="2026-05-04T00:00:00+00:00",
+    )
+    incoming = WorldStateCheckpoint(
+        url="https://example.test/story-2",
+        title="Another Episode",
+        author="GM",
+        model="scraper-direct",
+        player_characters=[Character(name="Wolf", description="A different sailor.")],
+        npcs=[],
+        locations=[],
+        beats=[],
+        analyzed_at="2026-05-04T00:00:00+00:00",
+    )
+
+    merged, warnings = merge_entities_for_bible(existing, incoming)
+
+    assert [char.name for char in merged.player_characters] == ["Wulf", "Wolf"]
+    assert any("similar" in warning.lower() or "ambiguous" in warning.lower() for warning in warnings)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+from difflib import SequenceMatcher
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -61,6 +62,19 @@ def _normalize_name(value: str) -> str:
     return " ".join(value.split()).strip().lower()
 
 
+def _similarity_score(left: str, right: str) -> float:
+    left_norm = _normalize_name(left)
+    right_norm = _normalize_name(right)
+    if not left_norm or not right_norm:
+        return 0.0
+    if left_norm == right_norm:
+        return 1.0
+    ratio = SequenceMatcher(None, left_norm, right_norm).ratio()
+    if ratio >= 0.75:
+        return ratio
+    return 0.0
+
+
 def _dedupe_by_name(
     items: list[tuple[str, str | None]],
 ) -> list[tuple[str, str | None]]:
@@ -73,6 +87,90 @@ def _dedupe_by_name(
         seen.add(key)
         deduped.append((name.strip(), description))
     return deduped
+
+
+def merge_entities_for_bible(
+    existing: WorldStateCheckpoint,
+    incoming: WorldStateCheckpoint,
+) -> tuple[WorldStateCheckpoint, list[str]]:
+    """Merge two world-state checkpoints into a canonical bible view.
+
+    The merge is deterministic for exact-name matches and conservative for
+    near-duplicates. It preserves existing richer values when conflicts arise,
+    unions aliases, and emits warnings for contradictory descriptions and
+    ambiguous similar names.
+    """
+
+    merged_characters: list[Character] = []
+    warnings: list[str] = []
+
+    existing_by_name = { _normalize_name(character.name): character for character in existing.player_characters }
+    incoming_by_name = { _normalize_name(character.name): character for character in incoming.player_characters }
+
+    merged_characters = list(existing.player_characters)
+
+    for incoming_character in incoming.player_characters:
+        key = _normalize_name(incoming_character.name)
+        existing_character = existing_by_name.get(key)
+        if existing_character is not None:
+            merged_description = incoming_character.description
+            if len(incoming_character.description.strip()) < len(existing_character.description.strip()):
+                merged_description = existing_character.description
+
+            if incoming_character.description.strip().lower() != existing_character.description.strip().lower():
+                warnings.append(
+                    f"Description conflict for {existing_character.name}: keeping the richer canonical description."
+                )
+
+            merged_aliases = list(dict.fromkeys([*existing_character.aliases, *incoming_character.aliases]))
+            merged_character = Character(
+                name=existing_character.name,
+                description=merged_description.strip() or existing_character.description,
+                class_name=existing_character.class_name or incoming_character.class_name,
+                race=existing_character.race or incoming_character.race,
+                physical_description=existing_character.physical_description or incoming_character.physical_description,
+                aliases=merged_aliases,
+            )
+            merged_characters = [
+                merged_character if _normalize_name(character.name) == key else character
+                for character in merged_characters
+            ]
+            continue
+
+        similar = [
+            character
+            for character in existing.player_characters
+            if _similarity_score(character.name, incoming_character.name) >= 0.75
+        ]
+        if similar:
+            warnings.append(
+                f"Ambiguous similar name for {incoming_character.name}: matched {', '.join(character.name for character in similar)}."
+            )
+
+        merged_characters.append(
+            Character(
+                name=incoming_character.name,
+                description=incoming_character.description,
+                class_name=incoming_character.class_name,
+                race=incoming_character.race,
+                physical_description=incoming_character.physical_description,
+                aliases=list(dict.fromkeys(incoming_character.aliases)),
+            )
+        )
+
+    merged = WorldStateCheckpoint(
+        url=existing.url,
+        title=existing.title or incoming.title,
+        author=existing.author or incoming.author,
+        model=existing.model or incoming.model,
+        player_characters=merged_characters,
+        npcs=list(existing.npcs) + list(incoming.npcs),
+        locations=list(existing.locations) + list(incoming.locations),
+        beats=list(existing.beats) + list(incoming.beats),
+        analyzed_at=existing.analyzed_at or incoming.analyzed_at,
+    )
+
+    return merged, warnings
 
 
 def _build_player_characters(raw: RawTextCheckpoint) -> list[Character]:

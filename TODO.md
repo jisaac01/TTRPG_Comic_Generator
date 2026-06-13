@@ -15,7 +15,7 @@
   - Updated prompt consumers in [src/master_beater.py](src/master_beater.py), [src/scriptwriter.py](src/scriptwriter.py), and [src/prompter.py](src/prompter.py) to render the richer character context.
   - Added tests for the richer schema in [tests/test_entities.py](tests/test_entities.py).
 
-- [ ] Step 2: Define what “merge” really means
+- [x] Step 2: Define what “merge” really means
   - This is not a simple file union or deterministic dedupe pass.
   - The real continuity merge needs an LLM-assisted synthesis step that compares:
     1. the current episode’s extracted entities (`02_entities.json`),
