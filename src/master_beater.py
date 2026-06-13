@@ -3,13 +3,14 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
 from pydantic import BaseModel, Field
 
-from entities import StoryBeat, WorldStateCheckpoint
+from entities import Character, StoryBeat, WorldStateCheckpoint
 from llm_client import build_openai_client
 from model_defaults import DEFAULT_MODEL
 from prompt_templates import (
@@ -34,7 +35,7 @@ class StoryBibleCheckpoint(BaseModel):
 StoryBibleGenerator = Callable[[str, WorldStateCheckpoint, str, int], str]
 
 
-def _format_character_details(character: WorldStateCheckpoint.model_fields["player_characters"].annotation.__args__[0] | WorldStateCheckpoint.model_fields["npcs"].annotation.__args__[0]) -> str:
+def _format_character_details(character: Character) -> str:
     details = [f"- {character.name}: {character.description}"]
     extras: list[str] = []
     if character.class_name:
@@ -76,6 +77,41 @@ def _format_beats_for_prompt(beats: list[StoryBeat]) -> str:
             + (f" ({highlights})" if highlights else "")
         )
     return "\n".join(beat_lines) or "- none"
+
+
+def _preserve_case(source: str, target: str) -> str:
+    if source.isupper():
+        return target.upper()
+    if source.istitle():
+        return target.title()
+    return target
+
+
+def _normalize_aliases_in_text(text: str, world: WorldStateCheckpoint) -> str:
+    """Replace alias mentions only when they begin a sentence or the text itself."""
+    normalized = text
+
+    for character in [*world.player_characters, *world.npcs]:
+        canonical_name = character.name.strip()
+        for alias in character.aliases or []:
+            alias_text = alias.strip()
+            if not alias_text or alias_text.lower() == canonical_name.lower():
+                continue
+
+            pattern = re.compile(
+                rf"(^|[.!?]\s+|\n)(\s*)({re.escape(alias_text)})(?=\b)",
+                re.IGNORECASE | re.MULTILINE,
+            )
+            normalized = pattern.sub(
+                lambda match: (
+                    match.group(1)
+                    + match.group(2)
+                    + _preserve_case(match.group(3), canonical_name)
+                ),
+                normalized,
+            )
+
+    return normalized
 
 
 def _format_quotes_for_prompt(quotes: list[dict[str, str | None]] | None = None) -> str:
@@ -161,6 +197,7 @@ def create_story_bible(
     world = WorldStateCheckpoint.model_validate_json(
         entities_checkpoint_path.read_text(encoding="utf-8")
     )
+    normalized_content = _normalize_aliases_in_text(raw.content, world)
 
     quotes_list: list[dict[str, str | None]] = []
     for quote in raw.quotes:
@@ -172,11 +209,11 @@ def create_story_bible(
     generation_errors: list[str] = []
 
     if generator is not None:
-        story_bible_text = generator(raw.content, world, model, scene_count)
+        story_bible_text = generator(normalized_content, world, model, scene_count)
     else:
         try:
             story_bible_text = _generate_with_ollama(
-                raw.content,
+                normalized_content,
                 world,
                 model,
                 scene_count,

@@ -714,7 +714,7 @@ class ComicPipeline:
                 beater_system_prompt, beater_user_prompt = prepare_beater_prompts(
                     version_dir=version_dir,
                     content=raw.content,
-                    world=entities,
+                    world=bible_entities,
                     scene_count=scene_count,
                     raw_quotes=[
                         {"text": quote.text, "attribution": quote.attribution}
@@ -725,7 +725,7 @@ class ComicPipeline:
                 )
                 story_bible = create_story_bible(
                     raw_checkpoint_path=raw_path,
-                    entities_checkpoint_path=entities_path,
+                    entities_checkpoint_path=version_bible_path,
                     output_path=story_bible_path,
                     model=self.beater_model,
                     scene_count=scene_count,
@@ -806,7 +806,7 @@ class ComicPipeline:
                     ):
                         script_system_prompt, script_user_prompt = prepare_scriptwriter_prompts(
                             version_dir=version_dir,
-                            world=cast(WorldStateInput, entities),
+                            world=cast(WorldStateInput, bible_entities),
                             story_bible=story_bible_page,
                             system_prompt_path=prompt_template_paths[SCRIPTWRITER_SYSTEM_PROMPT_FILENAME],
                             user_prompt_path=prompt_template_paths[SCRIPTWRITER_USER_PROMPT_FILENAME],
@@ -817,7 +817,7 @@ class ComicPipeline:
                         generated_pages.append(
                             write_script(
                                 raw_checkpoint_path=raw_path,
-                                entities_checkpoint_path=entities_path,
+                                entities_checkpoint_path=version_bible_path,
                                 story_bible_checkpoint_path=story_bible_page_path,
                                 output_path=script_page_path,
                                 model=self.script_model,
@@ -1014,7 +1014,7 @@ class ComicPipeline:
                         try:
                             prompt_text = prepare_page_prompt_template(
                                 version_dir=version_dir,
-                                world=entities,
+                                world=bible_entities,
                                 script=prompt_script,
                                 art_template=art_template,
                                 template_path=prompt_template_paths[PAGE_PROMPT_TEMPLATE_FILENAME],

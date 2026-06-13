@@ -134,6 +134,60 @@ Continuation scene."""
     assert hasattr(received_world, 'beats')
 
 
+def test_create_story_bible_normalizes_aliases_conservatively(tmp_path):
+    raw_input = {
+        "url": "https://example.test/story",
+        "title": "Swamp Trouble",
+        "author": "GM",
+        "content": "Wolf crossed the marsh. Sea Wolf prowled the reeds.",
+        "quotes": [],
+        "source_selector": "div.story-content",
+        "scraped_at": "2026-05-04T00:00:00+00:00",
+    }
+    entities_input = {
+        "url": "https://example.test/story",
+        "title": "Swamp Trouble",
+        "author": "GM",
+        "model": DEFAULT_MODEL,
+        "player_characters": [
+            {
+                "name": "Wulf",
+                "description": "A weathered sailor.",
+                "aliases": ["Wolf"],
+            }
+        ],
+        "npcs": [],
+        "locations": [],
+        "beats": [],
+        "analyzed_at": "2026-05-04T00:00:00+00:00",
+    }
+
+    raw_path = tmp_path / "01_raw_text.json"
+    entities_path = tmp_path / "02_entities.json"
+    raw_path.write_text(json.dumps(raw_input), encoding="utf-8")
+    entities_path.write_text(json.dumps(entities_input), encoding="utf-8")
+
+    received_content = None
+
+    def fake_generator(raw_content, world, model, scene_count):
+        nonlocal received_content
+        received_content = raw_content
+        return "Scene 1:\nNormalized story."
+
+    master_beater.create_story_bible(
+        raw_checkpoint_path=raw_path,
+        entities_checkpoint_path=entities_path,
+        output_path=tmp_path / "02_5_story_bible.json",
+        system_prompt_text="TEST_SYSTEM_PROMPT",
+        user_prompt_text="TEST_USER_PROMPT",
+        model=DEFAULT_MODEL,
+        scene_count=1,
+        generator=fake_generator,
+    )
+
+    assert received_content == "Wulf crossed the marsh. Sea Wolf prowled the reeds."
+
+
 def test_create_story_bible_rejects_invalid_scene_count(tmp_path):
     raw_path, entities_path = _write_input_checkpoints(tmp_path)
 

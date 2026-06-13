@@ -481,6 +481,12 @@ async def test_first_run_creates_campaign_episode_version(tmp_path):
     mock_script.assert_called_once()
     mock_prompts.assert_called_once()
 
+    version_dir = _version_dir_from_result(result)
+    _, architect_kwargs = mock_architect.call_args
+    assert architect_kwargs["entities_checkpoint_path"] == version_dir / "02_5_entities_bible.json"
+    _, script_kwargs = mock_script.call_args
+    assert script_kwargs["entities_checkpoint_path"] == version_dir / "02_5_entities_bible.json"
+
     assert result["version"] == "v001"
     version_dir = _version_dir_from_result(result)
     assert version_dir.exists()

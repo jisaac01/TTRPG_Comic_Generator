@@ -40,7 +40,7 @@
   - If neither history source exists, fall back to the current version’s `02_entities.json`.
   - Merge the chosen source with the current version using the current deterministic helper, and keep this as the placeholder until the later LLM continuity merge is added.
 
-- [ ] Step 3.2: Implement the LLM-powered continuity and enrichment stage
+- [x] Step 3.2: Implement the LLM-powered continuity and enrichment stage
   - This stage replaces the deterministic merge logic from Step 3.1.
   - The LLM will be responsible for both merging entities and enriching them.
   - **Inputs**:
@@ -56,7 +56,7 @@
   - The LLM output should also contain any merging challenges encountered (which should be added as warnings similar to how merge_entities_for_bible does it)
   - add a new prompt to the prompts directory. Be sure to include this prompt in any versioning and campaign overrides similar to other prompts
 
-- [ ] Step 4: Use the bible in downstream generation
+- [x] Step 4: Use the bible in downstream generation
   - Feed the merged bible into the master-beater/story-bible path.
   - Add conservative alias-based name normalization before the master beater sees the raw text.
   - Keep the existing episode-local entities file for traceability, but make the downstream consumers use the richer bible-backed entity context.
