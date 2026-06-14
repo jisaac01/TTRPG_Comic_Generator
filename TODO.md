@@ -38,7 +38,7 @@ This phase focuses on modifying the pipeline to support the new generation mode,
 This phase covers combining the generated panel images into a single page and exposing the new mode in the user interface.
 
 **Steps**
-- [ ] 1. **Develop a Robust Image Stitcher**:
+- [x] 1. **Develop a Robust Image Stitcher**:
     *   Create a new module, `src/image_stitcher.py`, to handle the combination of panel images.
     *   This module will replace the functionality of the existing [src/combine_temp_images.py](src/combine_temp_images.py) script with a more production-ready solution.
     *   The stitcher should initially support a basic grid layout but be designed with future flexibility in mind. It should read panel metadata (like `panel_scale` and `panel_shape` from the script checkpoint) to determine the layout.
