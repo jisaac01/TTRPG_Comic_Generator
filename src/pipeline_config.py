@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Literal
 
 from app_paths import default_campaigns_root
-from model_defaults import DEFAULT_MODEL
 
 RerunFrom = Literal["scrape", "entities", "beater", "script", "style", "prompt"]
 RecapVersion = Literal["short", "standard", "alternate", "long"]
@@ -36,10 +35,8 @@ class RunConfig:
     # Root directory for campaign data (default: campaigns/)
     campaigns_root: Path = field(default_factory=lambda: CAMPAIGNS_ROOT)
 
-    # Model selection (each stage can use a different model)
-    beater_model: str = field(default_factory=lambda: DEFAULT_MODEL)
-    script_model: str = field(default_factory=lambda: DEFAULT_MODEL)
-    style_model: str = field(default_factory=lambda: DEFAULT_MODEL)
+    # Output structure
+    generate_images: bool = False
 
     # Output structure
     panel_count: int = 6

@@ -11,7 +11,7 @@ This plan outlines the steps to add a new image generation stage to the processi
 
 **Steps**
 
-- [ ] 1.  **Update Configuration (`src/pipeline_config.py` and `src/settings_service.py`)**
+- [x] 1.  **Update Configuration (`src/pipeline_config.py` and `src/settings_service.py`)**
     *   In `src/settings_service.py`:
         *   Add a new property `image_generation_model` to `SettingsService` with a getter and setter. The default value should be `gemini-2.5-flash-image`.
         *   The available models will be `gemini-2.5-flash-image`, `gemini-3.1-flash-image`, and `gemini-3-pro-image`.

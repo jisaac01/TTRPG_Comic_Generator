@@ -230,7 +230,6 @@ def build_run_page(
         else:
             url = selected_episode.url if selected_episode and selected_episode.url else (url_field.value or "")
             rerun = rerun_dropdown.value or "beater"
-        model = model_field.value or DEFAULT_MODEL
         return RunConfig(
             url=url,
             campaign=campaign_dropdown.value or "",
@@ -240,9 +239,6 @@ def build_run_page(
             panel_count=int(panel_count_field.value or 6),
             total_pages=int(total_pages_field.value or 1),
             aspect_ratio=aspect_ratio_dropdown.value or "3:2",
-            beater_model=model,
-            script_model=model,
-            style_model=model,
         )
 
     def on_pipeline_event(event: PipelineEventUnion) -> None:
@@ -900,7 +896,6 @@ def build_output_page(
 
     def _build_rerun_config(campaign: str, episode_slug: str, stage: str) -> RunConfig:
         meta = _load_episode_settings(campaign, episode_slug)
-        model = services.settings.get_default_model() or DEFAULT_MODEL
         panel_count = int(panel_count_field.value or meta.get("panel_count", 6))
         total_pages = int(total_pages_field.value or meta.get("total_pages", 1))
         recap_version = normalize_recap_version(recap_dropdown.value or meta.get("recap_version", "standard"))
@@ -919,9 +914,6 @@ def build_output_page(
             panel_count=panel_count,
             total_pages=total_pages,
             aspect_ratio=cast(AspectRatio, aspect_ratio),
-            beater_model=model,
-            script_model=model,
-            style_model=model,
         )
 
     def _set_run_status() -> str | None:

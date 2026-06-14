@@ -29,12 +29,15 @@ def test_settings_service_persists_config_and_applies_environment(tmp_path, monk
 
     assert service.get_default_model() == DEFAULT_MODEL
     assert service.get_ollama_base_url() == "http://localhost:11434/v1"
+    assert service.get_image_generation_model() == "gemini-2.5-flash-image"
 
     service.set_default_model("gemini-3.1-pro")
+    service.set_image_generation_model("gemini-3.1-flash-image")
     service.set_ollama_base_url("http://localhost:11434/v1")
     service.set_gemini_api_key("secret-key")
 
     assert service.get_default_model() == "gemini-3.1-pro"
+    assert service.get_image_generation_model() == "gemini-3.1-flash-image"
     assert service.get_ollama_base_url() == "http://localhost:11434/v1"
     assert service.get_gemini_api_key() == "secret-key"
 

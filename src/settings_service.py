@@ -15,6 +15,7 @@ from model_defaults import DEFAULT_MODEL
 KEYRING_SERVICE_NAME = "TTRPG_Comic_Generator"
 KEYRING_USERNAME = "gemini_api_key"
 DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434/v1"
+DEFAULT_IMAGE_GENERATION_MODEL = "gemini-2.5-flash-image"
 DEFAULT_CONFIG_PATH = default_config_path()
 
 
@@ -42,6 +43,14 @@ class SettingsService:
     def set_default_model(self, model: str) -> None:
         config = self._load_config()
         config["default_model"] = model
+        self._save_config(config)
+
+    def get_image_generation_model(self) -> str:
+        return self._load_config().get("image_generation_model", DEFAULT_IMAGE_GENERATION_MODEL)
+
+    def set_image_generation_model(self, model: str) -> None:
+        config = self._load_config()
+        config["image_generation_model"] = model
         self._save_config(config)
 
     def apply_to_environment(self) -> None:

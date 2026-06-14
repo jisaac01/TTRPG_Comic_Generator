@@ -183,7 +183,6 @@ def test_run_page_build_config_maps_form_fields() -> None:
     state["panel_count_field"].value = "4"
     state["total_pages_field"].value = "2"
     state["aspect_ratio_dropdown"].value = "3:2"
-    state["model_field"].value = "gemini-3.2-flash"
 
     config = state["build_config"]()
     assert config.url == "https://example.com/flail-ep-1"
@@ -194,8 +193,10 @@ def test_run_page_build_config_maps_form_fields() -> None:
     assert config.panel_count == 4
     assert config.total_pages == 2
     assert config.aspect_ratio == "3:2"
-    assert config.beater_model == "gemini-3.2-flash"
-    assert config.script_model == "gemini-3.2-flash"
+    assert config.generate_images is False
+    assert not hasattr(config, "beater_model")
+    assert not hasattr(config, "script_model")
+    assert not hasattr(config, "style_model")
 
 
 def test_run_page_build_config_story_url_defaults_to_scrape() -> None:
