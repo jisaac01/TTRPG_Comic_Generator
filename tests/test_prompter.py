@@ -125,6 +125,33 @@ def test_generate_page_prompt_writes_checkpoint(tmp_path):
     assert prompt_text == output_path.read_text(encoding="utf-8")
 
 
+def test_generate_page_prompt_uses_specialized_character_fields(tmp_path):
+    entities_path, script_path, template_path = _write_inputs(tmp_path)
+
+    entities = json.loads(entities_path.read_text(encoding="utf-8"))
+    entities["player_characters"][0].update(
+        {
+            "physical_description": "Tall, gaunt, and moss-slick from the marsh.",
+            "clothing_armor": "Mossy robes and a leather satchel.",
+            "weapons": "Torch and carved staff.",
+            "character_quirks": "Always sniffs the air before speaking.",
+        }
+    )
+    entities_path.write_text(json.dumps(entities), encoding="utf-8")
+
+    prompt_text = prompter.generate_page_prompt(
+        script_checkpoint_path=script_path,
+        entities_checkpoint_path=entities_path,
+        art_style_template_path=template_path,
+        output_path=tmp_path / "04_page_1_prompt.txt",
+    )
+
+    assert "physical Tall, gaunt, and moss-slick from the marsh." in prompt_text
+    assert "clothing/armor Mossy robes and a leather satchel." in prompt_text
+    assert "weapons Torch and carved staff." in prompt_text
+    assert "quirks Always sniffs the air before speaking." in prompt_text
+
+
 def test_generate_page_prompt_contains_interpolated_fields(tmp_path):
     entities_path, script_path, template_path = _write_inputs(tmp_path)
 

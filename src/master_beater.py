@@ -36,14 +36,26 @@ StoryBibleGenerator = Callable[[str, WorldStateCheckpoint, str, int], str]
 
 
 def _format_character_details(character: Character) -> str:
-    details = [f"- {character.name}: {character.description}"]
+    summary_parts = []
+    if character.physical_description:
+        summary_parts.append(f"Physical: {character.physical_description}")
+    if character.clothing_armor:
+        summary_parts.append(f"Clothing/Armor: {character.clothing_armor}")
+    if character.weapons:
+        summary_parts.append(f"Weapons: {character.weapons}")
+    if character.character_quirks:
+        summary_parts.append(f"Quirks: {character.character_quirks}")
+
+    if summary_parts:
+        details = [f"- {character.name}: " + "; ".join(summary_parts)]
+    else:
+        details = [f"- {character.name}: {character.description}"]
+
     extras: list[str] = []
     if character.class_name:
         extras.append(f"Class: {character.class_name}")
     if character.race:
         extras.append(f"Race: {character.race}")
-    if character.physical_description:
-        extras.append(f"Physical: {character.physical_description}")
     if extras:
         details.append("  " + "; ".join(extras))
     return "\n".join(details)

@@ -9,22 +9,32 @@ Return JSON with this shape:
   "player_characters": [
     {{
       "name": "...",
-      "description": "...",
+      "description": "A concise canonical summary of role, personality, and narrative importance.",
       "class": "...",
       "race": "...",
-      "physical_description": "...",
+      "physical_description": "A complete visual description of appearance, build, posture, age cues, and distinctive features.",
+      "clothing_armor": "...",
+      "weapons": "...",
+      "character_quirks": "...",
       "aliases": ["..."]
     }}
   ],
   "npcs": [
     {{
       "name": "...",
-      "description": "...",
+      "description": "A concise canonical summary of role, personality, and narrative importance.",
       "class": "...",
       "race": "...",
-      "physical_description": "...",
+      "physical_description": "A complete visual description of appearance, build, posture, age cues, and distinctive features.",
+      "clothing_armor": "...",
+      "weapons": "...",
+      "character_quirks": "...",
       "aliases": ["..."]
     }}
   ],
   "warnings": ["..."]
 }}
+
+Guidance:
+- Prefer specialized fields (physical_description, clothing_armor, weapons, character_quirks) over repeating the same details in description.
+- Keep description short and canonical; use the specialized fields for the richer visual and equipment detail the bible needs.

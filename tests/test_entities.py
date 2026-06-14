@@ -160,6 +160,9 @@ def test_build_player_characters_exposes_optional_continuity_fields_with_default
         "class_name": None,
         "race": None,
         "physical_description": None,
+        "clothing_armor": None,
+        "weapons": None,
+        "character_quirks": None,
         "aliases": [],
     }
 
@@ -171,14 +174,20 @@ def test_character_accepts_alias_field_names_for_continuity_metadata():
             "description": "A sharp-eyed sailor.",
             "class": "Ranger",
             "race": "Human",
-            "physical_description": "Tall and weather-beaten.",
+            "physical_description": "Tall and weather-beaten, with a scarred jaw and salt-stiff beard.",
+            "clothing_armor": "Oilskin coat over scale-mail cuirass.",
+            "weapons": "Cutlass and hand crossbow.",
+            "character_quirks": "Always taps his cutlass on the deck before speaking.",
             "aliases": ["Wolf"],
         }
     )
 
     assert char.class_name == "Ranger"
     assert char.race == "Human"
-    assert char.physical_description == "Tall and weather-beaten."
+    assert char.physical_description == "Tall and weather-beaten, with a scarred jaw and salt-stiff beard."
+    assert char.clothing_armor == "Oilskin coat over scale-mail cuirass."
+    assert char.weapons == "Cutlass and hand crossbow."
+    assert char.character_quirks == "Always taps his cutlass on the deck before speaking."
     assert char.aliases == ["Wolf"]
 
 

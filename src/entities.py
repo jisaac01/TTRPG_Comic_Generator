@@ -30,6 +30,9 @@ class Character(BaseModel):
     )
     race: str | None = None
     physical_description: str | None = None
+    clothing_armor: str | None = None
+    weapons: str | None = None
+    character_quirks: str | None = None
     aliases: list[str] = Field(default_factory=list)
 
 
@@ -121,13 +124,16 @@ def _merge_entities_with_llm(
         raise ValueError("LLM continuity merge returned invalid JSON.") from exc
 
     merge_payload = ContinuityMergePayload.model_validate(payload)
+    merged_characters = merge_payload.player_characters or list(existing.player_characters)
+    merged_npcs = merge_payload.npcs or list(existing.npcs)
+
     merged = WorldStateCheckpoint(
         url=existing.url or incoming.url,
         title=existing.title or incoming.title,
         author=existing.author or incoming.author,
         model=model,
-        player_characters=merge_payload.player_characters or list(existing.player_characters),
-        npcs=merge_payload.npcs or list(existing.npcs),
+        player_characters=merged_characters,
+        npcs=merged_npcs,
         locations=list(existing.locations) + list(incoming.locations),
         beats=list(existing.beats) + list(incoming.beats),
         analyzed_at=existing.analyzed_at or incoming.analyzed_at,

@@ -57,14 +57,26 @@ def _format_character_details(world: WorldStateCheckpoint, script: ScriptCheckpo
         if not _character_is_referenced(character.name, panel_text):
             continue
 
-        parts = [f"{character.name}: {character.description}"]
+        summary_parts = []
+        if character.physical_description:
+            summary_parts.append(f"physical {character.physical_description}")
+        if character.clothing_armor:
+            summary_parts.append(f"clothing/armor {character.clothing_armor}")
+        if character.weapons:
+            summary_parts.append(f"weapons {character.weapons}")
+        if character.character_quirks:
+            summary_parts.append(f"quirks {character.character_quirks}")
+
+        if summary_parts:
+            parts = [f"{character.name}: " + "; ".join(summary_parts)]
+        else:
+            parts = [f"{character.name}: {character.description}"]
+
         extras = []
         if character.class_name:
             extras.append(f"class {character.class_name}")
         if character.race:
             extras.append(f"race {character.race}")
-        if character.physical_description:
-            extras.append(f"physical {character.physical_description}")
         if extras:
             parts.append("(" + "; ".join(extras) + ")")
         details.append(" ".join(parts))

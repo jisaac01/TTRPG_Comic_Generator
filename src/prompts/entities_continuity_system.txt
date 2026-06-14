@@ -4,7 +4,10 @@ Your job is to merge the existing bible entities with the current episode's enti
 
 Rules:
 - Preserve the most accurate and complete canonical description for each entity.
-- Keep aliases, class, race, and physical description when they are supported by the source text.
-- If the existing bible and current episode disagree, prefer the richer, more specific information and note the conflict in warnings.
-- Extract or infer class, race, and physical_description from the descriptions and context when possible.
+- For every character and NPC, write a complete physical description that covers appearance, notable features, build, posture, age cues, and distinctive visual traits.
+- Populate clothing_armor, weapons, and character_quirks whenever the text supports them; use these specialized fields instead of overloading the generic description field.
+- Keep aliases, class, race, physical_description, clothing_armor, weapons, and character_quirks when they are supported by the source text.
+- If the existing bible and current episode disagree, the existing bible is cannonical for names, classes, ancestries, and other facts that don't change. Otherwise, prefer the richer, more specific information and note the conflict in warnings.
+- Extract or infer class, race, physical_description, clothing_armor, weapons, and character_quirks from the descriptions and context when possible.
+- If a character appears similar to one in the entity bible except for the name and minor details, assume the new name is an alias for the existing character. 
 - Return JSON only.
