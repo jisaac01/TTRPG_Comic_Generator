@@ -16,6 +16,7 @@ from entities import (
     build_entities_from_raw,
     write_entities_bible,
 )
+from image_generator import ImageGenerator
 from model_defaults import DEFAULT_MODEL
 from pipeline_config import RunConfig, RerunFrom, CAMPAIGNS_ROOT
 from pipeline_events import (
@@ -391,6 +392,8 @@ class ComicPipeline:
         rerun_from: RerunFrom | None = None,
         recap_version: str = "standard",
         skip_style: bool = False,
+        generate_images: bool = False,
+        image_generation_model: str = "gemini-2.5-flash-image",
         event_callback: Callable[[PipelineEventUnion], None] | None = None,
     ):
         self.url = url
@@ -413,6 +416,8 @@ class ComicPipeline:
         self.rerun_from: RerunFrom | None = rerun_from
         self.recap_version = normalize_recap_version(recap_version)
         self.skip_style = skip_style
+        self.generate_images = generate_images
+        self.image_generation_model = image_generation_model
         self.event_callback = event_callback or (lambda _: None)
         self._version_dir: Path | None = None
 
@@ -431,6 +436,41 @@ class ComicPipeline:
                 warning=detail,
             )
         )
+
+    def _run_image_generation_stage(self, version_dir: Path) -> tuple[list[str], list[str]]:
+        """Generate PNG images from each saved page prompt file."""
+        prompt_paths = sorted(version_dir.glob("04_page_*_prompt.txt"))
+        if not prompt_paths:
+            return [], []
+
+        generator = ImageGenerator(model=self.image_generation_model)
+        generated_paths: list[str] = []
+        errors: list[str] = []
+
+        for prompt_path in prompt_paths:
+            page_number_match = re.search(r"04_page_(\d+)_prompt\.txt$", prompt_path.name)
+            if page_number_match is None:
+                errors.append(f"image_generation: unable to determine page number for {prompt_path.name}")
+                continue
+
+            page_number = page_number_match.group(1)
+            output_path = version_dir / f"05_page_{page_number}.png"
+            try:
+                prompt_text = prompt_path.read_text(encoding="utf-8")
+                image_bytes = generator.generate_image(prompt_text)
+                generator.save_image(image_bytes, output_path)
+                generated_paths.append(str(output_path))
+            except Exception as exc:
+                errors.append(f"image_generation: page {page_number}: {exc}")
+                self._emit(
+                    PhaseWarning(
+                        phase="image_generation",
+                        message=f"Image generation failed for page {page_number}",
+                        warning=str(exc),
+                    )
+                )
+
+        return generated_paths, errors
 
     def _apply_recap_selection(self, raw: RawTextCheckpoint) -> tuple[RawTextCheckpoint, bool, bool]:
         """Select content from recap variants and report selection/content changes."""
@@ -1111,6 +1151,47 @@ class ComicPipeline:
                     )
                     self._emit_prompt_template_mismatch_warning("prompt", exc)
 
+        image_generation_paths: list[str] = []
+        image_generation_errors: list[str] = []
+        if self.generate_images:
+            self._emit(
+                PhaseStarted(
+                    phase="image_generation",
+                    message="Generating images...",
+                    details={"model": self.image_generation_model, "page_count": len(list(version_dir.glob("04_page_*_prompt.txt")))},
+                )
+            )
+            try:
+                image_generation_paths, image_generation_errors = self._run_image_generation_stage(version_dir)
+                if image_generation_paths:
+                    self._emit(
+                        PhaseCompleted(
+                            phase="image_generation",
+                            message="...done",
+                            details={"page_count": len(image_generation_paths)},
+                        )
+                    )
+                else:
+                    self._emit(
+                        PhaseSkipped(
+                            phase="image_generation",
+                            message="Skipped",
+                            reason="no prompt files available",
+                        )
+                    )
+            except Exception as exc:
+                image_generation_errors.append(f"image_generation: {exc}")
+                self._emit(
+                    PhaseError(
+                        phase="image_generation",
+                        message="Image generation failed",
+                        error=str(exc),
+                        exception=exc,
+                    )
+                )
+
+            errors.extend(image_generation_errors)
+
         # Determine final status
         checkpoint_keys = (
             "entities",
@@ -1163,6 +1244,7 @@ class ComicPipeline:
                 "output_path": str(prompts_path),
                 "prompt": page_prompt,
             } if page_prompt is not None else None,
+            "images": image_generation_paths,
             "errors": errors,
             "error_details": error_details,
             "version": version_name,

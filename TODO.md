@@ -25,7 +25,7 @@ This plan outlines the steps to add a new image generation stage to the processi
     *   Create a method `generate_image(prompt: str) -> bytes` that calls the image generation model via `llm_client` and returns the image data.
     *   Add a method `save_image(image_data: bytes, output_path: Path)`.
 
-- [ ] 3.  **Integrate Image Generation into Pipeline (`src/pipeline.py`)**
+- [x] 3.  **Integrate Image Generation into Pipeline (`src/pipeline.py`)**
     *   Add a new pipeline stage `IMAGE_GENERATION = "Image Generation"`.
     *   Create a new private method `_run_image_generation_stage` in `ComicPipeline`.
     *   This method will:

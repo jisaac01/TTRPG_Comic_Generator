@@ -37,6 +37,7 @@ class RunConfig:
 
     # Output structure
     generate_images: bool = False
+    image_generation_model: str = "gemini-2.5-flash-image"
 
     # Output structure
     panel_count: int = 6

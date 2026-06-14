@@ -5,7 +5,7 @@ import json
 import sys
 from pathlib import Path
 from typing import cast
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -1274,6 +1274,67 @@ async def test_beater_prompt_uses_total_scene_count(tmp_path):
     )
     assert "Target scene count: 6" in rendered_prompt
     assert "Break the story into exactly 6 scenes." in rendered_prompt
+
+
+@pytest.mark.asyncio
+async def test_image_generation_stage_runs_when_enabled(tmp_path):
+    fake_generator = MagicMock()
+    fake_generator.generate_image.return_value = b"png-bytes"
+    fake_generator.save_image.side_effect = (
+        lambda image_bytes, output_path: Path(output_path).write_bytes(image_bytes) or Path(output_path)
+    )
+
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=2,
+        total_pages=1,
+        generate_images=True,
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
+        patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
+        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT),
+        patch("pipeline.ImageGenerator", return_value=fake_generator) as mock_image_generator,
+    ):
+        result = await pipeline.run()
+
+    version_dir = _version_dir_from_result(result)
+    assert (version_dir / "05_page_1.png").exists()
+    fake_generator.generate_image.assert_called_once_with(_PAGE_PROMPT)
+    mock_image_generator.assert_called_once_with(model="gemini-2.5-flash-image")
+
+
+@pytest.mark.asyncio
+async def test_image_generation_stage_is_skipped_by_default(tmp_path):
+    fake_generator = MagicMock()
+
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=2,
+        total_pages=1,
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
+        patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
+        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT),
+        patch("pipeline.ImageGenerator", return_value=fake_generator) as mock_image_generator,
+    ):
+        await pipeline.run()
+
+    mock_image_generator.assert_not_called()
+    fake_generator.generate_image.assert_not_called()
 
 
 @pytest.mark.asyncio

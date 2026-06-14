@@ -147,6 +147,25 @@ class _WritesVersionThenFailsPipeline:
         raise RuntimeError("network timeout")
 
 
+class _CapturesPipelineConfigPipeline:
+    def __init__(self, *, event_callback, **kwargs: object) -> None:
+        self._event_callback = event_callback
+        self.kwargs = kwargs
+
+    async def run(self) -> dict[str, object]:
+        self._event_callback(
+            RunCompleted(
+                status="ok",
+                version="v001",
+                version_dir="/tmp/v001",
+                checkpoints=[],
+                failed_phases=[],
+                error_messages=[],
+            )
+        )
+        return {"version": "v001", "version_dir": "/tmp/v001", "errors": []}
+
+
 class _WritesVersionThenBlocksPipeline:
     def __init__(self, *, campaigns_root: Path, campaign: str, url: str, event_callback, **_: object) -> None:
         self._campaigns_root = campaigns_root
@@ -228,6 +247,32 @@ async def test_run_controller_cancel_stops_active_run(tmp_path):
     assert result.error_details == ["Run cancelled by user."]
     assert seen_event_types == ["PhaseStarted"]
     assert controller.current_run() is None
+
+
+@pytest.mark.asyncio
+async def test_run_controller_forwards_image_generation_config(tmp_path):
+    captured: dict[str, object] = {}
+
+    class _RecordingPipeline:
+        def __init__(self, **kwargs: object) -> None:
+            captured.update(kwargs)
+
+        async def run(self) -> dict[str, object]:
+            return {"version": "v001", "version_dir": "/tmp/v001", "errors": []}
+
+    controller = RunController(pipeline_factory=_RecordingPipeline)
+    config = RunConfig(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        generate_images=True,
+        image_generation_model="gemini-3.1-flash-image",
+    )
+
+    await controller.launch_run(config, lambda _event: None)
+
+    assert captured["generate_images"] is True
+    assert captured["image_generation_model"] == "gemini-3.1-flash-image"
 
 
 @pytest.mark.asyncio
