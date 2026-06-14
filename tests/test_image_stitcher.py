@@ -5,8 +5,7 @@ from PIL import Image
 
 sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
-from image_stitcher import stitch_panel_images
-from scriptwriter import Page, Panel, ScriptCheckpoint
+from image_stitcher import _grid_size, stitch_panel_images
 
 
 def _write_panel_image(path: Path, color: tuple[int, int, int]) -> None:
@@ -51,51 +50,66 @@ def test_stitch_panel_images_versions_existing_output(tmp_path: Path) -> None:
     assert (tmp_path / "06_page_1_v1.png").read_bytes() == b"old-output"
 
 
-def test_stitch_panel_images_prefers_single_column_for_splash_panels(tmp_path: Path) -> None:
-    first = tmp_path / "panel_1.png"
-    second = tmp_path / "panel_2.png"
+def test_grid_size_prefers_landscape_layout_for_six_panels() -> None:
+    assert _grid_size(6, aspect_ratio="3:2") == (3, 2)
 
-    _write_panel_image(first, (255, 128, 0))
-    _write_panel_image(second, (0, 128, 255))
 
-    script_checkpoint = ScriptCheckpoint(
-        url="https://example.test/story",
-        title="Splash page",
-        author="GM",
-        model="test-model",
-        panel_count=2,
-        total_pages=1,
-        pages=[
-            Page(
-                page_number=1,
-                panel_count=2,
-                panels=[
-                    Panel(
-                        index=1,
-                        page_number=1,
-                        panel_scale="splash",
-                        panel_shape="wide",
-                        setting="Splash panel",
-                        visual_action="A huge reveal.",
-                    ),
-                    Panel(
-                        index=2,
-                        page_number=1,
-                        panel_scale="medium",
-                        panel_shape="standard",
-                        setting="Follow-up panel",
-                        visual_action="The impact settles.",
-                    ),
-                ],
-            )
-        ],
-        scripted_at="2026-06-14T00:00:00+00:00",
-    )
+def test_grid_size_prefers_portrait_layout_for_six_panels() -> None:
+    assert _grid_size(6, aspect_ratio="4:3") == (2, 3)
 
-    output_path = tmp_path / "splash_page.png"
 
-    stitch_panel_images([first, second], output_path, script_checkpoint=script_checkpoint)
+def test_grid_size_handles_three_panels_on_square_pages() -> None:
+    cols, rows = _grid_size(3, aspect_ratio="1:1")
+    assert cols * rows >= 3
+    assert cols <= rows + 1
+
+
+def test_stitch_panel_images_uses_portrait_grid_for_six_panels(tmp_path: Path) -> None:
+    panel_paths = []
+    for index, color in enumerate(
+        (
+            (255, 0, 0),
+            (0, 255, 0),
+            (0, 0, 255),
+            (255, 255, 0),
+            (255, 0, 255),
+            (0, 255, 255),
+        ),
+        start=1,
+    ):
+        path = tmp_path / f"panel_{index}.png"
+        _write_panel_image(path, color)
+        panel_paths.append(path)
+
+    output_path = tmp_path / "portrait_page.png"
+    stitch_panel_images(panel_paths, output_path, aspect_ratio="4:3")
 
     page = Image.open(output_path).convert("RGB")
-
     assert page.size[0] < page.size[1]
+
+
+def test_stitch_panel_images_uses_landscape_grid_for_six_panels(tmp_path: Path) -> None:
+    panel_paths = []
+    for index, color in enumerate(
+        (
+            (255, 0, 0),
+            (0, 255, 0),
+            (0, 0, 255),
+            (255, 255, 0),
+            (255, 0, 255),
+            (0, 255, 255),
+        ),
+        start=1,
+    ):
+        path = tmp_path / f"panel_{index}.png"
+        _write_panel_image(path, color)
+        panel_paths.append(path)
+
+    output_path = tmp_path / "landscape_page.png"
+    stitch_panel_images(panel_paths, output_path, aspect_ratio="3:2")
+
+    page = Image.open(output_path).convert("RGB")
+    assert page.size[0] > page.size[1]
+
+
+

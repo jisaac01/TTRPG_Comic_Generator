@@ -611,16 +611,12 @@ class ComicPipeline:
         for page_number in pages:
             page_paths = sorted(version_dir.glob(f"05_page_{page_number}_panel_*.png"))
             output_path = version_dir / f"06_page_{page_number}.png"
-            script_path = version_dir / f"03_5_styled_script_page_{page_number:03d}.json"
-            if not script_path.exists():
-                script_path = version_dir / f"03_script_page_{page_number:03d}.json"
-
-            script_checkpoint = None
-            if script_path.exists():
-                script_checkpoint = ScriptCheckpoint.model_validate_json(script_path.read_text(encoding="utf-8"))
-
             try:
-                stitch_panel_images(page_paths, output_path, script_checkpoint=script_checkpoint)
+                stitch_panel_images(
+                    page_paths,
+                    output_path,
+                    aspect_ratio=self.aspect_ratio,
+                )
                 stitched_paths.append(str(output_path))
             except Exception as exc:
                 errors.append(f"stitching: page {page_number}: {exc}")

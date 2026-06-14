@@ -35,7 +35,6 @@ from prompt_templates import DEFAULT_PROMPTS_DIR
 from prompter import ART_DIRECTION_TEMPLATE_FIELDS, ART_DIRECTION_TEMPLATE_FILENAME
 from repository_service import CampaignPrompts, RepositoryService
 from run_controller import RunController
-from scriptwriter import ScriptCheckpoint
 from scraper import configure_playwright_runtime, normalize_recap_version, playwright_browser_executable
 from settings_service import SettingsService
 
@@ -1148,15 +1147,13 @@ def build_output_page(
         if not panel_paths:
             raise ValueError("No panel images available to stitch")
 
-        script_path = version_dir / f"03_5_styled_script_page_{page_number:03d}.json"
-        if not script_path.exists():
-            script_path = version_dir / f"03_script_page_{page_number:03d}.json"
-        script_checkpoint = None
-        if script_path.exists():
-            script_checkpoint = ScriptCheckpoint.model_validate_json(script_path.read_text(encoding="utf-8"))
-
         output_path = version_dir / f"06_page_{page_number}.png"
-        return stitch_panel_images(panel_paths, output_path, script_checkpoint=script_checkpoint)
+        settings = _read_settings_from_controls()
+        return stitch_panel_images(
+            panel_paths,
+            output_path,
+            aspect_ratio=str(settings["aspect_ratio"]),
+        )
 
     def _generate_prompt_image(prompt_path: Path) -> Path:
         version_dir = _selected_version_dir[0]

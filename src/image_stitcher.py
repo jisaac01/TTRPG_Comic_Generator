@@ -6,20 +6,37 @@ from pathlib import Path
 
 from PIL import Image
 
-from scriptwriter import ScriptCheckpoint
+
+def _target_col_row_ratio(aspect_ratio: str) -> float:
+    """Target width/height ratio of the panel grid (cols divided by rows)."""
+    if aspect_ratio == "4:3":
+        return 0.75
+    if aspect_ratio == "1:1":
+        return 1.0
+    return 1.5
 
 
-def _grid_size(panel_count: int) -> tuple[int, int]:
-    cols = max(1, math.ceil(math.sqrt(panel_count)))
-    rows = math.ceil(panel_count / cols)
-    return cols, rows
+def _grid_size(panel_count: int, aspect_ratio: str = "3:2") -> tuple[int, int]:
+    """Choose a panel grid biased toward the page aspect ratio."""
+    if panel_count <= 1:
+        return 1, 1
 
+    target_ratio = _target_col_row_ratio(aspect_ratio)
+    best_cols = 1
+    best_rows = panel_count
+    best_score = float("inf")
 
-def _should_force_single_column(script_checkpoint: ScriptCheckpoint | None) -> bool:
-    if script_checkpoint is None:
-        return False
+    for cols in range(1, panel_count + 1):
+        rows = math.ceil(panel_count / cols)
+        empty_cells = cols * rows - panel_count
+        ratio = cols / rows
+        score = (empty_cells * 10) + abs(math.log(ratio / target_ratio))
+        if score < best_score:
+            best_score = score
+            best_cols = cols
+            best_rows = rows
 
-    return any(panel.panel_scale == "splash" for panel in script_checkpoint.panels)
+    return best_cols, best_rows
 
 
 def _rotate_existing_output(output_path: Path) -> None:
@@ -48,25 +65,18 @@ def _version_number(filename: str, base_name: str, suffix: str) -> int | None:
 def stitch_panel_images(
     image_paths: list[Path],
     output_path: Path,
-    script_checkpoint: ScriptCheckpoint | None = None,
+    aspect_ratio: str = "3:2",
     gutter: int = 24,
     bg_color: tuple[int, int, int] = (255, 255, 255),
 ) -> Path:
-    """Create one comic page from panel images.
-
-    The layout starts with a simple grid and can be biased toward a single
-    column when a splash panel is present in the script metadata.
-    """
+    """Create one comic page from panel images using a grid shaped by *aspect_ratio*."""
     if not image_paths:
         raise ValueError("No images were provided to stitch.")
 
     images = [Image.open(path).convert("RGB") for path in image_paths]
     try:
         frame_width, frame_height = images[0].size
-        cols, rows = _grid_size(len(images))
-        if _should_force_single_column(script_checkpoint):
-            cols = 1
-            rows = len(images)
+        cols, rows = _grid_size(len(images), aspect_ratio=aspect_ratio)
 
         page_width = frame_width * cols + gutter * (cols + 1)
         page_height = frame_height * rows + gutter * (rows + 1)
