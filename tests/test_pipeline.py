@@ -668,6 +668,36 @@ async def test_explicit_prompt_overrides_are_copied_into_version(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_panel_generation_mode_writes_one_prompt_per_panel(tmp_path):
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=2,
+        total_pages=1,
+        generation_mode="panel",
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
+        patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
+        patch("pipeline.prepare_page_prompt_template", side_effect=["PANEL 1", "PANEL 2"]) as mock_prompts,
+    ):
+        result = await pipeline.run()
+
+    version_dir = _version_dir_from_result(result)
+
+    assert (version_dir / "04_page_1_panel_1_prompt.txt").exists()
+    assert (version_dir / "04_page_1_panel_2_prompt.txt").exists()
+    assert mock_prompts.call_count == 2
+    assert (version_dir / "04_page_1_panel_1_prompt.txt").read_text(encoding="utf-8") == "PANEL 1"
+    assert (version_dir / "04_page_1_panel_2_prompt.txt").read_text(encoding="utf-8") == "PANEL 2"
+
+
+@pytest.mark.asyncio
 async def test_first_run_result_contains_model_dump_dicts(tmp_path):
     """Returned checkpoint values must be plain dicts, not Pydantic models."""
     pipeline = ComicPipeline(

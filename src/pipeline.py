@@ -55,7 +55,7 @@ from prompt_templates import (
     STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME,
     STYLE_INTEGRATOR_USER_PROMPT_FILENAME,
 )
-from scriptwriter import WorldStateInput
+from scriptwriter import WorldStateInput, Page
 from style_integrator import StyleIntegrationPartialFailure, integrate_style
 from scraper import RawTextCheckpoint, normalize_recap_version, scrape_scrybequill
 from scriptwriter import (
@@ -91,6 +91,10 @@ def _script_page_path(version_dir: Path, page_number: int) -> Path:
 
 def _styled_script_page_path(version_dir: Path, page_number: int) -> Path:
     return version_dir / f"03_5_styled_script_page_{page_number:03d}.json"
+
+
+def _panel_prompt_path(version_dir: Path, page_number: int, panel_index: int) -> Path:
+    return version_dir / f"04_page_{page_number}_panel_{panel_index}_prompt.txt"
 
 
 def _copy_checkpoint_patterns(prev_dir: Path, version_dir: Path, patterns: list[str]) -> None:
@@ -381,6 +385,7 @@ class ComicPipeline:
         panel_count: int = 6,
         total_pages: int = 1,
         aspect_ratio: str = "3:2",
+        generation_mode: Literal["page", "panel"] = "page",
         art_style_template: Path | None = None,
         master_beater_system_prompt: Path | None = None,
         master_beater_user_prompt: Path | None = None,
@@ -405,6 +410,7 @@ class ComicPipeline:
         self.panel_count = panel_count
         self.total_pages = total_pages
         self.aspect_ratio = aspect_ratio
+        self.generation_mode = generation_mode
         self.art_style_template = art_style_template
         self.master_beater_system_prompt = master_beater_system_prompt
         self.master_beater_user_prompt = master_beater_user_prompt
@@ -448,13 +454,18 @@ class ComicPipeline:
         errors: list[str] = []
 
         for prompt_path in prompt_paths:
-            page_number_match = re.search(r"04_page_(\d+)_prompt\.txt$", prompt_path.name)
+            page_number_match = re.search(r"04_page_(\d+)(?:_panel_(\d+))?_prompt\.txt$", prompt_path.name)
             if page_number_match is None:
                 errors.append(f"image_generation: unable to determine page number for {prompt_path.name}")
                 continue
 
             page_number = page_number_match.group(1)
-            output_path = version_dir / f"05_page_{page_number}.png"
+            panel_number = page_number_match.group(2)
+            output_path = version_dir / (
+                f"05_page_{page_number}_panel_{panel_number}.png"
+                if panel_number is not None
+                else f"05_page_{page_number}.png"
+            )
             try:
                 prompt_text = prompt_path.read_text(encoding="utf-8")
                 image_bytes = generator.generate_image(prompt_text)
@@ -720,6 +731,8 @@ class ComicPipeline:
         entities_path = version_dir / "02_entities.json"
         story_bible_path = version_dir / "02_5_story_bible.json"
         prompts_path = version_dir / "04_page_1_prompt.txt"
+        if self.generation_mode == "panel":
+            prompts_path = _panel_prompt_path(version_dir, 1, 1)
         story_bible_page_paths = [
             _story_bible_page_path(version_dir, page_number)
             for page_number in range(1, self.total_pages + 1)
@@ -1076,10 +1089,16 @@ class ComicPipeline:
         else:
             template_path = self._capture_art_template_for_version(template_path, version_dir)
             prompt_script_paths = script_page_paths if self.skip_style else styled_script_page_paths
-            expected_prompt_paths = [
-                version_dir / f"04_page_{page_number}_prompt.txt"
-                for page_number in range(1, self.total_pages + 1)
-            ]
+            if self.generation_mode == "panel":
+                expected_prompt_paths = []
+                for page_number, prompt_script in enumerate(prompt_script_pages, start=1):
+                    for panel in prompt_script.panels:
+                        expected_prompt_paths.append(_panel_prompt_path(version_dir, page_number, panel.index))
+            else:
+                expected_prompt_paths = [
+                    version_dir / f"04_page_{page_number}_prompt.txt"
+                    for page_number in range(1, self.total_pages + 1)
+                ]
 
             if all(path.exists() for path in expected_prompt_paths):
                 self._emit(
@@ -1104,6 +1123,50 @@ class ComicPipeline:
                         zip(prompt_script_pages, prompt_script_paths),
                         start=1,
                     ):
+                        if self.generation_mode == "panel":
+                            for panel in prompt_script.panels:
+                                try:
+                                    panel_script = ScriptCheckpoint(
+                                        url=prompt_script.url,
+                                        title=prompt_script.title,
+                                        author=prompt_script.author,
+                                        model=prompt_script.model,
+                                        panel_count=1,
+                                        total_pages=1,
+                                        pages=[
+                                            Page(
+                                                page_number=panel.page_number,
+                                                panel_count=1,
+                                                panels=[panel],
+                                            )
+                                        ],
+                                        generation_errors=prompt_script.generation_errors,
+                                        scripted_at=prompt_script.scripted_at,
+                                    )
+                                    prompt_text = prepare_page_prompt_template(
+                                        version_dir=version_dir,
+                                        world=bible_entities,
+                                        script=panel_script,
+                                        art_template=art_template,
+                                        template_path=prompt_template_paths[PAGE_PROMPT_TEMPLATE_FILENAME],
+                                        aspect_ratio=self.aspect_ratio,
+                                        output_suffix=f"page_{page_number:03d}_panel_{panel.index:03d}",
+                                    )
+                                except Exception as exc:
+                                    self._emit(
+                                        PhaseWarning(
+                                            phase="prompt",
+                                            message=f"Failed to save interpolated panel {page_number}.{panel.index} prompt template",
+                                            warning=str(exc),
+                                        )
+                                    )
+                                    continue
+
+                                page_output_path = _panel_prompt_path(version_dir, page_number, panel.index)
+                                page_output_path.write_text(prompt_text, encoding="utf-8")
+                                page_prompts.append((page_output_path, prompt_text))
+                            continue
+
                         try:
                             prompt_text = prepare_page_prompt_template(
                                 version_dir=version_dir,

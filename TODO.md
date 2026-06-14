@@ -18,7 +18,7 @@ This phase focuses on modifying the pipeline to support the new generation mode,
     *   In [src/pipeline_config.py](src/pipeline_config.py), modify the `RunConfig` class to include a `generation_mode` field. This field will accept either `"page"` or `"panel"` as values, with `"page"` as the default.
     *   This will allow the pipeline to switch between the existing page-based generation and the new panel-based generation.
 
-- [ ] 2. **Adapt Pipeline Orchestration**:
+- [x] 2. **Adapt Pipeline Orchestration**:
     *   In [src/pipeline.py](src/pipeline.py), update the `ComicPipeline.run()` method to check the `generation_mode`.
     *   If the mode is `"panel"`, the pipeline logic will need to iterate through each panel within a page's script checkpoint (`03_script_page_*.json`) to generate individual image prompts.
     *   The output should be one prompt file per panel (e.g., `04_page_1_panel_1_prompt.txt`, `04_page_1_panel_2_prompt.txt`, etc.) instead of one per page.
