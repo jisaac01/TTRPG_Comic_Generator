@@ -23,7 +23,7 @@ This phase focuses on modifying the pipeline to support the new generation mode,
     *   If the mode is `"panel"`, the pipeline logic will need to iterate through each panel within a page's script checkpoint (`03_script_page_*.json`) to generate individual image prompts.
     *   The output should be one prompt file per panel (e.g., `04_page_1_panel_1_prompt.txt`, `04_page_1_panel_2_prompt.txt`, etc.) instead of one per page.
 
-- [ ] 3. **Refine Prompter for Panel-Level Context**:
+- [x] 3. **Refine Prompter for Panel-Level Context**:
     *   In [src/prompter.py](src/prompter.py), adjust the `Prompter` class to generate prompts at the panel level when in `"panel"` mode.
     *   The existing character filtering logic (`_character_is_referenced()`) should be applied to the text of a single panel, rather than the entire page. This will ensure that only characters present in a specific panel are included in its image prompt.
     *   Modify the prompt templates to remove page-level context like page numbers or episode titles from individual panel prompts.

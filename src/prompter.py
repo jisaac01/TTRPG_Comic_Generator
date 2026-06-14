@@ -148,7 +148,19 @@ def _resolve_page_number(script: ScriptCheckpoint) -> int:
     return page_numbers[0]
 
 
-def _format_page_elements_instruction(title: str, page_number: int) -> str:
+def _is_panel_prompt(output_path: Path | None) -> bool:
+    return output_path is not None and "_panel_" in output_path.name
+
+
+def _format_output_goal(generation_mode: str = "page") -> str:
+    if generation_mode == "panel":
+        return "one single comic panel image showing only the specified panel below."
+    return "one single comic page image containing all panels below in order."
+
+
+def _format_page_elements_instruction(title: str, page_number: int, generation_mode: str = "page") -> str:
+    if generation_mode == "panel":
+        return ""
     if page_number == 1:
         return f'Page elements: Include the title "{title}" on the page.'
     return f"Page elements: Include page number {page_number} at the bottom of the page."
@@ -202,6 +214,7 @@ def generate_page_prompt(
     art_direction_template = _load_art_template(art_style_template_path)
     title = script.title or world.title or "Untitled story"
     page_number = _resolve_page_number(script)
+    generation_mode = "panel" if _is_panel_prompt(output_path) else "page"
     character_details = _format_character_details(world, script)
     panel_block = _format_panel_block(script)
 
@@ -211,7 +224,8 @@ def generate_page_prompt(
         title=title,
         art_direction=_format_art_direction(art_direction_template),
         character_details=character_details,
-        page_elements_instruction=_format_page_elements_instruction(title, page_number),
+        output_goal=_format_output_goal(generation_mode),
+        page_elements_instruction=_format_page_elements_instruction(title, page_number, generation_mode),
         panel_count=script.panel_count,
         aspect_ratio=aspect_ratio,
         panel_block=panel_block,

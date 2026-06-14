@@ -175,6 +175,29 @@ def test_generate_page_prompt_contains_interpolated_fields(tmp_path):
     assert "Offscreen NPC: A merchant who is not present in this scene" not in prompt_text
 
 
+def test_generate_panel_prompt_uses_panel_scope_and_avoids_page_context(tmp_path):
+    entities_path, script_path, template_path = _write_inputs(tmp_path)
+    script = json.loads(script_path.read_text(encoding="utf-8"))
+    script["panel_count"] = 1
+    script["pages"][0]["panel_count"] = 1
+    script["pages"][0]["panels"] = [script["pages"][0]["panels"][0]]
+    script_path.write_text(json.dumps(script), encoding="utf-8")
+
+    prompt_text = prompter.generate_page_prompt(
+        script_checkpoint_path=script_path,
+        entities_checkpoint_path=entities_path,
+        art_style_template_path=template_path,
+        output_path=tmp_path / "04_page_1_panel_1_prompt.txt",
+    )
+
+    assert "single comic panel image" in prompt_text
+    assert "single comic page image" not in prompt_text
+    assert 'Page elements: Include the title "Swamp Trouble" on the page.' not in prompt_text
+    assert "Include page number 1 at the bottom of the page." not in prompt_text
+    assert "Panel count: 1" in prompt_text
+    assert "Panel 1:" in prompt_text
+
+
 def test_generate_page_prompt_uses_page_number_on_later_pages(tmp_path):
     entities_path, script_path, template_path = _write_inputs(tmp_path)
     script = json.loads(script_path.read_text(encoding="utf-8"))

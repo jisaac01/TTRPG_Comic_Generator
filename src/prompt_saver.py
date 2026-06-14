@@ -234,6 +234,7 @@ def prepare_page_prompt_template(
     template_path: Path | None = None,
     *,
     aspect_ratio: str = "3:2",
+    generation_mode: str = "page",
     output_suffix: str,
 ) -> str:
     """Prepare and save page prompt template before generation.
@@ -243,6 +244,7 @@ def prepare_page_prompt_template(
     from prompter import (
         _format_art_direction,
         _format_character_details,
+        _format_output_goal,
         _format_page_elements_instruction,
         _format_panel_block,
         _resolve_page_number,
@@ -250,6 +252,8 @@ def prepare_page_prompt_template(
 
     title = script.title or world.title or "Untitled story"
     page_number = _resolve_page_number(script)
+    output_goal = _format_output_goal(generation_mode)
+    page_elements_instruction = _format_page_elements_instruction(title, page_number, generation_mode)
     prompts_dir = _ensure_prompts_dir(version_dir)
     
     # Save original template
@@ -264,7 +268,8 @@ def prepare_page_prompt_template(
         title=title,
         art_direction=_format_art_direction(art_template),
         character_details=character_details,
-        page_elements_instruction=_format_page_elements_instruction(title, page_number),
+        output_goal=output_goal,
+        page_elements_instruction=page_elements_instruction,
         panel_count=script.panel_count,
         aspect_ratio=aspect_ratio,
         panel_block=panel_block,

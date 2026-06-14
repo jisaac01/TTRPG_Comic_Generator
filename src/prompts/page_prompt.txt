@@ -5,7 +5,7 @@
 Style enforcement: Apply the provided art direction uniformly across every panel; do not let any panel drift into a generic default rendering style.
 Do not render the words "Caption", "V.O.", "Chyron", or "SFX"; these are panel elements not content. 
 
-Output goal: one single comic page image containing all panels below in order.
+Output goal: {output_goal}
 Target aspect ratio: {aspect_ratio}.
 Character details (apply to every panel): {character_details}
 {page_elements_instruction}
@@ -14,4 +14,4 @@ Panel count: {panel_count}
 Panel specifications:
 {panel_block}
 
-Final format: single comic page image.
+Final format: single comic image.

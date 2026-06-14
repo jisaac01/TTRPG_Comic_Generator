@@ -1151,6 +1151,7 @@ class ComicPipeline:
                                         template_path=prompt_template_paths[PAGE_PROMPT_TEMPLATE_FILENAME],
                                         aspect_ratio=self.aspect_ratio,
                                         output_suffix=f"page_{page_number:03d}_panel_{panel.index:03d}",
+                                        generation_mode="panel",
                                     )
                                 except Exception as exc:
                                     self._emit(
@@ -1175,6 +1176,7 @@ class ComicPipeline:
                                 art_template=art_template,
                                 template_path=prompt_template_paths[PAGE_PROMPT_TEMPLATE_FILENAME],
                                 aspect_ratio=self.aspect_ratio,
+                                generation_mode="page",
                                 output_suffix=f"page_{page_number:03d}",
                             )
                         except Exception as exc:
