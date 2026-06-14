@@ -19,7 +19,7 @@ This plan outlines the steps to add a new image generation stage to the processi
         *   Add a new boolean field `generate_images: bool = False` to the `RunConfig` dataclass. This will control whether the image generation stage runs as part of a full pipeline execution.
         *   Remove `beater_model`, `script_model`, and `style_model`. These will now be managed by `SettingsService` as a single default.
 
-- [ ] 2.  **Create Image Generation Logic (`src/image_generator.py`)**
+- [x] 2.  **Create Image Generation Logic (`src/image_generator.py`)**
     *   Create a new file `src/image_generator.py`.
     *   Implement a class `ImageGenerator` that takes an `LLMClient` instance.
     *   Create a method `generate_image(prompt: str) -> bytes` that calls the image generation model via `llm_client` and returns the image data.
