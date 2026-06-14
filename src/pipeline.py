@@ -17,6 +17,7 @@ from entities import (
     write_entities_bible,
 )
 from image_generator import ImageGenerator
+from image_stitcher import stitch_panel_images
 from model_defaults import DEFAULT_MODEL
 from pipeline_config import RunConfig, RerunFrom, CAMPAIGNS_ROOT
 from pipeline_events import (
@@ -482,6 +483,45 @@ class ComicPipeline:
                 )
 
         return generated_paths, errors
+
+    def _run_stitching_stage(self, version_dir: Path) -> tuple[list[str], list[str]]:
+        """Stitch generated panel images into final page PNGs for panel-mode output."""
+        if self.generation_mode != "panel":
+            return [], []
+
+        panel_paths = sorted(version_dir.glob("05_page_*_panel_*.png"))
+        if not panel_paths:
+            return [], []
+
+        stitched_paths: list[str] = []
+        errors: list[str] = []
+
+        pages = sorted({int(re.search(r"05_page_(\d+)_panel_\d+\.png$", path.name).group(1)) for path in panel_paths})
+        for page_number in pages:
+            page_paths = sorted(version_dir.glob(f"05_page_{page_number}_panel_*.png"))
+            output_path = version_dir / f"06_page_{page_number}.png"
+            script_path = version_dir / f"03_5_styled_script_page_{page_number:03d}.json"
+            if not script_path.exists():
+                script_path = version_dir / f"03_script_page_{page_number:03d}.json"
+
+            script_checkpoint = None
+            if script_path.exists():
+                script_checkpoint = ScriptCheckpoint.model_validate_json(script_path.read_text(encoding="utf-8"))
+
+            try:
+                stitch_panel_images(page_paths, output_path, script_checkpoint=script_checkpoint)
+                stitched_paths.append(str(output_path))
+            except Exception as exc:
+                errors.append(f"stitching: page {page_number}: {exc}")
+                self._emit(
+                    PhaseWarning(
+                        phase="stitching",
+                        message=f"Stitching failed for page {page_number}",
+                        warning=str(exc),
+                    )
+                )
+
+        return stitched_paths, errors
 
     def _apply_recap_selection(self, raw: RawTextCheckpoint) -> tuple[RawTextCheckpoint, bool, bool]:
         """Select content from recap variants and report selection/content changes."""
@@ -1236,6 +1276,16 @@ class ComicPipeline:
                             details={"page_count": len(image_generation_paths)},
                         )
                     )
+                    stitched_paths, stitching_errors = self._run_stitching_stage(version_dir)
+                    if stitched_paths:
+                        self._emit(
+                            PhaseCompleted(
+                                phase="stitching",
+                                message="...done",
+                                details={"page_count": len(stitched_paths)},
+                            )
+                        )
+                    image_generation_errors.extend(stitching_errors)
                 else:
                     self._emit(
                         PhaseSkipped(

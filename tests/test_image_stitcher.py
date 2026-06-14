@@ -35,6 +35,22 @@ def test_stitch_panel_images_creates_a_page_image(tmp_path: Path) -> None:
     assert page.getpixel((24, 24)) == (255, 0, 0)
 
 
+def test_stitch_panel_images_versions_existing_output(tmp_path: Path) -> None:
+    first = tmp_path / "panel_1.png"
+    second = tmp_path / "panel_2.png"
+    output_path = tmp_path / "06_page_1.png"
+
+    _write_panel_image(first, (10, 20, 30))
+    _write_panel_image(second, (40, 50, 60))
+    output_path.write_bytes(b"old-output")
+
+    stitch_panel_images([first, second], output_path)
+
+    assert output_path.exists()
+    assert (tmp_path / "06_page_1_v1.png").exists()
+    assert (tmp_path / "06_page_1_v1.png").read_bytes() == b"old-output"
+
+
 def test_stitch_panel_images_prefers_single_column_for_splash_panels(tmp_path: Path) -> None:
     first = tmp_path / "panel_1.png"
     second = tmp_path / "panel_2.png"

@@ -876,6 +876,7 @@ def test_output_page_exposes_generation_controls(tmp_path):
 
     assert state["generate_images_button"] is not None
     assert state["generate_selected_image_button"] is not None
+    assert state["stitch_images_button"] is not None
 
 
 def test_output_page_action_buttons_disable_when_started(tmp_path):
@@ -907,6 +908,37 @@ def test_output_page_action_buttons_disable_when_started(tmp_path):
     state["generate_selected_image_button"].visible = True
     state["generate_selected_image_button"].on_click(None)
     assert state["generate_selected_image_button"].disabled is True
+
+
+def test_output_page_regenerating_panel_prompt_uses_panel_output_path(tmp_path, monkeypatch):
+    import flet as ft
+
+    campaigns_root = _make_output_versions(tmp_path)
+    version_dir = campaigns_root / "test_camp" / "episode-1" / "v002"
+    (version_dir / "04_page_1_panel_1_prompt.txt").write_text("panel prompt", encoding="utf-8")
+
+    class _TaskPage(_FakePage):
+        def run_task(self, task: object) -> None:
+            asyncio.run(task())
+
+    fake_generator = type("FakeGenerator", (), {"generate_image": lambda self, prompt: b"panel-bytes", "save_image": None})()
+    fake_generator.save_image = lambda image_bytes, output_path: Path(output_path).write_bytes(image_bytes) or Path(output_path)
+
+    monkeypatch.setattr("gui.ImageGenerator", lambda model: fake_generator)
+    stitched = version_dir / "06_page_1.png"
+    monkeypatch.setattr("gui.stitch_panel_images", lambda *args, **kwargs: stitched)
+
+    page = _TaskPage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+
+    state["file_list"].value = "04_page_1_panel_1_prompt.txt"
+    state["file_list"].on_change(type("Event", (), {"control": type("Control", (), {"value": "04_page_1_panel_1_prompt.txt"})()})())
+
+    state["generate_selected_image_button"].on_click(None)
+
+    assert (version_dir / "05_page_1_panel_1.png").exists()
+    assert stitched.exists() is False
 
 
 def test_output_page_prompt_selection_enables_single_image_generation(tmp_path):

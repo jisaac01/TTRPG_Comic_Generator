@@ -43,7 +43,7 @@ This phase covers combining the generated panel images into a single page and ex
     *   This module will replace the functionality of the existing [src/combine_temp_images.py](src/combine_temp_images.py) script with a more production-ready solution.
     *   The stitcher should initially support a basic grid layout but be designed with future flexibility in mind. It should read panel metadata (like `panel_scale` and `panel_shape` from the script checkpoint) to determine the layout.
 
-- [ ] 2. **Integrate Stitcher into Pipeline**:
+- [x] 2. **Integrate Stitcher into Pipeline**:
     *   In [src/pipeline.py](src/pipeline.py), add a new pipeline stage that runs the image stitcher after the panel images have been generated in `"panel"` mode.
     *   The stitcher will take the individual panel images and the corresponding script checkpoint as input to produce a final page image.
 

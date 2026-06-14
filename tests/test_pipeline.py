@@ -1341,6 +1341,43 @@ async def test_image_generation_stage_runs_when_enabled(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_panel_image_generation_stitches_final_page(tmp_path):
+    fake_generator = MagicMock()
+    fake_generator.generate_image.return_value = b"png-bytes"
+    fake_generator.save_image.side_effect = (
+        lambda image_bytes, output_path: Path(output_path).write_bytes(image_bytes) or Path(output_path)
+    )
+
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=2,
+        total_pages=1,
+        generation_mode="panel",
+        generate_images=True,
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
+        patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
+        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT),
+        patch("pipeline.ImageGenerator", return_value=fake_generator),
+        patch("pipeline.stitch_panel_images", return_value=Path("stitched.png")) as mock_stitch,
+    ):
+        result = await pipeline.run()
+
+    version_dir = _version_dir_from_result(result)
+    assert (version_dir / "05_page_1_panel_1.png").exists()
+    assert (version_dir / "05_page_1_panel_2.png").exists()
+    mock_stitch.assert_called_once()
+    assert mock_stitch.call_args.args[1] == version_dir / "06_page_1.png"
+
+
+@pytest.mark.asyncio
 async def test_image_generation_stage_is_skipped_by_default(tmp_path):
     fake_generator = MagicMock()
 
