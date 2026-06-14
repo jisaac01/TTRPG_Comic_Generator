@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Callable, Literal, Protocol
 
 from pipeline import ComicPipeline
-from pipeline_config import RunConfig
+from pipeline_config import RunConfig, run_config_snapshot
 from pipeline_events import PipelineEventUnion, RunCompleted, VersionCreated
 
 
@@ -237,11 +237,16 @@ class RunController:
         if run_info.failed_phases:
             failed = list(run_info.failed_phases)
 
+        run_config = run_config_snapshot(run_info.config)
+        if output is not None and isinstance(output.get("run_config"), dict):
+            run_config = dict(output["run_config"])
+
         status_blob = {
             "status": run_info.status,
             "campaign": run_info.config.campaign,
             "version": run_info.version,
             "version_dir": run_info.version_dir,
+            "run_config": run_config,
             "checkpoints": checkpoints,
             "failed": failed,
             "errors": list(run_info.errors),

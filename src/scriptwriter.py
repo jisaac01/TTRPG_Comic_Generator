@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import re
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Literal, cast
@@ -243,6 +244,126 @@ def write_story_bible_pages(
             encoding="utf-8",
         )
     return checkpoints
+
+
+@dataclass(frozen=True)
+class StoryBiblePanelUnit:
+    page_number: int
+    panel_index: int
+    checkpoint: StoryBibleCheckpoint
+
+
+def build_story_bible_panel_units(
+    story_bible: StoryBibleCheckpoint,
+    total_pages: int,
+) -> list[StoryBiblePanelUnit]:
+    """Create one story-bible checkpoint per panel (scene) across layout pages."""
+    scenes = split_story_bible_into_scenes(story_bible)
+    page_buckets = bucket_scenes_into_pages(scenes, total_pages)
+    units: list[StoryBiblePanelUnit] = []
+    global_index = 1
+    for page_number, page_scenes in enumerate(page_buckets, start=1):
+        for scene_text in page_scenes:
+            units.append(
+                StoryBiblePanelUnit(
+                    page_number=page_number,
+                    panel_index=global_index,
+                    checkpoint=StoryBibleCheckpoint(
+                        url=story_bible.url,
+                        title=story_bible.title,
+                        author=story_bible.author,
+                        model=story_bible.model,
+                        scene_count=1,
+                        story_bible=scene_text,
+                        generation_errors=list(story_bible.generation_errors),
+                        created_at=story_bible.created_at,
+                    ),
+                )
+            )
+            global_index += 1
+    return units
+
+
+def write_story_bible_panels(
+    story_bible_checkpoint_path: Path,
+    output_paths: dict[tuple[int, int], Path],
+    total_pages: int,
+) -> list[StoryBiblePanelUnit]:
+    """Split a story bible into per-panel checkpoint files."""
+    story_bible = StoryBibleCheckpoint.model_validate_json(
+        story_bible_checkpoint_path.read_text(encoding="utf-8")
+    )
+    units = build_story_bible_panel_units(story_bible, total_pages)
+    expected_keys = {(unit.page_number, unit.panel_index) for unit in units}
+    if set(output_paths) != expected_keys:
+        raise ValueError(
+            "Story bible panel output paths do not match expected panel units: "
+            f"expected {len(expected_keys)} paths, received {len(output_paths)}."
+        )
+
+    for unit in units:
+        output_path = output_paths[(unit.page_number, unit.panel_index)]
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(
+            json.dumps(unit.checkpoint.model_dump(), indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    return units
+
+
+def merge_panel_scripts_into_page(
+    panel_scripts: list[ScriptCheckpoint],
+    page_number: int,
+) -> ScriptCheckpoint:
+    """Merge ordered single-panel script checkpoints into one layout-page checkpoint."""
+    if not panel_scripts:
+        raise ValueError(f"No panel scripts provided for layout page {page_number}.")
+
+    template = panel_scripts[0]
+    merged_panels: list[Panel] = []
+    for panel_script in panel_scripts:
+        if len(panel_script.pages) != 1 or len(panel_script.panels) != 1:
+            raise ValueError(
+                f"Panel script for layout page {page_number} must contain exactly one panel."
+            )
+        source = panel_script.panels[0]
+        merged_panels.append(
+            Panel(
+                index=source.index,
+                page_number=page_number,
+                panel_scale=source.panel_scale,
+                panel_shape=source.panel_shape,
+                setting=source.setting,
+                visual_action=source.visual_action,
+                dialogue_overlay=list(source.dialogue_overlay),
+                held_items_before=dict(source.held_items_before),
+                held_items_after=dict(source.held_items_after),
+                narrative_overlays_and_text_direction=list(
+                    source.narrative_overlays_and_text_direction
+                ),
+            )
+        )
+
+    page = Page(
+        page_number=page_number,
+        panel_count=len(merged_panels),
+        panels=merged_panels,
+    )
+    generation_errors: list[str] = []
+    for panel_script in panel_scripts:
+        generation_errors.extend(panel_script.generation_errors)
+
+    return ScriptCheckpoint(
+        url=template.url,
+        title=template.title,
+        author=template.author,
+        model=template.model,
+        panel_count=len(merged_panels),
+        total_pages=1,
+        pages=[page],
+        generation_errors=generation_errors,
+        scripted_at=template.scripted_at,
+    )
 
 
 def renumber_script_page_checkpoints(

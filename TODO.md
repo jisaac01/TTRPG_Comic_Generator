@@ -2,7 +2,8 @@
 
 - [ ] Add a second pass for continuity and fun
 - [ ] remove validation (e.g. carried items)
-- [ ] panel stitching
+- [ ] camera angle, panel lighting
+- [ ] figure out why the entities bible is created in the beater step and not in the entities step
 ---
 
 ## Plan: Implement Panel-by-Panel Generation Mode

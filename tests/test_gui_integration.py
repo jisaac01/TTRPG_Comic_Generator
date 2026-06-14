@@ -820,22 +820,22 @@ def test_output_page_build_rerun_config_uses_live_controls(tmp_path):
     assert config.aspect_ratio == "4:3"
 
 
-def test_output_page_shows_episode_settings_from_meta(tmp_path):
+def test_output_page_shows_version_settings_from_run_status(tmp_path):
     import flet as ft
 
     campaigns_root = _make_output_versions(tmp_path)
-    episode_dir = campaigns_root / "test_camp" / "episode-1"
-    (episode_dir / "episode_meta.json").write_text(
+    version_dir = campaigns_root / "test_camp" / "episode-1" / "v002"
+    (version_dir / "run_status.json").write_text(
         json.dumps(
             {
-                "slug": "episode-1",
-                "url": "https://example.com/story",
-                "title": "Episode 1",
-                "created_at": "2026-05-18T00:00:00Z",
-                "panel_count": 8,
-                "total_pages": 3,
-                "recap_version": "short",
-                "aspect_ratio": "3:2",
+                "status": "ok",
+                "run_config": {
+                    "panel_count": 8,
+                    "total_pages": 3,
+                    "recap_version": "short",
+                    "aspect_ratio": "3:2",
+                    "generation_mode": "panel",
+                },
             }
         ),
         encoding="utf-8",
@@ -849,6 +849,8 @@ def test_output_page_shows_episode_settings_from_meta(tmp_path):
     assert "Pages: 3" in state["settings_text"].value
     assert "Recap: short" in state["settings_text"].value
     assert "Aspect ratio: 3:2" in state["settings_text"].value
+    assert "Generation: Panel by Panel" in state["settings_text"].value
+    assert state["generation_mode_dropdown"].value == "panel"
 
 
 def test_output_page_run_status_shows_errors_and_warnings(tmp_path):

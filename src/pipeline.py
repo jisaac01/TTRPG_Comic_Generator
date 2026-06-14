@@ -19,7 +19,13 @@ from entities import (
 from image_generator import ImageGenerator
 from image_stitcher import stitch_panel_images
 from model_defaults import DEFAULT_MODEL
-from pipeline_config import RunConfig, RerunFrom, CAMPAIGNS_ROOT
+from pipeline_config import (
+    CAMPAIGNS_ROOT,
+    RerunFrom,
+    RunConfig,
+    effective_rerun_from,
+    should_copy_prompt_artifacts,
+)
 from pipeline_events import (
     PipelineEvent,
     PipelineEventUnion,
@@ -62,9 +68,12 @@ from scraper import RawTextCheckpoint, normalize_recap_version, scrape_scrybequi
 from scriptwriter import (
     ScriptCheckpoint,
     apply_cross_page_continuity_errors,
+    build_story_bible_panel_units,
+    merge_panel_scripts_into_page,
     renumber_script_page_checkpoints,
     write_script,
     write_story_bible_pages,
+    write_story_bible_panels,
 )
 from master_beater import StoryBibleCheckpoint, create_story_bible
 
@@ -74,10 +83,14 @@ from master_beater import StoryBibleCheckpoint, create_story_bible
 
 INDEX_FILENAME = "index.json"
 EPISODE_META_FILENAME = "episode_meta.json"
+RUN_STATUS_FILENAME = "run_status.json"
 PROMPTS_SUBDIR_NAME = "prompts"
 STORY_BIBLE_PAGE_GLOB = "02_6_story_bible_page_*.json"
+STORY_BIBLE_PANEL_GLOB = "02_6_story_bible_page_*_panel_*.json"
 SCRIPT_PAGE_GLOB = "03_script_page_*.json"
+SCRIPT_PANEL_GLOB = "03_script_page_*_panel_*.json"
 STYLED_SCRIPT_PAGE_GLOB = "03_5_styled_script_page_*.json"
+PAGE_PROMPT_GLOB = "04_page_*_prompt.txt"
 
 # RerunFrom is imported from pipeline_config above
 
@@ -86,8 +99,16 @@ def _story_bible_page_path(version_dir: Path, page_number: int) -> Path:
     return version_dir / f"02_6_story_bible_page_{page_number:03d}.json"
 
 
+def _story_bible_panel_path(version_dir: Path, page_number: int, panel_index: int) -> Path:
+    return version_dir / f"02_6_story_bible_page_{page_number:03d}_panel_{panel_index:03d}.json"
+
+
 def _script_page_path(version_dir: Path, page_number: int) -> Path:
     return version_dir / f"03_script_page_{page_number:03d}.json"
+
+
+def _script_panel_path(version_dir: Path, page_number: int, panel_index: int) -> Path:
+    return version_dir / f"03_script_page_{page_number:03d}_panel_{panel_index:03d}.json"
 
 
 def _styled_script_page_path(version_dir: Path, page_number: int) -> Path:
@@ -223,18 +244,53 @@ def _write_episode_meta(episode_dir: Path, meta: dict) -> None:
         raise
 
 
-def _update_episode_meta(episode_dir: Path, *, panel_count: int, total_pages: int, recap_version: str, aspect_ratio: str) -> None:
-    meta = _read_episode_meta(episode_dir)
-    meta.update(
-        {
-            "panel_count": panel_count,
-            "total_pages": total_pages,
-            "recap_version": recap_version,
-            "aspect_ratio": aspect_ratio,
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        }
-    )
-    _write_episode_meta(episode_dir, meta)
+def _read_run_config(version_dir: Path) -> dict | None:
+    status_path = version_dir / RUN_STATUS_FILENAME
+    if not status_path.exists():
+        return None
+    try:
+        payload = json.loads(status_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+    run_config = payload.get("run_config")
+    return run_config if isinstance(run_config, dict) else None
+
+
+_PRESERVE_PATTERNS_BY_STAGE: dict[RerunFrom | None, list[str]] = {
+    "scrape": [],
+    "entities": ["01_raw_text.json"],
+    "beater": ["01_raw_text.json", "02_entities.json"],
+    "script": ["01_raw_text.json", "02_entities.json", "02_5_story_bible.json"],
+    "style": [
+        "01_raw_text.json",
+        "02_entities.json",
+        "02_5_story_bible.json",
+        STORY_BIBLE_PAGE_GLOB,
+        STORY_BIBLE_PANEL_GLOB,
+        SCRIPT_PAGE_GLOB,
+        SCRIPT_PANEL_GLOB,
+    ],
+    "prompt": [
+        "01_raw_text.json",
+        "02_entities.json",
+        "02_5_story_bible.json",
+        STORY_BIBLE_PAGE_GLOB,
+        STORY_BIBLE_PANEL_GLOB,
+        SCRIPT_PAGE_GLOB,
+        SCRIPT_PANEL_GLOB,
+        STYLED_SCRIPT_PAGE_GLOB,
+    ],
+    None: [
+        "01_raw_text.json",
+        "02_entities.json",
+        "02_5_story_bible.json",
+        STORY_BIBLE_PAGE_GLOB,
+        STORY_BIBLE_PANEL_GLOB,
+        SCRIPT_PAGE_GLOB,
+        SCRIPT_PANEL_GLOB,
+        STYLED_SCRIPT_PAGE_GLOB,
+    ],
+}
 
 
 # ---------------------------------------------------------------------------
@@ -296,77 +352,118 @@ def _next_version_name(episode_dir: Path) -> str:
 
 
 def _create_version_dir(
-    episode_dir: Path, rerun_from: RerunFrom | None
-) -> tuple[Path, str]:
+    episode_dir: Path,
+    rerun_from: RerunFrom | None,
+    new_config: dict | None = None,
+) -> tuple[Path, str, RerunFrom | None]:
     """
     Create the next version directory.
 
-    If a previous version exists, copy only the specific checkpoint files
-    that should be preserved (those prior to *rerun_from*). Prompt template files
-    and art direction templates are always regenerated during the run and are not copied.
-    
-    If rerun_from is None, all checkpoint files are preserved from the previous version.
+    If a previous version exists, copy only checkpoints preserved by the effective
+    rerun stage (requested rerun combined with config-driven invalidation).
 
-    Returns (version_dir, version_name).
+    Returns (version_dir, version_name, effective_rerun_from).
     """
     version_name = _next_version_name(episode_dir)
     version_dir = episode_dir / version_name
     version_dir.mkdir(parents=True, exist_ok=True)
 
+    effective_rerun = rerun_from
     existing = sorted(
         p for p in episode_dir.iterdir() if p.is_dir() and re.fullmatch(r"v\d{3}", p.name)
         and p.name != version_name
     )
     if existing:
         prev_dir = existing[-1]
-        
-        # Map each rerun point to the checkpoint files that should be preserved.
-        # Prompt template files and art_direction_template are resolved fresh during run()
-        # via _capture_prompt_templates_for_version and _capture_art_template_for_version,
-        # so they are never copied from the previous version.
-        _CHECKPOINTS_TO_COPY: dict[RerunFrom | None, list[str]] = {
-            None: [
-                "01_raw_text.json",
-                "02_entities.json",
-                "02_5_story_bible.json",
-                STORY_BIBLE_PAGE_GLOB,
-                SCRIPT_PAGE_GLOB,
-                STYLED_SCRIPT_PAGE_GLOB,
-            ],
-            "scrape": [],
-            "entities": ["01_raw_text.json"],
-            "beater": ["01_raw_text.json", "02_entities.json"],
-            "script": ["01_raw_text.json", "02_entities.json", "02_5_story_bible.json"],
-            "style": [
-                "01_raw_text.json",
-                "02_entities.json",
-                "02_5_story_bible.json",
-                STORY_BIBLE_PAGE_GLOB,
-                SCRIPT_PAGE_GLOB,
-            ],
-            "prompt": [
-                "01_raw_text.json",
-                "02_entities.json",
-                "02_5_story_bible.json",
-                STORY_BIBLE_PAGE_GLOB,
-                SCRIPT_PAGE_GLOB,
-                STYLED_SCRIPT_PAGE_GLOB,
-            ],
-        }
-        files_to_copy = _CHECKPOINTS_TO_COPY.get(rerun_from, [])
-
+        prev_config = _read_run_config(prev_dir)
+        effective_rerun = effective_rerun_from(
+            rerun_from,
+            prev_config,
+            new_config or {},
+        )
+        files_to_copy = _PRESERVE_PATTERNS_BY_STAGE.get(
+            effective_rerun,
+            _PRESERVE_PATTERNS_BY_STAGE[None],
+        )
         _copy_checkpoint_patterns(prev_dir, version_dir, files_to_copy)
 
-        # Prompt reruns must regenerate 04_page_*.txt from the current script state.
-        if rerun_from is None:
-            for prev_prompt_file in prev_dir.glob("04_page_*.txt"):
+        if should_copy_prompt_artifacts(effective_rerun, prev_config, new_config or {}):
+            for prev_prompt_file in prev_dir.glob(PAGE_PROMPT_GLOB):
                 shutil.copy2(prev_prompt_file, version_dir / prev_prompt_file.name)
 
             prev_prompts_dir = prev_dir / PROMPTS_SUBDIR_NAME
             if prev_prompts_dir.exists():
                 shutil.copytree(prev_prompts_dir, version_dir / PROMPTS_SUBDIR_NAME)
 
-    return version_dir, version_name
+    return version_dir, version_name, effective_rerun
+
+
+def _generate_script_pages_panel_mode(
+    *,
+    version_dir: Path,
+    story_bible_path: Path,
+    raw_path: Path,
+    version_bible_path: Path,
+    bible_entities: WorldStateInput,
+    total_pages: int,
+    script_model: str,
+    prompt_template_paths: dict[str, Path],
+) -> list[ScriptCheckpoint]:
+    story_bible = StoryBibleCheckpoint.model_validate_json(
+        story_bible_path.read_text(encoding="utf-8")
+    )
+    units = build_story_bible_panel_units(story_bible, total_pages)
+    panel_story_paths = {
+        (unit.page_number, unit.panel_index): _story_bible_panel_path(
+            version_dir, unit.page_number, unit.panel_index
+        )
+        for unit in units
+    }
+    write_story_bible_panels(
+        story_bible_checkpoint_path=story_bible_path,
+        output_paths=panel_story_paths,
+        total_pages=total_pages,
+    )
+
+    panel_scripts: dict[tuple[int, int], ScriptCheckpoint] = {}
+    for unit in units:
+        key = (unit.page_number, unit.panel_index)
+        story_path = panel_story_paths[key]
+        script_path = _script_panel_path(version_dir, unit.page_number, unit.panel_index)
+        script_system_prompt, script_user_prompt = prepare_scriptwriter_prompts(
+            version_dir=version_dir,
+            world=bible_entities,
+            story_bible=unit.checkpoint,
+            system_prompt_path=prompt_template_paths[SCRIPTWRITER_SYSTEM_PROMPT_FILENAME],
+            user_prompt_path=prompt_template_paths[SCRIPTWRITER_USER_PROMPT_FILENAME],
+            page_number=unit.page_number,
+            output_suffix=f"page_{unit.page_number:03d}_panel_{unit.panel_index:03d}",
+        )
+        panel_scripts[key] = write_script(
+            raw_checkpoint_path=raw_path,
+            entities_checkpoint_path=version_bible_path,
+            story_bible_checkpoint_path=story_path,
+            output_path=script_path,
+            model=script_model,
+            total_pages=1,
+            system_prompt_text=script_system_prompt,
+            user_prompt_text=script_user_prompt,
+        )
+
+    merged_pages: list[ScriptCheckpoint] = []
+    for page_number in range(1, total_pages + 1):
+        page_panel_scripts = [
+            panel_scripts[(unit.page_number, unit.panel_index)]
+            for unit in units
+            if unit.page_number == page_number
+        ]
+        merged_pages.append(
+            merge_panel_scripts_into_page(page_panel_scripts, page_number)
+        )
+
+    return apply_cross_page_continuity_errors(
+        renumber_script_page_checkpoints(merged_pages)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -427,6 +524,20 @@ class ComicPipeline:
         self.image_generation_model = image_generation_model
         self.event_callback = event_callback or (lambda _: None)
         self._version_dir: Path | None = None
+        self._effective_rerun_from: RerunFrom | None = rerun_from
+
+    def run_config_dict(self) -> dict:
+        config = {
+            "panel_count": self.panel_count,
+            "total_pages": self.total_pages,
+            "recap_version": self.recap_version,
+            "aspect_ratio": self.aspect_ratio,
+            "generation_mode": self.generation_mode,
+            "skip_style": self.skip_style,
+            "generate_images": self.generate_images,
+            "rerun_from": self._effective_rerun_from or self.rerun_from,
+        }
+        return config
 
     def _emit(self, event: PipelineEventUnion) -> None:
         """Emit an event via the callback."""
@@ -676,14 +787,12 @@ class ComicPipeline:
             episode_dir = _resolve_episode_dir(
                 self.campaigns_root, self.campaign, self.url, raw.title
             )
-            _update_episode_meta(
+            version_dir, version_name, effective_rerun = _create_version_dir(
                 episode_dir,
-                panel_count=self.panel_count,
-                total_pages=self.total_pages,
-                recap_version=self.recap_version,
-                aspect_ratio=self.aspect_ratio,
+                self.rerun_from,
+                self.run_config_dict(),
             )
-            version_dir, version_name = _create_version_dir(episode_dir, self.rerun_from)
+            self._effective_rerun_from = effective_rerun
             self._version_dir = version_dir
             self._emit(
                 VersionCreated(
@@ -700,14 +809,12 @@ class ComicPipeline:
 
         else:
             episode_dir = _episode_dir(self.campaigns_root, self.campaign, existing_episode)
-            _update_episode_meta(
+            version_dir, version_name, effective_rerun = _create_version_dir(
                 episode_dir,
-                panel_count=self.panel_count,
-                total_pages=self.total_pages,
-                recap_version=self.recap_version,
-                aspect_ratio=self.aspect_ratio,
+                self.rerun_from,
+                self.run_config_dict(),
             )
-            version_dir, version_name = _create_version_dir(episode_dir, self.rerun_from)
+            self._effective_rerun_from = effective_rerun
             self._version_dir = version_dir
             self._emit(
                 VersionCreated(
@@ -924,27 +1031,24 @@ class ComicPipeline:
                     details={"model": self.script_model},
                 )
             )
-            story_bible_pages: list[StoryBibleCheckpoint] = []
             try:
-                story_bible_pages = write_story_bible_pages(
-                    story_bible_checkpoint_path=story_bible_path,
-                    output_paths=story_bible_page_paths,
-                    total_pages=self.total_pages,
-                )
-            except Exception as exc:
-                errors.append(f"script: {exc}")
-                error_details.append(f"script: {_format_exception_detail(exc)}")
-                self._emit(
-                    PhasePartialFailure(
-                        phase="script",
-                        message="Story bible page splitting failed - skipping style and prompt phases",
-                        skipped_phases=["style", "prompt"],
-                        error_detail=str(exc),
+                if self.generation_mode == "panel":
+                    script_pages = _generate_script_pages_panel_mode(
+                        version_dir=version_dir,
+                        story_bible_path=story_bible_path,
+                        raw_path=raw_path,
+                        version_bible_path=version_bible_path,
+                        bible_entities=cast(WorldStateInput, bible_entities),
+                        total_pages=self.total_pages,
+                        script_model=self.script_model,
+                        prompt_template_paths=prompt_template_paths,
                     )
-                )
-                self._emit_prompt_template_mismatch_warning("script", exc)
-            if story_bible_pages:
-                try:
+                else:
+                    story_bible_pages = write_story_bible_pages(
+                        story_bible_checkpoint_path=story_bible_path,
+                        output_paths=story_bible_page_paths,
+                        total_pages=self.total_pages,
+                    )
                     generated_pages: list[ScriptCheckpoint] = []
                     for page_number, (story_bible_page, story_bible_page_path, script_page_path) in enumerate(
                         zip(story_bible_pages, story_bible_page_paths, script_page_paths),
@@ -959,7 +1063,6 @@ class ComicPipeline:
                             page_number=page_number,
                             output_suffix=f"page_{page_number:03d}",
                         )
-
                         generated_pages.append(
                             write_script(
                                 raw_checkpoint_path=raw_path,
@@ -972,32 +1075,31 @@ class ComicPipeline:
                                 user_prompt_text=script_user_prompt,
                             )
                         )
-
                     script_pages = apply_cross_page_continuity_errors(
                         renumber_script_page_checkpoints(generated_pages)
                     )
-                    _write_script_pages(script_page_paths, script_pages)
-                    script_generated_this_run = True
-                    page_word = "page" if len(script_pages) == 1 else "pages"
-                    self._emit(
-                        PhaseCompleted(
-                            phase="script",
-                            message="...done",
-                            details={"page_count": len(script_pages)},
-                        )
+
+                _write_script_pages(script_page_paths, script_pages)
+                script_generated_this_run = True
+                self._emit(
+                    PhaseCompleted(
+                        phase="script",
+                        message="...done",
+                        details={"page_count": len(script_pages)},
                     )
-                except Exception as exc:
-                    errors.append(f"script: {exc}")
-                    error_details.append(f"script: {_format_exception_detail(exc)}")
-                    self._emit(
-                        PhasePartialFailure(
-                            phase="script",
-                            message="Script generation failed - skipping style and prompt phases",
-                            skipped_phases=["style", "prompt"],
-                            error_detail=str(exc),
-                        )
+                )
+            except Exception as exc:
+                errors.append(f"script: {exc}")
+                error_details.append(f"script: {_format_exception_detail(exc)}")
+                self._emit(
+                    PhasePartialFailure(
+                        phase="script",
+                        message="Script generation failed - skipping style and prompt phases",
+                        skipped_phases=["style", "prompt"],
+                        error_detail=str(exc),
                     )
-                    self._emit_prompt_template_mismatch_warning("script", exc)
+                )
+                self._emit_prompt_template_mismatch_warning("script", exc)
 
         if script_generated_this_run and script_pages is not None:
             for page_number, checkpoint in enumerate(script_pages, start=1):
@@ -1364,6 +1466,7 @@ class ComicPipeline:
             "error_details": error_details,
             "version": version_name,
             "version_dir": str(version_dir),
+            "run_config": self.run_config_dict(),
         }
 
 

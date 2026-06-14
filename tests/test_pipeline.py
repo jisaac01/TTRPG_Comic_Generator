@@ -145,6 +145,28 @@ _SCRIPT_CHECKPOINT = scriptwriter.ScriptCheckpoint(
     scripted_at="2026-05-04T00:00:00+00:00",
 )
 
+
+def _single_panel_script_checkpoint(panel_index: int) -> scriptwriter.ScriptCheckpoint:
+    panel = _SCRIPT_CHECKPOINT.pages[0].panels[panel_index - 1]
+    return scriptwriter.ScriptCheckpoint(
+        url=_SCRIPT_CHECKPOINT.url,
+        title=_SCRIPT_CHECKPOINT.title,
+        author=_SCRIPT_CHECKPOINT.author,
+        model=_SCRIPT_CHECKPOINT.model,
+        panel_count=1,
+        total_pages=1,
+        pages=[
+            scriptwriter.Page(
+                page_number=1,
+                panel_count=1,
+                panels=[panel],
+            )
+        ],
+        generation_errors=[],
+        scripted_at=_SCRIPT_CHECKPOINT.scripted_at,
+    )
+
+
 _STORY_BIBLE_CHECKPOINT = master_beater.StoryBibleCheckpoint(
     url="https://example.test/story",
     title="Dreadmarsh Crossing",
@@ -255,6 +277,7 @@ def _make_episode(campaigns_root: Path, campaign: str, url: str, title: str) -> 
     v001 = episode_dir / "v001"
     v001.mkdir(parents=True, exist_ok=True)
     _write_version_checkpoints(v001)
+    _write_run_config(v001)
 
     meta = {"url": url, "slug": slug, "title": title, "created_at": "2026-05-04T00:00:00+00:00"}
     (episode_dir / "episode_meta.json").write_text(
@@ -349,11 +372,29 @@ def test_next_version_name_ignores_non_version_dirs(tmp_path):
 # ---------------------------------------------------------------------------
 
 
+def _default_run_config() -> dict:
+    return {
+        "panel_count": 2,
+        "total_pages": 1,
+        "recap_version": "standard",
+        "aspect_ratio": "3:2",
+        "generation_mode": "page",
+        "skip_style": False,
+        "generate_images": False,
+        "rerun_from": None,
+    }
+
+
+def _write_run_config(version_dir: Path, config: dict | None = None) -> None:
+    payload = {"run_config": config or _default_run_config()}
+    (version_dir / "run_status.json").write_text(json.dumps(payload), encoding="utf-8")
+
+
 def test_create_version_dir_first_run_no_clone(tmp_path):
     episode_dir = tmp_path / "episodes" / "ep1"
     episode_dir.mkdir(parents=True)
 
-    version_dir, name = _create_version_dir(episode_dir, rerun_from=None)
+    version_dir, name, _ = _create_version_dir(episode_dir, rerun_from=None)
 
     assert name == "v001"
     assert version_dir.exists()
@@ -365,8 +406,13 @@ def test_create_version_dir_clones_previous_version(tmp_path):
     v001 = episode_dir / "v001"
     v001.mkdir(parents=True)
     _write_version_checkpoints(v001)
+    _write_run_config(v001)
 
-    version_dir, name = _create_version_dir(episode_dir, rerun_from=None)
+    version_dir, name, _ = _create_version_dir(
+        episode_dir,
+        rerun_from=None,
+        new_config=_default_run_config(),
+    )
 
     assert name == "v002"
     assert (version_dir / "01_raw_text.json").exists()
@@ -383,7 +429,7 @@ def test_create_version_dir_rerun_from_prompt_deletes_only_prompt(tmp_path):
     v001.mkdir(parents=True)
     _write_version_checkpoints(v001)
 
-    version_dir, _ = _create_version_dir(episode_dir, rerun_from="prompt")
+    version_dir, _, _ = _create_version_dir(episode_dir, rerun_from="prompt")
 
     assert (version_dir / "01_raw_text.json").exists()
     assert (version_dir / "02_entities.json").exists()
@@ -399,7 +445,7 @@ def test_create_version_dir_rerun_from_beater_deletes_beater_onwards(tmp_path):
     v001.mkdir(parents=True)
     _write_version_checkpoints(v001)
 
-    version_dir, _ = _create_version_dir(episode_dir, rerun_from="beater")
+    version_dir, _, _ = _create_version_dir(episode_dir, rerun_from="beater")
 
     assert (version_dir / "01_raw_text.json").exists()
     assert (version_dir / "02_entities.json").exists()
@@ -415,7 +461,7 @@ def test_create_version_dir_rerun_from_scrape_deletes_all(tmp_path):
     v001.mkdir(parents=True)
     _write_version_checkpoints(v001)
 
-    version_dir, _ = _create_version_dir(episode_dir, rerun_from="scrape")
+    version_dir, _, _ = _create_version_dir(episode_dir, rerun_from="scrape")
 
     assert not (version_dir / "01_raw_text.json").exists()
     assert not (version_dir / "02_entities.json").exists()
@@ -682,7 +728,10 @@ async def test_panel_generation_mode_writes_one_prompt_per_panel(tmp_path):
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
         patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
-        patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
+        patch(
+            "pipeline.write_script",
+            side_effect=[_single_panel_script_checkpoint(1), _single_panel_script_checkpoint(2)],
+        ),
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.prepare_page_prompt_template", side_effect=["PANEL 1", "PANEL 2"]) as mock_prompts,
     ):
@@ -812,7 +861,7 @@ async def test_cached_raw_recap_switch_updates_content_and_reruns_downstream(tmp
 
     mock_scrape.assert_not_awaited()
     mock_entities.assert_called_once()
-    mock_architect.assert_not_called()
+    mock_architect.assert_called_once()
     mock_script.assert_called_once()
     mock_prompts.assert_called_once()
 
@@ -1362,7 +1411,10 @@ async def test_panel_image_generation_stitches_final_page(tmp_path):
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
         patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
-        patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
+        patch(
+            "pipeline.write_script",
+            side_effect=[_single_panel_script_checkpoint(1), _single_panel_script_checkpoint(2)],
+        ),
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT),
         patch("pipeline.ImageGenerator", return_value=fake_generator),

@@ -14,7 +14,14 @@ from typing import Any, cast
 
 from app_paths import default_campaigns_root
 from model_defaults import DEFAULT_MODEL
-from pipeline_config import AspectRatio, RecapVersion, RunConfig
+from pipeline_config import (
+    STAGE_ORDER,
+    AspectRatio,
+    RecapVersion,
+    RunConfig,
+    required_rerun_for_config_diff,
+    setting_field_enabled,
+)
 from pipeline_events import (
     PhaseError,
     PhasePartialFailure,
@@ -840,8 +847,26 @@ def build_output_page(
         ],
         width=200,
     )
+    generation_mode_dropdown = _ft.Dropdown(
+        label="Generation mode",
+        value="page",
+        options=[
+            _ft.dropdown.Option("page", "Page by Page"),
+            _ft.dropdown.Option("panel", "Panel by Panel"),
+        ],
+        width=180,
+    )
     version_path_text = _ft.Text("", size=11, selectable=True)
     output_status_text = _ft.Text("", size=12)
+
+    _DEFAULT_RUN_CONFIG: dict[str, Any] = {
+        "panel_count": 6,
+        "total_pages": 1,
+        "recap_version": "standard",
+        "aspect_ratio": "3:2",
+        "generation_mode": "page",
+    }
+    _committed_settings: dict[str, Any] = {}
 
     _episodes_by_slug: dict[str, Any] = {}
     _selected_version_dir: list[Path | None] = [None]
@@ -877,37 +902,99 @@ def build_output_page(
         version_dropdown.options = [_ft.dropdown.Option(v.version) for v in versions]
         version_dropdown.value = versions[-1].version if versions else None
 
-    def _load_episode_settings(campaign: str, episode_slug: str) -> dict[str, Any]:
+    def _legacy_episode_run_config(campaign: str, episode_slug: str) -> dict[str, Any]:
         episode_dir = services.repository.campaigns_root / campaign / episode_slug
         meta_path = episode_dir / "episode_meta.json"
         if not meta_path.exists():
             return {}
         try:
-            return json.loads(meta_path.read_text(encoding="utf-8"))
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             return {}
+        legacy: dict[str, Any] = {}
+        for key in _DEFAULT_RUN_CONFIG:
+            if key in meta:
+                legacy[key] = meta[key]
+        return legacy
+
+    def _load_version_run_config(campaign: str, episode_slug: str, version: str) -> dict[str, Any]:
+        config = dict(_DEFAULT_RUN_CONFIG)
+        if campaign and episode_slug and version:
+            status = services.repository.run_status(campaign, episode_slug, version) or {}
+            run_config = status.get("run_config")
+            if isinstance(run_config, dict):
+                config.update(run_config)
+            else:
+                config.update(_legacy_episode_run_config(campaign, episode_slug))
+        return config
+
+    def _apply_settings_to_controls(config: dict[str, Any]) -> None:
+        panel_count_field.value = str(config.get("panel_count", 6))
+        total_pages_field.value = str(config.get("total_pages", 1))
+        recap_dropdown.value = str(config.get("recap_version", "standard"))
+        aspect_ratio_settings_dropdown.value = str(config.get("aspect_ratio", "3:2"))
+        generation_mode_dropdown.value = str(config.get("generation_mode", "page"))
+
+    def _read_settings_from_controls() -> dict[str, Any]:
+        aspect_ratio = aspect_ratio_settings_dropdown.value or "3:2"
+        if aspect_ratio not in {"1:1", "4:3", "3:2"}:
+            aspect_ratio = "3:2"
+        generation_mode = generation_mode_dropdown.value or "page"
+        if generation_mode not in {"page", "panel"}:
+            generation_mode = "page"
+        return {
+            "panel_count": int(panel_count_field.value or 6),
+            "total_pages": int(total_pages_field.value or 1),
+            "recap_version": normalize_recap_version(recap_dropdown.value or "standard"),
+            "aspect_ratio": aspect_ratio,
+            "generation_mode": generation_mode,
+        }
+
+    def _apply_stage_gating() -> None:
+        stage = quick_rerun_stage_dropdown.value or "beater"
+        recap_dropdown.disabled = not setting_field_enabled("recap", stage)
+        panel_count_field.disabled = not setting_field_enabled("panels", stage)
+        total_pages_field.disabled = not setting_field_enabled("pages", stage)
+        generation_mode_dropdown.disabled = not setting_field_enabled("generation_mode", stage)
+        aspect_ratio_settings_dropdown.disabled = not setting_field_enabled("aspect_ratio", stage)
 
     def _sync_settings_controls() -> None:
         campaign = campaign_dropdown.value or ""
         episode_slug = episode_dropdown.value or ""
-        meta = _load_episode_settings(campaign, episode_slug) if campaign and episode_slug else {}
-        panel_count_field.value = str(meta.get("panel_count", 6))
-        total_pages_field.value = str(meta.get("total_pages", 1))
-        recap_dropdown.value = str(meta.get("recap_version", "standard"))
-        aspect_ratio_settings_dropdown.value = str(meta.get("aspect_ratio", "3:2"))
+        version = version_dropdown.value or ""
+        config = _load_version_run_config(campaign, episode_slug, version)
+        _committed_settings.clear()
+        _committed_settings.update(config)
+        _apply_settings_to_controls(config)
+        _apply_stage_gating()
 
     def _set_episode_settings_text() -> None:
-        campaign = campaign_dropdown.value or ""
-        episode_slug = episode_dropdown.value or ""
-        meta = _load_episode_settings(campaign, episode_slug) if campaign and episode_slug else {}
-        panel_count = meta.get("panel_count", 6)
-        total_pages = meta.get("total_pages", 1)
-        recap_version = meta.get("recap_version", "standard")
-        aspect_ratio = meta.get("aspect_ratio", "3:2")
-        settings_text.value = (
-            f"Panels: {panel_count}  |  Pages: {total_pages}  |  "
-            f"Recap: {recap_version}  |  Aspect ratio: {aspect_ratio}"
+        config = _read_settings_from_controls()
+        mode_label = (
+            "Panel by Panel" if config.get("generation_mode") == "panel" else "Page by Page"
         )
+        settings_text.value = (
+            f"Panels: {config['panel_count']}  |  Pages: {config['total_pages']}  |  "
+            f"Recap: {config['recap_version']}  |  Aspect ratio: {config['aspect_ratio']}  |  "
+            f"Generation: {mode_label}"
+        )
+
+    def _validate_rerun_settings() -> str | None:
+        stage = quick_rerun_stage_dropdown.value or "beater"
+        if stage not in STAGE_ORDER:
+            return None
+        required = required_rerun_for_config_diff(
+            _committed_settings,
+            _read_settings_from_controls(),
+        )
+        if required is None:
+            return None
+        if STAGE_ORDER.index(required) < STAGE_ORDER.index(stage):
+            return (
+                f"These settings require rerunning from {required} or earlier "
+                f"(selected stage: {stage})."
+            )
+        return None
 
     def _build_rerun_config(
         campaign: str,
@@ -916,27 +1003,21 @@ def build_output_page(
         *,
         generate_images: bool = False,
     ) -> RunConfig:
-        meta = _load_episode_settings(campaign, episode_slug)
-        panel_count = int(panel_count_field.value or meta.get("panel_count", 6))
-        total_pages = int(total_pages_field.value or meta.get("total_pages", 1))
-        recap_version = normalize_recap_version(recap_dropdown.value or meta.get("recap_version", "standard"))
-        aspect_ratio = aspect_ratio_settings_dropdown.value or str(meta.get("aspect_ratio", "3:2"))
-        if aspect_ratio not in {"1:1", "4:3", "3:2"}:
-            aspect_ratio = "3:2"
+        settings = _read_settings_from_controls()
         episode = _episodes_by_slug.get(episode_slug)
         url = episode.url if episode and episode.url else ""
-        rerun_from = cast(Any, stage)
         return RunConfig(
             url=url,
             campaign=campaign,
-            rerun_from=cast(Any, rerun_from),
-            recap_version=cast(RecapVersion, recap_version),
+            rerun_from=cast(Any, stage),
+            recap_version=cast(RecapVersion, settings["recap_version"]),
             skip_style=False,
             generate_images=generate_images,
             image_generation_model=services.settings.get_image_generation_model(),
-            panel_count=panel_count,
-            total_pages=total_pages,
-            aspect_ratio=cast(AspectRatio, aspect_ratio),
+            panel_count=int(settings["panel_count"]),
+            total_pages=int(settings["total_pages"]),
+            aspect_ratio=cast(AspectRatio, settings["aspect_ratio"]),
+            generation_mode=cast(Any, settings["generation_mode"]),
         )
 
     def _set_run_status() -> str | None:
@@ -1017,7 +1098,20 @@ def build_output_page(
             _selected_files[key] = path
             rows.controls.append(_ft.Radio(value=key, label=key))
 
-        preferred_default = "run_status.json" if status_value == "failed" else "04_page_1_prompt.txt"
+        config = _load_version_run_config(campaign, episode_slug, version)
+        if config.get("generation_mode") == "panel":
+            panel_prompts = sorted(
+                name
+                for name in _selected_files
+                if name.startswith("04_page_") and "_panel_" in name and name.endswith("_prompt.txt")
+            )
+            preferred_default = (
+                "run_status.json"
+                if status_value == "failed"
+                else (panel_prompts[0] if panel_prompts else "04_page_1_prompt.txt")
+            )
+        else:
+            preferred_default = "run_status.json" if status_value == "failed" else "04_page_1_prompt.txt"
         if preferred_default in _selected_files:
             file_list.value = preferred_default
         elif rows.controls:
@@ -1258,6 +1352,15 @@ def build_output_page(
         stitch_images_button.disabled = busy
         generate_selected_image_button.disabled = busy
 
+    def on_quick_rerun_stage_changed(_e: Any) -> None:
+        if _committed_settings:
+            _apply_settings_to_controls(_committed_settings)
+        _apply_stage_gating()
+        _set_episode_settings_text()
+        page.update()
+
+    _bind_dropdown_handler(quick_rerun_stage_dropdown, on_quick_rerun_stage_changed)
+
     def on_quick_rerun_click(_e: Any) -> None:
         _set_output_busy_state(True)
         output_status_text.value = ""
@@ -1272,6 +1375,13 @@ def build_output_page(
         if not campaign or not episode_slug:
             _set_output_busy_state(False)
             output_status_text.value = "Select campaign and episode for quick rerun"
+            page.update()
+            return
+
+        validation_error = _validate_rerun_settings()
+        if validation_error:
+            _set_output_busy_state(False)
+            output_status_text.value = validation_error
             page.update()
             return
 
@@ -1355,6 +1465,7 @@ def build_output_page(
                 total_pages_field,
                 recap_dropdown,
                 aspect_ratio_settings_dropdown,
+                generation_mode_dropdown,
             ], spacing=10),
             _ft.Row([quick_rerun_button, quick_rerun_gif, quick_rerun_text], spacing=10),
             output_status_text,
@@ -1422,6 +1533,7 @@ def build_output_page(
         "total_pages_field": total_pages_field,
         "recap_dropdown": recap_dropdown,
         "aspect_ratio_dropdown": aspect_ratio_settings_dropdown,
+        "generation_mode_dropdown": generation_mode_dropdown,
         "refresh_campaigns": _refresh_campaign_options,
         "refresh_episodes": _refresh_episodes,
         "refresh_all": _refresh_all,

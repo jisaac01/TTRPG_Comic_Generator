@@ -121,3 +121,129 @@ class RunConfig:
             if path_value is not None and not path_value.exists():
                 errors.append(f"{field_name} path does not exist: {path_value}")
         return errors
+
+
+STAGE_ORDER: list[RerunFrom] = [
+    "scrape",
+    "entities",
+    "beater",
+    "script",
+    "style",
+    "prompt",
+]
+
+SETTING_MIN_STAGE: dict[str, RerunFrom] = {
+    "recap_version": "entities",
+    "panel_count": "beater",
+    "total_pages": "beater",
+    "generation_mode": "script",
+    "aspect_ratio": "prompt",
+}
+
+SETTING_FIELD_MIN_STAGE: dict[str, RerunFrom] = {
+    "recap": "entities",
+    "panels": "beater",
+    "pages": "beater",
+    "generation_mode": "script",
+    "aspect_ratio": "prompt",
+}
+
+PROMPT_AFFECTING_KEYS = frozenset(
+    {"aspect_ratio", "generation_mode", "panel_count", "total_pages"}
+)
+
+RUN_CONFIG_KEYS = (
+    "panel_count",
+    "total_pages",
+    "recap_version",
+    "aspect_ratio",
+    "generation_mode",
+    "skip_style",
+    "generate_images",
+    "rerun_from",
+)
+
+
+def run_config_snapshot(config: RunConfig) -> dict:
+    """Extract version-persisted settings from a RunConfig."""
+    return {
+        "panel_count": config.panel_count,
+        "total_pages": config.total_pages,
+        "recap_version": config.recap_version,
+        "aspect_ratio": config.aspect_ratio,
+        "generation_mode": config.generation_mode,
+        "skip_style": config.skip_style,
+        "generate_images": config.generate_images,
+        "rerun_from": config.rerun_from,
+    }
+
+
+def _stage_index(stage: RerunFrom | None) -> int:
+    if stage is None:
+        return len(STAGE_ORDER)
+    return STAGE_ORDER.index(stage)
+
+
+def earliest_stage_for_config_diff(
+    prev_config: dict | None,
+    new_config: dict,
+) -> RerunFrom | None:
+    """Return the earliest pipeline stage invalidated by changed run settings."""
+    if not prev_config:
+        return None
+
+    earliest_idx = len(STAGE_ORDER)
+    for key, min_stage in SETTING_MIN_STAGE.items():
+        if prev_config.get(key) != new_config.get(key):
+            earliest_idx = min(earliest_idx, _stage_index(min_stage))
+
+    if earliest_idx >= len(STAGE_ORDER):
+        return None
+    return STAGE_ORDER[earliest_idx]
+
+
+def effective_rerun_from(
+    requested: RerunFrom | None,
+    prev_config: dict | None,
+    new_config: dict,
+) -> RerunFrom | None:
+    """Combine the requested rerun stage with config-driven invalidation."""
+    requested_idx = _stage_index(requested)
+    diff_stage = earliest_stage_for_config_diff(prev_config, new_config)
+    diff_idx = _stage_index(diff_stage)
+    effective_idx = min(requested_idx, diff_idx)
+    if effective_idx >= len(STAGE_ORDER):
+        return None
+    return STAGE_ORDER[effective_idx]
+
+
+def should_copy_prompt_artifacts(
+    effective_rerun: RerunFrom | None,
+    prev_config: dict | None,
+    new_config: dict,
+) -> bool:
+    """Copy prompt files only when prompts are not being regenerated."""
+    if effective_rerun is not None:
+        return False
+    if not prev_config:
+        return False
+    for key in PROMPT_AFFECTING_KEYS:
+        if prev_config.get(key) != new_config.get(key):
+            return False
+    return True
+
+
+def setting_field_enabled(field: str, rerun_stage: str) -> bool:
+    """Return whether a settings field may be edited for the selected rerun stage."""
+    min_stage = SETTING_FIELD_MIN_STAGE.get(field)
+    if min_stage is None:
+        return False
+    return _stage_index(rerun_stage) <= _stage_index(min_stage)
+
+
+def required_rerun_for_config_diff(
+    prev_config: dict | None,
+    new_config: dict,
+) -> RerunFrom | None:
+    """Earliest stage required when applying new_config over prev_config."""
+    return earliest_stage_for_config_diff(prev_config, new_config)

@@ -5,7 +5,12 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
-from pipeline_config import RunConfig
+from pipeline_config import (
+    RunConfig,
+    effective_rerun_from,
+    run_config_snapshot,
+    should_copy_prompt_artifacts,
+)
 
 
 def test_run_config_defaults_generate_images_off_and_uses_current_schema() -> None:
@@ -45,3 +50,36 @@ def test_run_config_round_trip_preserves_generation_mode() -> None:
     restored = RunConfig.from_dict(config.to_dict())
 
     assert restored.generation_mode == "panel"
+
+
+def test_effective_rerun_from_bumps_when_generation_mode_changes() -> None:
+    prev = run_config_snapshot(
+        RunConfig(url="https://example.test/story", campaign="dreadmarsh")
+    )
+    new = dict(prev)
+    new["generation_mode"] = "panel"
+
+    assert effective_rerun_from("prompt", prev, new) == "script"
+
+
+def test_effective_rerun_from_bumps_when_panel_count_changes() -> None:
+    prev = run_config_snapshot(
+        RunConfig(url="https://example.test/story", campaign="dreadmarsh", panel_count=6)
+    )
+    new = dict(prev)
+    new["panel_count"] = 8
+
+    assert effective_rerun_from("style", prev, new) == "beater"
+
+
+def test_should_copy_prompt_artifacts_only_when_config_unchanged() -> None:
+    config = run_config_snapshot(
+        RunConfig(url="https://example.test/story", campaign="dreadmarsh")
+    )
+
+    assert should_copy_prompt_artifacts(None, config, config) is True
+    assert should_copy_prompt_artifacts("prompt", config, config) is False
+
+    changed = dict(config)
+    changed["generation_mode"] = "panel"
+    assert should_copy_prompt_artifacts(None, config, changed) is False
