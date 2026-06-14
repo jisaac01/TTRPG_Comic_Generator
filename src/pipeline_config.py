@@ -16,6 +16,7 @@ from app_paths import default_campaigns_root
 RerunFrom = Literal["scrape", "entities", "beater", "script", "style", "prompt"]
 RecapVersion = Literal["short", "standard", "alternate", "long"]
 AspectRatio = Literal["1:1", "4:3", "3:2"]
+GenerationMode = Literal["page", "panel"]
 
 CAMPAIGNS_ROOT = default_campaigns_root()
 
@@ -43,6 +44,7 @@ class RunConfig:
     panel_count: int = 6
     total_pages: int = 1
     aspect_ratio: AspectRatio = "3:2"
+    generation_mode: GenerationMode = "page"
 
     # Optional template/prompt overrides (explicit paths)
     art_style_template: Path | None = None
@@ -102,6 +104,8 @@ class RunConfig:
             errors.append("total_pages must be > 0")
         if self.aspect_ratio not in {"1:1", "4:3", "3:2"}:
             errors.append("aspect_ratio must be one of 1:1, 4:3, 3:2")
+        if self.generation_mode not in {"page", "panel"}:
+            errors.append("generation_mode must be either 'page' or 'panel'")
         if self.art_style_template is not None and not self.art_style_template.exists():
             errors.append(f"art_style_template path does not exist: {self.art_style_template}")
         path_fields = [

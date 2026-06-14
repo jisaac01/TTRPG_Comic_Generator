@@ -27,3 +27,21 @@ def test_run_config_round_trip_preserves_generate_images() -> None:
     restored = RunConfig.from_dict(config.to_dict())
 
     assert restored.generate_images is True
+
+
+def test_run_config_defaults_to_page_generation_mode() -> None:
+    config = RunConfig(url="https://example.test/story", campaign="dreadmarsh")
+
+    assert config.generation_mode == "page"
+
+
+def test_run_config_round_trip_preserves_generation_mode() -> None:
+    config = RunConfig(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        generation_mode="panel",
+    )
+
+    restored = RunConfig.from_dict(config.to_dict())
+
+    assert restored.generation_mode == "panel"

@@ -14,7 +14,7 @@ This plan introduces a new "panel" generation mode to the pipeline. In this mode
 This phase focuses on modifying the pipeline to support the new generation mode, from configuration to prompt generation.
 
 **Steps**
-- [ ] 1. **Update Pipeline Configuration**:
+- [x] 1. **Update Pipeline Configuration**:
     *   In [src/pipeline_config.py](src/pipeline_config.py), modify the `RunConfig` class to include a `generation_mode` field. This field will accept either `"page"` or `"panel"` as values, with `"page"` as the default.
     *   This will allow the pipeline to switch between the existing page-based generation and the new panel-based generation.
 
