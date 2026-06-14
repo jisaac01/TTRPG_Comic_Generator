@@ -111,6 +111,12 @@ class _FakeSettingsService:
     def get_ollama_base_url(self) -> str:
         return "http://localhost:11434/v1"
 
+    def get_image_generation_model(self) -> str:
+        return "gemini-3.1-flash-image"
+
+    def set_image_generation_model(self, model: str) -> None:
+        self._image_generation_model = model
+
 
 class _FakeRepositoryService:
     def __init__(self) -> None:
@@ -180,6 +186,7 @@ def test_run_page_build_config_maps_form_fields() -> None:
     state["rerun_dropdown"].value = "script"
     state["recap_dropdown"].value = "short"
     state["skip_style_checkbox"].value = True
+    state["generate_images_checkbox"].value = True
     state["panel_count_field"].value = "4"
     state["total_pages_field"].value = "2"
     state["aspect_ratio_dropdown"].value = "3:2"
@@ -193,7 +200,8 @@ def test_run_page_build_config_maps_form_fields() -> None:
     assert config.panel_count == 4
     assert config.total_pages == 2
     assert config.aspect_ratio == "3:2"
-    assert config.generate_images is False
+    assert config.generate_images is True
+    assert config.image_generation_model == "gemini-3.1-flash-image"
     assert not hasattr(config, "beater_model")
     assert not hasattr(config, "script_model")
     assert not hasattr(config, "style_model")

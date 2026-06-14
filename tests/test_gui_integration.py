@@ -79,6 +79,7 @@ class _FakeSettingsService:
         self._gemini_api_key = ""
         self._ollama_base_url = "http://localhost:11434/v1"
         self._default_model = "gemini-3.1-flash-lite"
+        self._image_generation_model = "gemini-2.5-flash-image"
 
     def get_gemini_api_key(self) -> str | None:
         return self._gemini_api_key
@@ -97,6 +98,12 @@ class _FakeSettingsService:
 
     def set_default_model(self, model: str) -> None:
         self._default_model = model
+
+    def get_image_generation_model(self) -> str:
+        return self._image_generation_model
+
+    def set_image_generation_model(self, model: str) -> None:
+        self._image_generation_model = model
 
     def apply_to_environment(self) -> None:
         return

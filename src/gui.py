@@ -152,6 +152,17 @@ def build_run_page(
         width=140,
     )
     skip_style_checkbox = _ft.Checkbox(label="Skip style", value=False)
+    generate_images_checkbox = _ft.Checkbox(label="Generate images", value=False)
+    image_generation_model_dropdown = _ft.Dropdown(
+        label="Image model",
+        value=services.settings.get_image_generation_model(),
+        options=[
+            _ft.dropdown.Option("gemini-2.5-flash-image", "gemini-2.5-flash-image"),
+            _ft.dropdown.Option("gemini-3.1-flash-image", "gemini-3.1-flash-image"),
+            _ft.dropdown.Option("gemini-3-pro-image", "gemini-3-pro-image"),
+        ],
+        width=260,
+    )
     panel_count_field = _ft.TextField(label="Panels", value="6", width=80)
     total_pages_field = _ft.TextField(label="Pages", value="1", width=80)
     aspect_ratio_dropdown = _ft.Dropdown(
@@ -236,6 +247,8 @@ def build_run_page(
             rerun_from=rerun,
             recap_version=recap_dropdown.value or "standard",  # type: ignore[arg-type]
             skip_style=bool(skip_style_checkbox.value),
+            generate_images=bool(generate_images_checkbox.value),
+            image_generation_model=image_generation_model_dropdown.value or services.settings.get_image_generation_model(),
             panel_count=int(panel_count_field.value or 6),
             total_pages=int(total_pages_field.value or 1),
             aspect_ratio=aspect_ratio_dropdown.value or "3:2",
@@ -365,8 +378,8 @@ def build_run_page(
             _ft.Row([campaign_dropdown, new_campaign_field, campaign_add_button], spacing=12),
             campaign_status_text,
             _ft.Row([run_mode_dropdown, url_field, episode_dropdown], spacing=12),
-            _ft.Row([rerun_dropdown, recap_dropdown, skip_style_checkbox], spacing=12),
-            _ft.Row([panel_count_field, total_pages_field, aspect_ratio_dropdown, model_field], spacing=12),
+            _ft.Row([rerun_dropdown, recap_dropdown, skip_style_checkbox, generate_images_checkbox], spacing=12),
+            _ft.Row([image_generation_model_dropdown, panel_count_field, total_pages_field, aspect_ratio_dropdown, model_field], spacing=12),
             _ft.Row([run_button, running_ring, running_gif, running_text, phase_badge, status_summary], spacing=12),
             run_error_text,
             version_text,
@@ -385,6 +398,8 @@ def build_run_page(
         "rerun_dropdown": rerun_dropdown,
         "recap_dropdown": recap_dropdown,
         "skip_style_checkbox": skip_style_checkbox,
+        "generate_images_checkbox": generate_images_checkbox,
+        "image_generation_model_dropdown": image_generation_model_dropdown,
         "panel_count_field": panel_count_field,
         "total_pages_field": total_pages_field,
         "aspect_ratio_dropdown": aspect_ratio_dropdown,
@@ -1346,6 +1361,16 @@ def build_main_layout(page: Any, services: AppServices) -> dict[str, Any]:
         value=services.settings.get_default_model(),
         expand=True,
     )
+    image_generation_model_input = ft.Dropdown(
+        label="Image Generation Model",
+        value=services.settings.get_image_generation_model(),
+        options=[
+            ft.dropdown.Option("gemini-2.5-flash-image", "gemini-2.5-flash-image"),
+            ft.dropdown.Option("gemini-3.1-flash-image", "gemini-3.1-flash-image"),
+            ft.dropdown.Option("gemini-3-pro-image", "gemini-3-pro-image"),
+        ],
+        width=420,
+    )
 
     status_text = ft.Text("Ready", size=12)
 
@@ -1353,6 +1378,7 @@ def build_main_layout(page: Any, services: AppServices) -> dict[str, Any]:
         if gemini_key_input.value:
             services.settings.set_gemini_api_key(gemini_key_input.value)
         services.settings.set_default_model(default_model_input.value or "")
+        services.settings.set_image_generation_model(image_generation_model_input.value or "gemini-2.5-flash-image")
         services.settings.apply_to_environment()
         status_text.value = "Settings saved"
         append_log_line(event_log, "Settings", "Saved settings", ft)
@@ -1362,7 +1388,7 @@ def build_main_layout(page: Any, services: AppServices) -> dict[str, Any]:
         modal=False,
         title=ft.Text("Settings"),
         content=ft.Column(
-            controls=[gemini_key_input, default_model_input],
+            controls=[gemini_key_input, default_model_input, image_generation_model_input],
             tight=True,
             width=520,
         ),

@@ -35,7 +35,7 @@ This plan outlines the steps to add a new image generation stage to the processi
         *   Emit `PhaseStarted`, `PhaseCompleted`, and `PhaseWarning` events as appropriate.
     *   Add the new stage to the main `run` method's execution flow.
 
-- [ ] 4.  **Update GUI for New Configuration (`src/gui.py`)**
+- [x] 4.  **Update GUI for New Configuration (`src/gui.py`)**
     *   In the "Settings" tab:
         *   Remove the individual model selection dropdowns.
         *   Add a new dropdown for `image_generation_model` with the specified options.
