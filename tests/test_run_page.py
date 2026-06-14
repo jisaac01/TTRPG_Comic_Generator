@@ -268,6 +268,15 @@ def test_run_page_run_button_disabled_on_click() -> None:
     assert page._last_task_coro is state["execute_run"]
 
 
+def test_run_page_does_not_expose_model_controls() -> None:
+    page = _FakePage()
+    event_log = ft.ListView()
+    _container, state = build_run_page(_services(), page, event_log, ft)
+
+    assert "model_field" not in state
+    assert "image_generation_model_dropdown" not in state
+
+
 @pytest.mark.asyncio
 async def test_run_page_execute_run_calls_launch_with_correct_config() -> None:
     page = _FakePage()

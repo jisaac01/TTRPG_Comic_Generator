@@ -156,16 +156,6 @@ def build_run_page(
     )
     skip_style_checkbox = _ft.Checkbox(label="Skip style", value=False)
     generate_images_checkbox = _ft.Checkbox(label="Generate images", value=False)
-    image_generation_model_dropdown = _ft.Dropdown(
-        label="Image model",
-        value=services.settings.get_image_generation_model(),
-        options=[
-            _ft.dropdown.Option("gemini-2.5-flash-image", "gemini-2.5-flash-image"),
-            _ft.dropdown.Option("gemini-3.1-flash-image", "gemini-3.1-flash-image"),
-            _ft.dropdown.Option("gemini-3-pro-image", "gemini-3-pro-image"),
-        ],
-        width=260,
-    )
     panel_count_field = _ft.TextField(label="Panels", value="6", width=80)
     total_pages_field = _ft.TextField(label="Pages", value="1", width=80)
     aspect_ratio_dropdown = _ft.Dropdown(
@@ -178,12 +168,6 @@ def build_run_page(
         ],
         width=180,
     )
-    model_field = _ft.TextField(
-        label="Model",
-        value=services.settings.get_default_model(),
-        width=280,
-    )
-
     run_button = _ft.Button("Run", disabled=False)
     running_ring = _ft.ProgressRing(width=16, height=16, stroke_width=2, visible=False)
     running_gif = _ft.Image(src=LOADING_GIF_URL, width=20, height=20, visible=False)
@@ -235,6 +219,15 @@ def build_run_page(
         elif rerun_dropdown.value == "scrape" or rerun_dropdown.value is None:
             rerun_dropdown.value = "beater"
 
+    def _set_busy_state(busy: bool) -> None:
+        run_button.disabled = busy
+        running_ring.visible = busy
+        running_gif.visible = busy
+        running_text.visible = busy
+        if busy:
+            status_summary.value = ""
+            run_error_text.value = ""
+
     def _build_config() -> RunConfig:
         mode = run_mode_dropdown.value or "story_url"
         selected_episode = _episodes_by_slug.get(episode_dropdown.value or "")
@@ -251,7 +244,7 @@ def build_run_page(
             recap_version=recap_dropdown.value or "standard",  # type: ignore[arg-type]
             skip_style=bool(skip_style_checkbox.value),
             generate_images=bool(generate_images_checkbox.value),
-            image_generation_model=image_generation_model_dropdown.value or services.settings.get_image_generation_model(),
+            image_generation_model=services.settings.get_image_generation_model(),
             panel_count=int(panel_count_field.value or 6),
             total_pages=int(total_pages_field.value or 1),
             aspect_ratio=aspect_ratio_dropdown.value or "3:2",
@@ -266,10 +259,7 @@ def build_run_page(
             detail = event.error_detail or event.message
             run_error_text.value = f"{event.phase} partial failure: {detail}"
         elif isinstance(event, RunCompleted):
-            run_button.disabled = False
-            running_ring.visible = False
-            running_gif.visible = False
-            running_text.visible = False
+            _set_busy_state(False)
             if event.status == "ok":
                 status_summary.value = "✓ OK"
                 run_error_text.value = ""
@@ -308,25 +298,14 @@ def build_run_page(
             status_summary.value = f"✗ {exc}"
             run_error_text.value = str(exc)
             append_log_line(event_log, "Run", str(exc), _ft)
-            run_button.disabled = False
-            running_ring.visible = False
-            running_gif.visible = False
-            running_text.visible = False
+            _set_busy_state(False)
             page.update()
         finally:
-            run_button.disabled = False
-            running_ring.visible = False
-            running_gif.visible = False
-            running_text.visible = False
+            _set_busy_state(False)
             page.update()
 
     def on_run_click(_event: Any) -> None:
-        status_summary.value = ""
-        run_error_text.value = ""
-        run_button.disabled = True
-        running_ring.visible = True
-        running_gif.visible = True
-        running_text.visible = True
+        _set_busy_state(True)
         page.update()
         page.run_task(_execute_run)
 
@@ -382,7 +361,7 @@ def build_run_page(
             campaign_status_text,
             _ft.Row([run_mode_dropdown, url_field, episode_dropdown], spacing=12),
             _ft.Row([rerun_dropdown, recap_dropdown, skip_style_checkbox, generate_images_checkbox], spacing=12),
-            _ft.Row([image_generation_model_dropdown, panel_count_field, total_pages_field, aspect_ratio_dropdown, model_field], spacing=12),
+            _ft.Row([panel_count_field, total_pages_field, aspect_ratio_dropdown], spacing=12),
             _ft.Row([run_button, running_ring, running_gif, running_text, phase_badge, status_summary], spacing=12),
             run_error_text,
             version_text,
@@ -402,11 +381,9 @@ def build_run_page(
         "recap_dropdown": recap_dropdown,
         "skip_style_checkbox": skip_style_checkbox,
         "generate_images_checkbox": generate_images_checkbox,
-        "image_generation_model_dropdown": image_generation_model_dropdown,
         "panel_count_field": panel_count_field,
         "total_pages_field": total_pages_field,
         "aspect_ratio_dropdown": aspect_ratio_dropdown,
-        "model_field": model_field,
         "run_button": run_button,
         "running_ring": running_ring,
         "running_gif": running_gif,
@@ -1076,10 +1053,12 @@ def build_output_page(
     async def _run_generate_selected_image() -> None:
         prompt_path = _selected_prompt_path()
         if prompt_path is None:
+            _set_output_busy_state(False)
             output_status_text.value = "Select a page prompt to regenerate"
             page.update()
             return
 
+        _set_output_busy_state(True)
         output_status_text.value = "Generating image..."
         page.update()
         try:
@@ -1088,6 +1067,7 @@ def build_output_page(
         except Exception as exc:
             output_status_text.value = f"Image generation failed: {exc}"
         finally:
+            _set_output_busy_state(False)
             page.update()
 
     async def _run_generate_all_images() -> None:
@@ -1096,15 +1076,18 @@ def build_output_page(
         version_dir = _selected_version_dir[0]
 
         if not campaign or not episode_slug:
+            _set_output_busy_state(False)
             output_status_text.value = "Select a campaign and episode before generating images"
             page.update()
             return
 
         if version_dir is None or not version_dir.exists():
+            _set_output_busy_state(False)
             output_status_text.value = "Select a version before generating images"
             page.update()
             return
 
+        _set_output_busy_state(True)
         output_status_text.value = "Generating images..."
         page.update()
         try:
@@ -1126,6 +1109,7 @@ def build_output_page(
         except (RuntimeError, ValueError) as exc:
             output_status_text.value = f"Image generation failed: {exc}"
         finally:
+            _set_output_busy_state(False)
             page.update()
 
     def on_file_change(_e: Any) -> None:
@@ -1201,7 +1185,16 @@ def build_output_page(
             output_status_text.value = "Unable to open version folder"
         page.update()
 
+    def _set_output_busy_state(busy: bool) -> None:
+        quick_rerun_button.disabled = busy
+        generate_images_button.disabled = busy
+        generate_selected_image_button.disabled = busy
+
     def on_quick_rerun_click(_e: Any) -> None:
+        _set_output_busy_state(True)
+        output_status_text.value = ""
+        page.update()
+
         campaign = campaign_dropdown.value or ""
         episode_slug = episode_dropdown.value or ""
         stage = quick_rerun_stage_dropdown.value or "beater"
@@ -1209,12 +1202,12 @@ def build_output_page(
         url = episode.url if episode and episode.url else ""
 
         if not campaign or not episode_slug:
+            _set_output_busy_state(False)
             output_status_text.value = "Select campaign and episode for quick rerun"
             page.update()
             return
 
         async def _run_quick_rerun() -> None:
-            quick_rerun_button.disabled = True
             quick_rerun_gif.visible = True
             quick_rerun_text.visible = True
             output_status_text.value = "Quick rerun started"
@@ -1242,16 +1235,28 @@ def build_output_page(
                 if event_log is not None:
                     append_log_line(event_log, "Run", str(exc), _ft)
             finally:
-                quick_rerun_button.disabled = False
+                _set_output_busy_state(False)
                 quick_rerun_gif.visible = False
                 quick_rerun_text.visible = False
                 page.update()
 
         page.run_task(_run_quick_rerun)
 
+    def on_generate_selected_image_click(_e: Any) -> None:
+        _set_output_busy_state(True)
+        output_status_text.value = ""
+        page.update()
+        page.run_task(_run_generate_selected_image)
+
+    def on_generate_images_click(_e: Any) -> None:
+        _set_output_busy_state(True)
+        output_status_text.value = ""
+        page.update()
+        page.run_task(_run_generate_all_images)
+
     quick_rerun_button.on_click = on_quick_rerun_click
-    generate_selected_image_button.on_click = lambda _e: page.run_task(_run_generate_selected_image)
-    generate_images_button.on_click = lambda _e: page.run_task(_run_generate_all_images)
+    generate_selected_image_button.on_click = on_generate_selected_image_click
+    generate_images_button.on_click = on_generate_images_click
 
     _refresh_campaign_options()
     _refresh_episodes()

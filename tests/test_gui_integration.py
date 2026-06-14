@@ -878,6 +878,37 @@ def test_output_page_exposes_generation_controls(tmp_path):
     assert state["generate_selected_image_button"] is not None
 
 
+def test_output_page_action_buttons_disable_when_started(tmp_path):
+    import flet as ft
+
+    campaigns_root = _make_output_versions(tmp_path)
+
+    class _BusyPage:
+        def __init__(self) -> None:
+            self.update_calls = 0
+            self.last_task = None
+
+        def update(self) -> None:
+            self.update_calls += 1
+
+        def run_task(self, task: object) -> None:
+            self.last_task = task
+
+    page = _BusyPage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+
+    state["quick_rerun_button"].on_click(None)
+    assert state["quick_rerun_button"].disabled is True
+
+    state["generate_images_button"].on_click(None)
+    assert state["generate_images_button"].disabled is True
+
+    state["generate_selected_image_button"].visible = True
+    state["generate_selected_image_button"].on_click(None)
+    assert state["generate_selected_image_button"].disabled is True
+
+
 def test_output_page_prompt_selection_enables_single_image_generation(tmp_path):
     import flet as ft
 
