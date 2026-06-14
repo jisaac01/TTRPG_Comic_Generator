@@ -1051,6 +1051,7 @@ async def test_two_campaigns_are_isolated(tmp_path):
             patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
             patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
             patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
+            patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
             patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT),
         ):
             await pipeline.run()

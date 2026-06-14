@@ -11,6 +11,7 @@ Routing rules:
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 
@@ -23,10 +24,18 @@ def _strip_matching_quotes(value: str) -> str:
     return value
 
 
+def _is_pytest_run() -> bool:
+    return "PYTEST_CURRENT_TEST" in os.environ or "pytest" in sys.modules
+
+
 def _load_local_env_once() -> None:
     """Load .env from current working directory once, without overriding existing env vars."""
     global _ENV_LOADED
     if _ENV_LOADED:
+        return
+
+    if _is_pytest_run():
+        _ENV_LOADED = True
         return
 
     env_path = Path(".env")
