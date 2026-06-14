@@ -16,7 +16,7 @@ user-invocable: true
 1. Run the project test suite immediately with the workspace virtual environment.
 2. Always use the VS Code task named "Run Pytest" for verification in this workspace.
 3. If you need a scoped subset, provide optional pytest arguments when prompted, such as `tests/test_pipeline.py -k image_generation`; leave the prompt blank for the full suite.
-4. Do not run raw `python -m pytest -q` here unless the task is literally unavailable.
+4. Do not run raw `python -m pytest -q`. If for some reason "Run Pytest" is not available, try to fix the problem with the task configuration rather than bypassing it.
 5. Report the result concisely, including the final pass/fail summary.
 
 ## Completion Checks
