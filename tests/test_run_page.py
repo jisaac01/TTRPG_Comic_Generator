@@ -174,6 +174,15 @@ def test_run_page_campaign_dropdown_populated() -> None:
     assert option_keys == ["flail", "kingmaker"]
 
 
+def test_run_page_exposes_generation_mode_selector() -> None:
+    page = _FakePage()
+    event_log = ft.ListView()
+    _container, state = build_run_page(_services(), page, event_log, ft)
+
+    assert "generation_mode_dropdown" in state
+    assert state["generation_mode_dropdown"].value == "page"
+
+
 def test_run_page_build_config_maps_form_fields() -> None:
     page = _FakePage()
     event_log = ft.ListView()
@@ -190,6 +199,7 @@ def test_run_page_build_config_maps_form_fields() -> None:
     state["panel_count_field"].value = "4"
     state["total_pages_field"].value = "2"
     state["aspect_ratio_dropdown"].value = "3:2"
+    state["generation_mode_dropdown"].value = "panel"
 
     config = state["build_config"]()
     assert config.url == "https://example.com/flail-ep-1"
@@ -200,6 +210,7 @@ def test_run_page_build_config_maps_form_fields() -> None:
     assert config.panel_count == 4
     assert config.total_pages == 2
     assert config.aspect_ratio == "3:2"
+    assert config.generation_mode == "panel"
     assert config.generate_images is True
     assert config.image_generation_model == "gemini-3.1-flash-image"
     assert not hasattr(config, "beater_model")

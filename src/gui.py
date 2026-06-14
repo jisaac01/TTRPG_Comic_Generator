@@ -160,6 +160,15 @@ def build_run_page(
     generate_images_checkbox = _ft.Checkbox(label="Generate images", value=False)
     panel_count_field = _ft.TextField(label="Panels", value="6", width=80)
     total_pages_field = _ft.TextField(label="Pages", value="1", width=80)
+    generation_mode_dropdown = _ft.Dropdown(
+        label="Generation mode",
+        value="page",
+        options=[
+            _ft.dropdown.Option("page", "Page by Page"),
+            _ft.dropdown.Option("panel", "Panel by Panel"),
+        ],
+        width=180,
+    )
     aspect_ratio_dropdown = _ft.Dropdown(
         label="Aspect ratio",
         value="3:2",
@@ -250,6 +259,7 @@ def build_run_page(
             panel_count=int(panel_count_field.value or 6),
             total_pages=int(total_pages_field.value or 1),
             aspect_ratio=aspect_ratio_dropdown.value or "3:2",
+            generation_mode=generation_mode_dropdown.value or "page",
         )
 
     def on_pipeline_event(event: PipelineEventUnion) -> None:
@@ -363,7 +373,7 @@ def build_run_page(
             campaign_status_text,
             _ft.Row([run_mode_dropdown, url_field, episode_dropdown], spacing=12),
             _ft.Row([rerun_dropdown, recap_dropdown, skip_style_checkbox, generate_images_checkbox], spacing=12),
-            _ft.Row([panel_count_field, total_pages_field, aspect_ratio_dropdown], spacing=12),
+            _ft.Row([panel_count_field, total_pages_field, generation_mode_dropdown, aspect_ratio_dropdown], spacing=12),
             _ft.Row([run_button, running_ring, running_gif, running_text, phase_badge, status_summary], spacing=12),
             run_error_text,
             version_text,
@@ -385,6 +395,7 @@ def build_run_page(
         "generate_images_checkbox": generate_images_checkbox,
         "panel_count_field": panel_count_field,
         "total_pages_field": total_pages_field,
+        "generation_mode_dropdown": generation_mode_dropdown,
         "aspect_ratio_dropdown": aspect_ratio_dropdown,
         "run_button": run_button,
         "running_ring": running_ring,
