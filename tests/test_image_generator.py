@@ -50,3 +50,29 @@ def test_image_generator_raises_when_response_has_no_image_payload() -> None:
 
     with pytest.raises(ValueError, match="No image data returned"):
         generator.generate_image("A blank scene")
+
+
+def test_save_image_rotates_existing_files_with_version_suffixes(tmp_path: Path) -> None:
+    output_path = tmp_path / "05_page_1.png"
+    output_path.write_bytes(b"current")
+    (tmp_path / "05_page_1_v1.png").write_bytes(b"previous-1")
+    (tmp_path / "05_page_1_v2.png").write_bytes(b"previous-2")
+
+    ImageGenerator(model="gemini-test").save_image(b"new", output_path)
+
+    assert output_path.read_bytes() == b"new"
+    assert (tmp_path / "05_page_1_v1.png").read_bytes() == b"current"
+    assert (tmp_path / "05_page_1_v2.png").read_bytes() == b"previous-1"
+    assert (tmp_path / "05_page_1_v3.png").read_bytes() == b"previous-2"
+
+
+def test_save_image_rotates_existing_files_for_non_png_suffixes(tmp_path: Path) -> None:
+    output_path = tmp_path / "05_page_1.jpg"
+    output_path.write_bytes(b"current")
+    (tmp_path / "05_page_1_v1.jpg").write_bytes(b"previous-1")
+
+    ImageGenerator(model="gemini-test").save_image(b"new", output_path)
+
+    assert output_path.read_bytes() == b"new"
+    assert (tmp_path / "05_page_1_v1.jpg").read_bytes() == b"current"
+    assert (tmp_path / "05_page_1_v2.jpg").read_bytes() == b"previous-1"

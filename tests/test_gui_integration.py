@@ -866,6 +866,32 @@ def test_output_page_run_status_shows_errors_and_warnings(tmp_path):
     assert "warnings=[fallback used]" in status_text
 
 
+def test_output_page_exposes_generation_controls(tmp_path):
+    import flet as ft
+
+    campaigns_root = _make_output_versions(tmp_path)
+    page = _FakePage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+
+    assert state["generate_images_button"] is not None
+    assert state["generate_selected_image_button"] is not None
+
+
+def test_output_page_prompt_selection_enables_single_image_generation(tmp_path):
+    import flet as ft
+
+    campaigns_root = _make_output_versions(tmp_path)
+    page = _FakePage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+
+    state["file_list"].value = "04_page_1_prompt.txt"
+    state["file_list"].on_change(type("Event", (), {"control": type("Control", (), {"value": "04_page_1_prompt.txt"})()})())
+
+    assert state["generate_selected_image_button"].visible is True
+
+
 def test_output_page_defaults_to_run_status_when_latest_failed(tmp_path):
     import flet as ft
 

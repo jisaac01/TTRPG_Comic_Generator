@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import re
 from pathlib import Path
 from typing import Callable, Protocol
 
@@ -41,5 +42,28 @@ class ImageGenerator:
     def save_image(self, image_bytes: bytes, output_path: Path) -> Path:
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        base_name = output_path.stem
+        suffix = output_path.suffix
+        versioned_files = sorted(
+            output_path.parent.glob(f"{base_name}_v*.png") if suffix == ".png" else output_path.parent.glob(f"{base_name}_v*{suffix}"),
+            key=lambda path: _version_number(path.name, base_name, suffix),
+        )
+
+        for candidate in reversed(versioned_files):
+            version = _version_number(candidate.name, base_name, suffix)
+            if version is None:
+                continue
+            target = candidate.with_name(f"{base_name}_v{version + 1}{suffix}")
+            candidate.replace(target)
+
+        if output_path.exists():
+            output_path.replace(output_path.with_name(f"{base_name}_v1{suffix}"))
+
         output_path.write_bytes(image_bytes)
         return output_path
+
+
+def _version_number(filename: str, base_name: str, suffix: str) -> int | None:
+    match = re.fullmatch(rf"{re.escape(base_name)}_v(\d+)" + re.escape(suffix), filename)
+    return int(match.group(1)) if match else None

@@ -42,7 +42,7 @@ This plan outlines the steps to add a new image generation stage to the processi
     *   In the "Run" tab:
         *   Add a "Generate images" checkbox that sets the `generate_images` flag in the `RunConfig`.
 
-- [ ] 5.  **Add GUI Controls for On-Demand Generation (`src/gui.py`)**
+- [x] 5.  **Add GUI Controls for On-Demand Generation (`src/gui.py`)**
     *   In the "Output" tab, which displays the contents of a version folder:
         *   Add a "Generate Images" button that, when clicked, runs a new pipeline execution specifically for the `IMAGE_GENERATION` stage on the selected version.
         *   Next to each `..._prompt.txt` file listed, add an icon button (e.g., a play or refresh icon).

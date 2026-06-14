@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import re
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -20,6 +22,7 @@ from pipeline_events import (
     RunCompleted,
     PipelineEventUnion,
 )
+from image_generator import ImageGenerator
 from prompt_templates import DEFAULT_PROMPTS_DIR
 from prompter import ART_DIRECTION_TEMPLATE_FIELDS, ART_DIRECTION_TEMPLATE_FILENAME
 from repository_service import CampaignPrompts, RepositoryService
@@ -799,6 +802,12 @@ def build_output_page(
     quick_rerun_button = _ft.OutlinedButton("Rerun")
     quick_rerun_gif = _ft.Image(src=LOADING_GIF_URL, width=20, height=20, visible=False)
     quick_rerun_text = _ft.Text("Running...", size=12, visible=False)
+    generate_images_button = _ft.OutlinedButton("Generate Images")
+    generate_selected_image_button = _ft.IconButton(
+        icon=_ft.Icons.REFRESH,
+        tooltip="Generate selected prompt image",
+        visible=False,
+    )
 
     file_list = _ft.RadioGroup(
         content=_ft.Column(
@@ -909,7 +918,13 @@ def build_output_page(
             f"Recap: {recap_version}  |  Aspect ratio: {aspect_ratio}"
         )
 
-    def _build_rerun_config(campaign: str, episode_slug: str, stage: str) -> RunConfig:
+    def _build_rerun_config(
+        campaign: str,
+        episode_slug: str,
+        stage: str,
+        *,
+        generate_images: bool = False,
+    ) -> RunConfig:
         meta = _load_episode_settings(campaign, episode_slug)
         panel_count = int(panel_count_field.value or meta.get("panel_count", 6))
         total_pages = int(total_pages_field.value or meta.get("total_pages", 1))
@@ -926,6 +941,8 @@ def build_output_page(
             rerun_from=cast(Any, rerun_from),
             recap_version=cast(RecapVersion, recap_version),
             skip_style=False,
+            generate_images=generate_images,
+            image_generation_model=services.settings.get_image_generation_model(),
             panel_count=panel_count,
             total_pages=total_pages,
             aspect_ratio=cast(AspectRatio, aspect_ratio),
@@ -1021,15 +1038,95 @@ def build_output_page(
         selected = file_list.value
         if not selected:
             preview.value = ""
+            generate_selected_image_button.visible = False
             return
         path = _selected_files.get(selected)
         if not path or not path.exists():
             preview.value = ""
+            generate_selected_image_button.visible = False
             return
         try:
             preview.value = _format_preview(path)
         except Exception as exc:
             preview.value = f"Unable to render preview: {exc}"
+        generate_selected_image_button.visible = path.name.startswith("04_page_") and path.name.endswith("_prompt.txt")
+
+    def _selected_prompt_path() -> Path | None:
+        selected = file_list.value
+        if not selected:
+            return None
+        path = _selected_files.get(selected)
+        return path if path and path.name.startswith("04_page_") and path.name.endswith("_prompt.txt") else None
+
+    def _generate_prompt_image(prompt_path: Path) -> Path:
+        version_dir = _selected_version_dir[0]
+        if version_dir is None:
+            raise ValueError("Select a version before generating images")
+
+        match = re.search(r"04_page_(\d+)_prompt\.txt$", prompt_path.name)
+        if match is None:
+            raise ValueError("Prompt file name is not a page prompt")
+
+        page_number = match.group(1)
+        output_path = version_dir / f"05_page_{page_number}.png"
+        generator = ImageGenerator(model=services.settings.get_image_generation_model())
+        generator.save_image(generator.generate_image(prompt_path.read_text(encoding="utf-8")), output_path)
+        return output_path
+
+    async def _run_generate_selected_image() -> None:
+        prompt_path = _selected_prompt_path()
+        if prompt_path is None:
+            output_status_text.value = "Select a page prompt to regenerate"
+            page.update()
+            return
+
+        output_status_text.value = "Generating image..."
+        page.update()
+        try:
+            output_path = await asyncio.to_thread(_generate_prompt_image, prompt_path)
+            output_status_text.value = f"Generated {output_path.name}"
+        except Exception as exc:
+            output_status_text.value = f"Image generation failed: {exc}"
+        finally:
+            page.update()
+
+    async def _run_generate_all_images() -> None:
+        campaign = campaign_dropdown.value or ""
+        episode_slug = episode_dropdown.value or ""
+        version_dir = _selected_version_dir[0]
+
+        if not campaign or not episode_slug:
+            output_status_text.value = "Select a campaign and episode before generating images"
+            page.update()
+            return
+
+        if version_dir is None or not version_dir.exists():
+            output_status_text.value = "Select a version before generating images"
+            page.update()
+            return
+
+        output_status_text.value = "Generating images..."
+        page.update()
+        try:
+            config = _build_rerun_config(campaign, episode_slug, "prompt", generate_images=True)
+            final_status: list[str] = []
+
+            def _on_event(event: PipelineEventUnion) -> None:
+                if isinstance(event, RunCompleted):
+                    final_status.append(event.status)
+                _refresh_all()
+                page.update()
+
+            await services.run_controller.launch_run(config, _on_event)
+            _refresh_all()
+            output_status_text.value = (
+                f"Generated images for {version_dir.name}: "
+                f"{final_status[0] if final_status else 'done'}"
+            )
+        except (RuntimeError, ValueError) as exc:
+            output_status_text.value = f"Image generation failed: {exc}"
+        finally:
+            page.update()
 
     def on_file_change(_e: Any) -> None:
         _load_selected_file()
@@ -1153,6 +1250,8 @@ def build_output_page(
         page.run_task(_run_quick_rerun)
 
     quick_rerun_button.on_click = on_quick_rerun_click
+    generate_selected_image_button.on_click = lambda _e: page.run_task(_run_generate_selected_image)
+    generate_images_button.on_click = lambda _e: page.run_task(_run_generate_all_images)
 
     _refresh_campaign_options()
     _refresh_episodes()
@@ -1187,7 +1286,15 @@ def build_output_page(
                     _ft.Container(
                         content=_ft.Column(
                             controls=[
-                                _ft.Text("Files", size=13, weight=_ft.FontWeight.W_500),
+                                _ft.Row(
+                                    controls=[
+                                        _ft.Text("Files", size=13, weight=_ft.FontWeight.W_500),
+                                        generate_selected_image_button,
+                                        generate_images_button,
+                                    ],
+                                    spacing=6,
+                                    vertical_alignment=_ft.CrossAxisAlignment.CENTER,
+                                ),
                                 _ft.Container(
                                     content=file_list,
                                     height=320,
@@ -1227,6 +1334,8 @@ def build_output_page(
         "output_status_text": output_status_text,
         "quick_rerun_stage_dropdown": quick_rerun_stage_dropdown,
         "quick_rerun_button": quick_rerun_button,
+        "generate_images_button": generate_images_button,
+        "generate_selected_image_button": generate_selected_image_button,
         "panel_count_field": panel_count_field,
         "total_pages_field": total_pages_field,
         "recap_dropdown": recap_dropdown,
