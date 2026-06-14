@@ -233,6 +233,7 @@ def prepare_page_prompt_template(
     art_template: dict[str, str],
     template_path: Path | None = None,
     *,
+    aspect_ratio: str = "3:2",
     output_suffix: str,
 ) -> str:
     """Prepare and save page prompt template before generation.
@@ -265,6 +266,7 @@ def prepare_page_prompt_template(
         character_details=character_details,
         page_elements_instruction=_format_page_elements_instruction(title, page_number),
         panel_count=script.panel_count,
+        aspect_ratio=aspect_ratio,
         panel_block=panel_block,
     )
 

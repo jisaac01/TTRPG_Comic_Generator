@@ -8,11 +8,11 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from app_paths import default_campaigns_root
 from model_defaults import DEFAULT_MODEL
-from pipeline_config import RunConfig
+from pipeline_config import AspectRatio, RecapVersion, RunConfig
 from pipeline_events import (
     PhaseError,
     PhasePartialFailure,
@@ -24,7 +24,7 @@ from prompt_templates import DEFAULT_PROMPTS_DIR
 from prompter import ART_DIRECTION_TEMPLATE_FIELDS, ART_DIRECTION_TEMPLATE_FILENAME
 from repository_service import CampaignPrompts, RepositoryService
 from run_controller import RunController
-from scraper import configure_playwright_runtime, playwright_browser_executable
+from scraper import configure_playwright_runtime, normalize_recap_version, playwright_browser_executable
 from settings_service import SettingsService
 
 try:
@@ -154,6 +154,16 @@ def build_run_page(
     skip_style_checkbox = _ft.Checkbox(label="Skip style", value=False)
     panel_count_field = _ft.TextField(label="Panels", value="6", width=80)
     total_pages_field = _ft.TextField(label="Pages", value="1", width=80)
+    aspect_ratio_dropdown = _ft.Dropdown(
+        label="Aspect ratio",
+        value="3:2",
+        options=[
+            _ft.dropdown.Option("1:1", "1:1 — Square"),
+            _ft.dropdown.Option("4:3", "4:3 — Vertical / Portrait"),
+            _ft.dropdown.Option("3:2", "3:2 — Standard comic page"),
+        ],
+        width=180,
+    )
     model_field = _ft.TextField(
         label="Model",
         value=services.settings.get_default_model(),
@@ -229,6 +239,7 @@ def build_run_page(
             skip_style=bool(skip_style_checkbox.value),
             panel_count=int(panel_count_field.value or 6),
             total_pages=int(total_pages_field.value or 1),
+            aspect_ratio=aspect_ratio_dropdown.value or "3:2",
             beater_model=model,
             script_model=model,
             style_model=model,
@@ -359,7 +370,7 @@ def build_run_page(
             campaign_status_text,
             _ft.Row([run_mode_dropdown, url_field, episode_dropdown], spacing=12),
             _ft.Row([rerun_dropdown, recap_dropdown, skip_style_checkbox], spacing=12),
-            _ft.Row([panel_count_field, total_pages_field, model_field], spacing=12),
+            _ft.Row([panel_count_field, total_pages_field, aspect_ratio_dropdown, model_field], spacing=12),
             _ft.Row([run_button, running_ring, running_gif, running_text, phase_badge, status_summary], spacing=12),
             run_error_text,
             version_text,
@@ -380,6 +391,7 @@ def build_run_page(
         "skip_style_checkbox": skip_style_checkbox,
         "panel_count_field": panel_count_field,
         "total_pages_field": total_pages_field,
+        "aspect_ratio_dropdown": aspect_ratio_dropdown,
         "model_field": model_field,
         "run_button": run_button,
         "running_ring": running_ring,
@@ -612,6 +624,13 @@ def build_prompt_page(
             source_dir_text.value = f"Source directory: {source_dir} (open failed)"
             page.update()
 
+    def on_copy_source_path(_e: Any) -> None:
+        key = _selected_key[0]
+        source_path = _resolve_source_path_for_key(key)
+        if source_path and source_path.exists():
+            _safe_set_clipboard(page, str(source_path))
+        page.update()
+
     def on_campaign_changed(event: Any) -> None:
         selected = _extract_change_value(event)
         if selected is not None:
@@ -704,7 +723,10 @@ def build_prompt_page(
 
 
 def _format_preview(path: Path) -> str:
-    text = path.read_text(encoding="utf-8")
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        return f"Unable to read file: {exc}"
     if path.suffix.lower() != ".json":
         return text
     try:
@@ -758,16 +780,21 @@ def build_output_page(
     loading_text = _ft.Text("Reloading...", size=12, visible=False)
 
     quick_rerun_stage_dropdown = _ft.Dropdown(
-        label="Quick Rerun Stage",
+        label="Rerun from stage",
         value="beater",
         options=[_ft.dropdown.Option(stage, label) for stage, label in _STAGE_LABELS],
         width=190,
     )
-    quick_rerun_button = _ft.OutlinedButton("Quick Rerun")
+    quick_rerun_button = _ft.OutlinedButton("Rerun")
     quick_rerun_gif = _ft.Image(src=LOADING_GIF_URL, width=20, height=20, visible=False)
     quick_rerun_text = _ft.Text("Running...", size=12, visible=False)
 
-    file_list = _ft.RadioGroup(content=_ft.Column(spacing=2))
+    file_list = _ft.RadioGroup(
+        content=_ft.Column(
+            spacing=2,
+            scroll=_ft.ScrollMode.AUTO,
+        )
+    )
     preview = _ft.TextField(
         multiline=True,
         min_lines=20,
@@ -778,6 +805,30 @@ def build_output_page(
     )
 
     run_status_text = _ft.Text("", size=12, selectable=True)
+    settings_text = _ft.Text("", size=12, selectable=True)
+    panel_count_field = _ft.TextField(label="Panels", value="6", width=80)
+    total_pages_field = _ft.TextField(label="Pages", value="1", width=80)
+    recap_dropdown = _ft.Dropdown(
+        label="Recap",
+        value="standard",
+        options=[
+            _ft.dropdown.Option("standard"),
+            _ft.dropdown.Option("short"),
+            _ft.dropdown.Option("alternate"),
+            _ft.dropdown.Option("long"),
+        ],
+        width=160,
+    )
+    aspect_ratio_settings_dropdown = _ft.Dropdown(
+        label="Aspect ratio",
+        value="3:2",
+        options=[
+            _ft.dropdown.Option("1:1", "1:1 — Square"),
+            _ft.dropdown.Option("4:3", "4:3 — Vertical / Portrait"),
+            _ft.dropdown.Option("3:2", "3:2 — Standard comic page"),
+        ],
+        width=200,
+    )
     version_path_text = _ft.Text("", size=11, selectable=True)
     output_status_text = _ft.Text("", size=12)
 
@@ -814,6 +865,64 @@ def build_output_page(
         versions = services.repository.list_versions(campaign, episode_slug)
         version_dropdown.options = [_ft.dropdown.Option(v.version) for v in versions]
         version_dropdown.value = versions[-1].version if versions else None
+
+    def _load_episode_settings(campaign: str, episode_slug: str) -> dict[str, Any]:
+        episode_dir = services.repository.campaigns_root / campaign / episode_slug
+        meta_path = episode_dir / "episode_meta.json"
+        if not meta_path.exists():
+            return {}
+        try:
+            return json.loads(meta_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return {}
+
+    def _sync_settings_controls() -> None:
+        campaign = campaign_dropdown.value or ""
+        episode_slug = episode_dropdown.value or ""
+        meta = _load_episode_settings(campaign, episode_slug) if campaign and episode_slug else {}
+        panel_count_field.value = str(meta.get("panel_count", 6))
+        total_pages_field.value = str(meta.get("total_pages", 1))
+        recap_dropdown.value = str(meta.get("recap_version", "standard"))
+        aspect_ratio_settings_dropdown.value = str(meta.get("aspect_ratio", "3:2"))
+
+    def _set_episode_settings_text() -> None:
+        campaign = campaign_dropdown.value or ""
+        episode_slug = episode_dropdown.value or ""
+        meta = _load_episode_settings(campaign, episode_slug) if campaign and episode_slug else {}
+        panel_count = meta.get("panel_count", 6)
+        total_pages = meta.get("total_pages", 1)
+        recap_version = meta.get("recap_version", "standard")
+        aspect_ratio = meta.get("aspect_ratio", "3:2")
+        settings_text.value = (
+            f"Panels: {panel_count}  |  Pages: {total_pages}  |  "
+            f"Recap: {recap_version}  |  Aspect ratio: {aspect_ratio}"
+        )
+
+    def _build_rerun_config(campaign: str, episode_slug: str, stage: str) -> RunConfig:
+        meta = _load_episode_settings(campaign, episode_slug)
+        model = services.settings.get_default_model() or DEFAULT_MODEL
+        panel_count = int(panel_count_field.value or meta.get("panel_count", 6))
+        total_pages = int(total_pages_field.value or meta.get("total_pages", 1))
+        recap_version = normalize_recap_version(recap_dropdown.value or meta.get("recap_version", "standard"))
+        aspect_ratio = aspect_ratio_settings_dropdown.value or str(meta.get("aspect_ratio", "3:2"))
+        if aspect_ratio not in {"1:1", "4:3", "3:2"}:
+            aspect_ratio = "3:2"
+        episode = _episodes_by_slug.get(episode_slug)
+        url = episode.url if episode and episode.url else ""
+        rerun_from = cast(Any, stage)
+        return RunConfig(
+            url=url,
+            campaign=campaign,
+            rerun_from=cast(Any, rerun_from),
+            recap_version=cast(RecapVersion, recap_version),
+            skip_style=False,
+            panel_count=panel_count,
+            total_pages=total_pages,
+            aspect_ratio=cast(AspectRatio, aspect_ratio),
+            beater_model=model,
+            script_model=model,
+            style_model=model,
+        )
 
     def _set_run_status() -> str | None:
         campaign = campaign_dropdown.value or ""
@@ -910,7 +1019,10 @@ def build_output_page(
         if not path or not path.exists():
             preview.value = ""
             return
-        preview.value = _format_preview(path)
+        try:
+            preview.value = _format_preview(path)
+        except Exception as exc:
+            preview.value = f"Unable to render preview: {exc}"
 
     def on_file_change(_e: Any) -> None:
         _load_selected_file()
@@ -921,12 +1033,19 @@ def build_output_page(
     def _refresh_all() -> None:
         _refresh_versions()
         status_value = _set_run_status()
+        _sync_settings_controls()
+        _set_episode_settings_text()
         _refresh_file_list(status_value)
         _load_selected_file()
-        campaign = campaign_dropdown.value or "-"
-        episode = episode_dropdown.value or "-"
-        version = version_dropdown.value or "-"
-        output_status_text.value = f"Loaded: {campaign} / {episode} / {version}"
+
+        campaign = campaign_dropdown.value or ""
+        episode_slug = episode_dropdown.value or ""
+        version = version_dropdown.value or ""
+
+        campaign_label = campaign or "-"
+        episode_label = episode_slug or "-"
+        version_label = version or "-"
+        output_status_text.value = f"Loaded: {campaign_label} / {episode_label} / {version_label}"
 
     def on_campaign_changed(event: Any) -> None:
         selected = _extract_change_value(event)
@@ -978,34 +1097,6 @@ def build_output_page(
             output_status_text.value = "Unable to open version folder"
         page.update()
 
-    def on_copy_prompt_path(_e: Any) -> None:
-        campaign = campaign_dropdown.value or ""
-        episode_slug = episode_dropdown.value or ""
-        version = version_dropdown.value or ""
-        if not (campaign and episode_slug and version):
-            return
-        page_prompt = services.repository.get_version_files(campaign, episode_slug, version).page_prompt
-        if not page_prompt:
-            output_status_text.value = "No page prompt file for selected version"
-        else:
-            _safe_set_clipboard(page, str(page_prompt))
-            output_status_text.value = "Copied latest prompt path"
-        page.update()
-
-    def on_copy_script_path(_e: Any) -> None:
-        campaign = campaign_dropdown.value or ""
-        episode_slug = episode_dropdown.value or ""
-        version = version_dropdown.value or ""
-        if not (campaign and episode_slug and version):
-            return
-        script = services.repository.get_version_files(campaign, episode_slug, version).script
-        if not script:
-            output_status_text.value = "No script file for selected version"
-        else:
-            _safe_set_clipboard(page, str(script))
-            output_status_text.value = "Copied latest script path"
-        page.update()
-
     def on_quick_rerun_click(_e: Any) -> None:
         campaign = campaign_dropdown.value or ""
         episode_slug = episode_dropdown.value or ""
@@ -1025,19 +1116,7 @@ def build_output_page(
             output_status_text.value = "Quick rerun started"
             page.update()
             try:
-                model = services.settings.get_default_model() or DEFAULT_MODEL
-                config = RunConfig(
-                    url=url,
-                    campaign=campaign,
-                    rerun_from=stage,  # type: ignore[arg-type]
-                    recap_version="standard",
-                    skip_style=False,
-                    panel_count=6,
-                    total_pages=1,
-                    beater_model=model,
-                    script_model=model,
-                    style_model=model,
-                )
+                config = _build_rerun_config(campaign, episode_slug, stage)
 
                 final_status: list[str] = []
 
@@ -1076,17 +1155,24 @@ def build_output_page(
         controls=[
             _ft.Text("Output", size=18, weight=_ft.FontWeight.W_600),
             _ft.Row([campaign_dropdown, episode_dropdown, version_dropdown, loading_ring, loading_text], spacing=12),
-            version_path_text,
             _ft.Row(
                 controls=[
+                    version_path_text,
                     _ft.OutlinedButton("Open Version Folder", on_click=on_open_version),
-                    _ft.OutlinedButton("Copy Latest Prompt Path", on_click=on_copy_prompt_path),
-                    _ft.OutlinedButton("Copy Latest Script Path", on_click=on_copy_script_path),
                 ],
-                spacing=8,
+                spacing=6,
             ),
-            _ft.Row([quick_rerun_stage_dropdown, quick_rerun_button, quick_rerun_gif, quick_rerun_text], spacing=10),
+            _ft.Row([quick_rerun_stage_dropdown], spacing=10),
+            _ft.Text("Episode settings", weight=_ft.FontWeight.W_600),
+            _ft.Row([
+                panel_count_field,
+                total_pages_field,
+                recap_dropdown,
+                aspect_ratio_settings_dropdown,
+            ], spacing=10),
+            _ft.Row([quick_rerun_button, quick_rerun_gif, quick_rerun_text], spacing=10),
             output_status_text,
+            settings_text,
             _ft.Text("Run status", weight=_ft.FontWeight.W_600),
             run_status_text,
             _ft.Row(
@@ -1095,11 +1181,16 @@ def build_output_page(
                         content=_ft.Column(
                             controls=[
                                 _ft.Text("Files", size=13, weight=_ft.FontWeight.W_500),
-                                file_list,
+                                _ft.Container(
+                                    content=file_list,
+                                    height=320,
+                                    expand=True,
+                                    clip_behavior=_ft.ClipBehavior.HARD_EDGE,
+                                ),
                             ],
                             spacing=4,
                         ),
-                        width=300,
+                        width=340,
                     ),
                     _ft.Column(
                         controls=[preview],
@@ -1117,16 +1208,22 @@ def build_output_page(
     )
 
     return container, {
+        "build_rerun_config": _build_rerun_config,
         "campaign_dropdown": campaign_dropdown,
         "episode_dropdown": episode_dropdown,
         "version_dropdown": version_dropdown,
         "file_list": file_list,
         "preview": preview,
         "run_status_text": run_status_text,
+        "settings_text": settings_text,
         "version_path_text": version_path_text,
         "output_status_text": output_status_text,
         "quick_rerun_stage_dropdown": quick_rerun_stage_dropdown,
         "quick_rerun_button": quick_rerun_button,
+        "panel_count_field": panel_count_field,
+        "total_pages_field": total_pages_field,
+        "recap_dropdown": recap_dropdown,
+        "aspect_ratio_dropdown": aspect_ratio_settings_dropdown,
         "refresh_campaigns": _refresh_campaign_options,
         "refresh_episodes": _refresh_episodes,
         "refresh_all": _refresh_all,
@@ -1206,6 +1303,20 @@ def build_main_layout(page: Any, services: AppServices) -> dict[str, Any]:
     page.theme_mode = ft.ThemeMode.LIGHT
     page.padding = 16
 
+    window = getattr(page, "window", None)
+    if window is not None:
+        window.width = 1500
+        window.height = 1100
+        window.min_width = 1200
+        window.min_height = 900
+    else:
+        page.window_width = 1500
+        page.window_height = 1100
+        page.window_min_width = 1200
+        page.window_min_height = 900
+
+    page.update()
+
     preflight_warnings = _playwright_preflight_warnings()
     preflight_text = ft.Text(
         "\n".join(preflight_warnings),
@@ -1270,9 +1381,8 @@ def build_main_layout(page: Any, services: AppServices) -> dict[str, Any]:
         actions_alignment=ft.MainAxisAlignment.END,
     )
 
-    settings_button = ft.IconButton(
-        icon=ft.Icons.SETTINGS,
-        tooltip="Settings",
+    settings_button = ft.TextButton(
+        "⚙ Settings",
         on_click=lambda _e: open_settings_dialog(page, settings_dialog),
     )
 

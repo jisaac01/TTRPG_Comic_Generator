@@ -194,6 +194,43 @@ def _register_episode(
     _write_index_atomic(campaigns_root, index)
 
 
+def _read_episode_meta(episode_dir: Path) -> dict:
+    meta_path = episode_dir / EPISODE_META_FILENAME
+    if not meta_path.exists():
+        return {}
+    try:
+        return json.loads(meta_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+
+
+def _write_episode_meta(episode_dir: Path, meta: dict) -> None:
+    episode_dir.mkdir(parents=True, exist_ok=True)
+    meta_path = episode_dir / EPISODE_META_FILENAME
+    fd, tmp_name = tempfile.mkstemp(dir=episode_dir, prefix=".episode_meta_", suffix=".json")
+    try:
+        with open(fd, "w", encoding="utf-8") as fh:
+            json.dump(meta, fh, indent=2, ensure_ascii=False)
+        Path(tmp_name).replace(meta_path)
+    except Exception:
+        Path(tmp_name).unlink(missing_ok=True)
+        raise
+
+
+def _update_episode_meta(episode_dir: Path, *, panel_count: int, total_pages: int, recap_version: str, aspect_ratio: str) -> None:
+    meta = _read_episode_meta(episode_dir)
+    meta.update(
+        {
+            "panel_count": panel_count,
+            "total_pages": total_pages,
+            "recap_version": recap_version,
+            "aspect_ratio": aspect_ratio,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+    _write_episode_meta(episode_dir, meta)
+
+
 # ---------------------------------------------------------------------------
 # Episode + version path resolution
 # ---------------------------------------------------------------------------
@@ -342,6 +379,7 @@ class ComicPipeline:
         style_model: str = DEFAULT_MODEL,
         panel_count: int = 6,
         total_pages: int = 1,
+        aspect_ratio: str = "3:2",
         art_style_template: Path | None = None,
         master_beater_system_prompt: Path | None = None,
         master_beater_user_prompt: Path | None = None,
@@ -363,6 +401,7 @@ class ComicPipeline:
         self.style_model = style_model
         self.panel_count = panel_count
         self.total_pages = total_pages
+        self.aspect_ratio = aspect_ratio
         self.art_style_template = art_style_template
         self.master_beater_system_prompt = master_beater_system_prompt
         self.master_beater_user_prompt = master_beater_user_prompt
@@ -546,6 +585,13 @@ class ComicPipeline:
             episode_dir = _resolve_episode_dir(
                 self.campaigns_root, self.campaign, self.url, raw.title
             )
+            _update_episode_meta(
+                episode_dir,
+                panel_count=self.panel_count,
+                total_pages=self.total_pages,
+                recap_version=self.recap_version,
+                aspect_ratio=self.aspect_ratio,
+            )
             version_dir, version_name = _create_version_dir(episode_dir, self.rerun_from)
             self._version_dir = version_dir
             self._emit(
@@ -563,6 +609,13 @@ class ComicPipeline:
 
         else:
             episode_dir = _episode_dir(self.campaigns_root, self.campaign, existing_episode)
+            _update_episode_meta(
+                episode_dir,
+                panel_count=self.panel_count,
+                total_pages=self.total_pages,
+                recap_version=self.recap_version,
+                aspect_ratio=self.aspect_ratio,
+            )
             version_dir, version_name = _create_version_dir(episode_dir, self.rerun_from)
             self._version_dir = version_dir
             self._emit(
@@ -1018,6 +1071,7 @@ class ComicPipeline:
                                 script=prompt_script,
                                 art_template=art_template,
                                 template_path=prompt_template_paths[PAGE_PROMPT_TEMPLATE_FILENAME],
+                                aspect_ratio=self.aspect_ratio,
                                 output_suffix=f"page_{page_number:03d}",
                             )
                         except Exception as exc:

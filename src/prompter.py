@@ -190,6 +190,7 @@ def generate_page_prompt(
     ),
     output_path: Path = Path("campaigns/<campaign>/<episode>/v001/04_page_1_prompt.txt"),
     page_prompt_template_path: Path | None = None,
+    aspect_ratio: str = "3:2",
 ) -> str:
     script = ScriptCheckpoint.model_validate_json(
         script_checkpoint_path.read_text(encoding="utf-8")
@@ -212,6 +213,7 @@ def generate_page_prompt(
         character_details=character_details,
         page_elements_instruction=_format_page_elements_instruction(title, page_number),
         panel_count=script.panel_count,
+        aspect_ratio=aspect_ratio,
         panel_block=panel_block,
     )
 

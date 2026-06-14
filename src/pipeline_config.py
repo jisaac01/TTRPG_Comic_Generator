@@ -16,6 +16,7 @@ from model_defaults import DEFAULT_MODEL
 
 RerunFrom = Literal["scrape", "entities", "beater", "script", "style", "prompt"]
 RecapVersion = Literal["short", "standard", "alternate", "long"]
+AspectRatio = Literal["1:1", "4:3", "3:2"]
 
 CAMPAIGNS_ROOT = default_campaigns_root()
 
@@ -43,6 +44,7 @@ class RunConfig:
     # Output structure
     panel_count: int = 6
     total_pages: int = 1
+    aspect_ratio: AspectRatio = "3:2"
 
     # Optional template/prompt overrides (explicit paths)
     art_style_template: Path | None = None
@@ -100,6 +102,8 @@ class RunConfig:
             errors.append("panel_count must be > 0")
         if self.total_pages <= 0:
             errors.append("total_pages must be > 0")
+        if self.aspect_ratio not in {"1:1", "4:3", "3:2"}:
+            errors.append("aspect_ratio must be one of 1:1, 4:3, 3:2")
         if self.art_style_template is not None and not self.art_style_template.exists():
             errors.append(f"art_style_template path does not exist: {self.art_style_template}")
         path_fields = [

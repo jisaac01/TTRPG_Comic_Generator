@@ -34,6 +34,14 @@ class _FakeSession:
         self._values[key] = value
 
 
+class _FakeWindow:
+    def __init__(self) -> None:
+        self.width = None
+        self.height = None
+        self.min_width = None
+        self.min_height = None
+
+
 class _FakePage:
     def __init__(self) -> None:
         self.title = ""
@@ -44,6 +52,7 @@ class _FakePage:
         self.update_calls = 0
         self.session = _FakeSession()
         self.clipboard_text = ""
+        self.window = _FakeWindow()
 
     def add(self, control: object) -> None:
         self.controls.append(control)
@@ -99,6 +108,17 @@ def _services(tmp_path: Path) -> AppServices:
         settings=_FakeSettingsService(),  # type: ignore[arg-type]
         run_controller=RunController(),
     )
+
+
+def test_gui_main_layout_applies_window_size_via_page_window(tmp_path):
+    page = _FakePage()
+
+    build_main_layout(page, _services(tmp_path))
+
+    assert page.window.width == 1500
+    assert page.window.height == 1100
+    assert page.window.min_width == 1200
+    assert page.window.min_height == 900
 
 
 def test_gui_main_layout_builds_tabs_and_event_log(tmp_path):
@@ -753,6 +773,75 @@ def test_output_page_json_preview_is_pretty(tmp_path):
 
     assert "\n" in state["preview"].value
     assert "  \"a\"" in state["preview"].value
+
+
+def test_output_page_build_rerun_config_uses_live_controls(tmp_path):
+    import flet as ft
+
+    campaigns_root = _make_output_versions(tmp_path)
+    episode_dir = campaigns_root / "test_camp" / "episode-1"
+    (episode_dir / "episode_meta.json").write_text(
+        json.dumps(
+            {
+                "slug": "episode-1",
+                "url": "https://example.com/story",
+                "title": "Episode 1",
+                "created_at": "2026-05-18T00:00:00Z",
+                "panel_count": 6,
+                "total_pages": 1,
+                "recap_version": "standard",
+                "aspect_ratio": "3:2",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    page = _FakePage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+
+    state["panel_count_field"].value = "10"
+    state["total_pages_field"].value = "4"
+    state["recap_dropdown"].value = "long"
+    state["aspect_ratio_dropdown"].value = "4:3"
+
+    config = state["build_rerun_config"]("test_camp", "episode-1", "beater")
+
+    assert config.panel_count == 10
+    assert config.total_pages == 4
+    assert config.recap_version == "long"
+    assert config.aspect_ratio == "4:3"
+
+
+def test_output_page_shows_episode_settings_from_meta(tmp_path):
+    import flet as ft
+
+    campaigns_root = _make_output_versions(tmp_path)
+    episode_dir = campaigns_root / "test_camp" / "episode-1"
+    (episode_dir / "episode_meta.json").write_text(
+        json.dumps(
+            {
+                "slug": "episode-1",
+                "url": "https://example.com/story",
+                "title": "Episode 1",
+                "created_at": "2026-05-18T00:00:00Z",
+                "panel_count": 8,
+                "total_pages": 3,
+                "recap_version": "short",
+                "aspect_ratio": "3:2",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    page = _FakePage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+
+    assert "Panels: 8" in state["settings_text"].value
+    assert "Pages: 3" in state["settings_text"].value
+    assert "Recap: short" in state["settings_text"].value
+    assert "Aspect ratio: 3:2" in state["settings_text"].value
 
 
 def test_output_page_run_status_shows_errors_and_warnings(tmp_path):

@@ -182,6 +182,7 @@ def test_run_page_build_config_maps_form_fields() -> None:
     state["skip_style_checkbox"].value = True
     state["panel_count_field"].value = "4"
     state["total_pages_field"].value = "2"
+    state["aspect_ratio_dropdown"].value = "3:2"
     state["model_field"].value = "gemini-3.2-flash"
 
     config = state["build_config"]()
@@ -192,6 +193,7 @@ def test_run_page_build_config_maps_form_fields() -> None:
     assert config.skip_style is True
     assert config.panel_count == 4
     assert config.total_pages == 2
+    assert config.aspect_ratio == "3:2"
     assert config.beater_model == "gemini-3.2-flash"
     assert config.script_model == "gemini-3.2-flash"
 
