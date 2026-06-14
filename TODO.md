@@ -5,67 +5,77 @@
 - [ ] panel stitching
 ---
 
-## Plan: Add Image Generation Pipeline Stage
+## Plan: Implement Panel-by-Panel Generation Mode
 
-This plan outlines the steps to add a new image generation stage to the processing pipeline. The stage will be off by default and can be triggered for an entire version or for individual image prompts from the GUI. We will also refactor model configuration to be more centralized.
+This plan introduces a new "panel" generation mode to the pipeline. In this mode, image prompts are generated for each panel individually, and the resulting images are then stitched together to form a complete page. This approach will provide more granular control over image generation and lay the groundwork for more flexible page layouts in the future.
+
+### Phase 1: Core Panel Generation Logic
+
+This phase focuses on modifying the pipeline to support the new generation mode, from configuration to prompt generation.
 
 **Steps**
+- [ ] 1. **Update Pipeline Configuration**:
+    *   In [src/pipeline_config.py](src/pipeline_config.py), modify the `RunConfig` class to include a `generation_mode` field. This field will accept either `"page"` or `"panel"` as values, with `"page"` as the default.
+    *   This will allow the pipeline to switch between the existing page-based generation and the new panel-based generation.
 
-- [x] 1.  **Update Configuration (`src/pipeline_config.py` and `src/settings_service.py`)**
-    *   In `src/settings_service.py`:
-        *   Add a new property `image_generation_model` to `SettingsService` with a getter and setter. The default value should be `gemini-2.5-flash-image`.
-        *   The available models will be `gemini-2.5-flash-image`, `gemini-3.1-flash-image`, and `gemini-3-pro-image`.
-    *   In `src/pipeline_config.py`:
-        *   Add a new boolean field `generate_images: bool = False` to the `RunConfig` dataclass. This will control whether the image generation stage runs as part of a full pipeline execution.
-        *   Remove `beater_model`, `script_model`, and `style_model`. These will now be managed by `SettingsService` as a single default.
+- [ ] 2. **Adapt Pipeline Orchestration**:
+    *   In [src/pipeline.py](src/pipeline.py), update the `ComicPipeline.run()` method to check the `generation_mode`.
+    *   If the mode is `"panel"`, the pipeline logic will need to iterate through each panel within a page's script checkpoint (`03_script_page_*.json`) to generate individual image prompts.
+    *   The output should be one prompt file per panel (e.g., `04_page_1_panel_1_prompt.txt`, `04_page_1_panel_2_prompt.txt`, etc.) instead of one per page.
 
-- [x] 2.  **Create Image Generation Logic (`src/image_generator.py`)**
-    *   Create a new file `src/image_generator.py`.
-    *   Implement a class `ImageGenerator` that takes an `LLMClient` instance.
-    *   Create a method `generate_image(prompt: str) -> bytes` that calls the image generation model via `llm_client` and returns the image data.
-    *   Add a method `save_image(image_data: bytes, output_path: Path)`.
-
-- [x] 3.  **Integrate Image Generation into Pipeline (`src/pipeline.py`)**
-    *   Add a new pipeline stage `IMAGE_GENERATION = "Image Generation"`.
-    *   Create a new private method `_run_image_generation_stage` in `ComicPipeline`.
-    *   This method will:
-        *   Check the `run_config.generate_images` flag. If `False`, the stage will be skipped unless it's the `rerun_from` target.
-        *   Find all `04_page_*_prompt.txt` files in the version directory.
-        *   For each prompt file, call the `ImageGenerator` to generate and save the image (e.g., as `05_page_001.png`).
-        *   Emit `PhaseStarted`, `PhaseCompleted`, and `PhaseWarning` events as appropriate.
-    *   Add the new stage to the main `run` method's execution flow.
-
-- [x] 4.  **Update GUI for New Configuration (`src/gui.py`)**
-    *   In the "Settings" tab:
-        *   Remove the individual model selection dropdowns.
-        *   Add a new dropdown for `image_generation_model` with the specified options.
-    *   In the "Run" tab:
-        *   Add a "Generate images" checkbox that sets the `generate_images` flag in the `RunConfig`.
-
-- [x] 5.  **Add GUI Controls for On-Demand Generation (`src/gui.py`)**
-    *   In the "Output" tab, which displays the contents of a version folder:
-        *   Add a "Generate Images" button that, when clicked, runs a new pipeline execution specifically for the `IMAGE_GENERATION` stage on the selected version.
-        *   Next to each `..._prompt.txt` file listed, add an icon button (e.g., a play or refresh icon).
-        *   Clicking this icon will trigger the generation of a single image for that specific prompt and save it to the version folder.
+- [ ] 3. **Refine Prompter for Panel-Level Context**:
+    *   In [src/prompter.py](src/prompter.py), adjust the `Prompter` class to generate prompts at the panel level when in `"panel"` mode.
+    *   The existing character filtering logic (`_character_is_referenced()`) should be applied to the text of a single panel, rather than the entire page. This will ensure that only characters present in a specific panel are included in its image prompt.
+    *   Modify the prompt templates to remove page-level context like page numbers or episode titles from individual panel prompts.
 
 **Relevant files**
-- `src/pipeline.py` — To add the new image generation stage.
-- `src/pipeline_config.py` — To add the `generate_images` flag to `RunConfig` and remove model-specific fields.
-- `src/settings_service.py` — To add the new `image_generation_model` setting.
-- `src/gui.py` — To update the UI with the new settings and generation buttons.
-- `src/image_generator.py` — **New file** to house the image generation logic.
-- `src/llm_client.py` — To add a method for calling the image generation API.
+- [src/pipeline_config.py](src/pipeline_config.py) — To add the `generation_mode` flag to `RunConfig`.
+- [src/pipeline.py](src/pipeline.py) — To modify the main pipeline logic to handle the new mode.
+- [src/prompter.py](src/prompter.py) — To adapt prompt generation and character filtering to the panel level.
+
+### Phase 2: Image Stitching and GUI Integration
+
+This phase covers combining the generated panel images into a single page and exposing the new mode in the user interface.
+
+**Steps**
+- [ ] 1. **Develop a Robust Image Stitcher**:
+    *   Create a new module, `src/image_stitcher.py`, to handle the combination of panel images.
+    *   This module will replace the functionality of the existing [src/combine_temp_images.py](src/combine_temp_images.py) script with a more production-ready solution.
+    *   The stitcher should initially support a basic grid layout but be designed with future flexibility in mind. It should read panel metadata (like `panel_scale` and `panel_shape` from the script checkpoint) to determine the layout.
+
+- [ ] 2. **Integrate Stitcher into Pipeline**:
+    *   In [src/pipeline.py](src/pipeline.py), add a new pipeline stage that runs the image stitcher after the panel images have been generated in `"panel"` mode.
+    *   The stitcher will take the individual panel images and the corresponding script checkpoint as input to produce a final page image.
+
+- [ ] 3. **Update GUI for Mode Selection**:
+    *   In [src/gui.py](src/gui.py), add a control (e.g., a dropdown or radio buttons) to allow the user to select the `generation_mode` (`"Page by Page"` or `"Panel by Panel"`).
+    *   This selection will be passed to the `RunConfig` when a pipeline run is initiated.
+
+**Relevant files**
+- `src/image_stitcher.py` (new file) — For the new production-ready image stitching logic.
+- [src/pipeline.py](src/pipeline.py) — To integrate the new stitching step.
+- [src/gui.py](src/gui.py) — To add the UI control for selecting the generation mode.
+
+### Phase 3: Advanced Layouts and Future Considerations
+
+This phase outlines the steps for supporting more complex and dynamic page layouts, building on the foundation established in the previous phases.
+
+**Steps**
+- [ ] 1. **Enhance the Layout Engine**:
+    *   Evolve the `image_stitcher.py` module into a more sophisticated layout engine.
+    *   Implement logic to support variable panel sizes and positions based on the `panel_scale` and `panel_shape` attributes in the `Panel` objects.
+    *   This will enable layouts where panels can have different dimensions (e.g., a panel taking up 3/4 of a page).
+
+- [ ] 2. **Support for Overlays and Annotations**:
+    *   Extend the layout engine to handle elements that are not strictly panels, such as overlapping panels, text annotations between panels, and page numbers.
+    *   This may require adding new object types to the script checkpoint schema to represent these elements.
+
+**Relevant files**
+- `src/image_stitcher.py` — To be enhanced into an advanced layout engine.
+- [src/scriptwriter.py](src/scriptwriter.py) — May need modifications to support new layout elements in the script.
 
 **Verification**
-1.  Run the full pipeline with "Generate images" unchecked and confirm no images are created.
-2.  Run the full pipeline with "Generate images" checked and confirm images are created in the version folder.
-3.  After a run is complete, navigate to the "Output" tab, select the version, and click the main "Generate Images" button. Verify it generates images for all prompts.
-4.  On the "Output" tab, click the icon button next to a single prompt file and verify it generates/regenerates only that one image.
-5.  Check that the image generation model can be changed in the settings and that the new setting is used for generation.
-
-**Decisions**
-- **Centralized Model Config**: Moving the text model configuration to `SettingsService` simplifies the `RunConfig` and makes the "Run" page cleaner. The image model will also be a global setting.
-- **Default Off**: Image generation is an expensive operation, so it will be an explicit opt-in action, either via a checkbox for a full run or a button for a completed run. This prevents accidental costs.
-- **Granular Control**: Providing both a full-version and a per-prompt generation trigger offers flexibility for iterating on art.
-
-
+1.  Run the pipeline in `"panel"` mode and verify that individual image prompts are created for each panel.
+2.  Confirm that the generated panel images are correctly stitched together into a final page image that reflects a simple grid layout.
+3.  After implementing Phase 3, create test cases with varied `panel_scale` and `panel_shape` values to ensure the layout engine arranges panels correctly.
+4.  Use the "Run Pytest" task to ensure that existing tests continue to pass after these changes.
