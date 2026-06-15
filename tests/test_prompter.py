@@ -197,6 +197,11 @@ def test_generate_panel_prompt_uses_panel_scope_and_avoids_page_context(tmp_path
     assert "Panel count: 1" in prompt_text
     assert "Panel 1:" in prompt_text
 
+    # Panel framing (bugfix): single-panel images must have no/zero padding; content fills frame to edges.
+    # These assertions will fail until page_prompt.txt (and/or prompter formatter) is updated.
+    assert "zero external padding" in prompt_text
+    assert "fill the entire image frame" in prompt_text or "extend fully to the four edges" in prompt_text
+
 
 def test_generate_page_prompt_uses_page_number_on_later_pages(tmp_path):
     entities_path, script_path, template_path = _write_inputs(tmp_path)

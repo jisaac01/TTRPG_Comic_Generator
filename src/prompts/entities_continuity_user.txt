@@ -32,9 +32,16 @@ Return JSON with this shape:
       "aliases": ["..."]
     }}
   ],
+  "locations": [
+    {{ "name": "...", "appearance": "..." }}
+  ],
+  "beats": [
+    {{ "index": 1, "beat": "...", "highlights": ["..."] }}
+  ],
   "warnings": ["..."]
 }}
 
 Guidance:
 - Prefer specialized fields (physical_description, clothing_armor, weapons, character_quirks) over repeating the same details in description.
 - Keep description short and canonical; use the specialized fields for the richer visual and equipment detail the bible needs.
+- For locations and beats return deduplicated lists only (merge similar locations; drop duplicate or near-identical beats). Renumber final beats from 1. Bible name/facts take priority.

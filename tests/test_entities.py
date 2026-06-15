@@ -6,6 +6,7 @@ import pytest
 
 sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
+import entities
 from entities import (
     Character,
     Location,
@@ -29,7 +30,16 @@ from scraper import RawTextCheckpoint, ScrapedEntity, ScrapedQuote
 
 
 def _fake_continuity_merge(existing, incoming, model="test-model"):
+    """Lightweight simulation of LLM continuity merge for character fields only.
+    Provides deterministic name-priority + alias union behavior so that existing
+    write_entities_bible tests can assert on the resulting checkpoint and written files.
+    Locations and beats are passed through from existing (tests that need populated
+    locs/beats for write use local patches instead).
+    We do not simulate LLM dedup or fuzzy name matching here; those rules live in the
+    prompts and the real _merge_entities_with_llm (tested via direct payload delegation).
+    """
     merged = existing.model_copy(deep=True)
+
     if not incoming.player_characters:
         return merged, []
 
@@ -57,6 +67,8 @@ def _fake_continuity_merge(existing, incoming, model="test-model"):
         )
 
     merged.player_characters = merged_characters
+    # For locs/beats, tests exercising them use local patches returning explicit results.
+    # Keep from existing to avoid polluting shared tests that expect empty.
     return merged, ["description continuity warning"]
 
 
@@ -762,4 +774,160 @@ def test_write_entities_bible_creates_campaign_root_and_version_copy(monkeypatch
     assert merged.player_characters[0].name == "Wulf"
     assert merged.player_characters[0].description == "A weathered sailor with a red scarf."
     assert any("description" in warning.lower() for warning in warnings)
+
+
+def test_write_entities_bible_writes_locations_and_beats_from_merge_result(monkeypatch, tmp_path):
+    """Covers that write_entities_bible correctly persists locations and beats (and character
+    name priority) coming from the continuity merge into both the campaign bible and the
+    version-local 02_5 copy. The actual merging/dedup rules live in the LLM + prompts;
+    here we use a local patch returning an explicit clean result and assert on the outputs
+    (files written, returned checkpoint).
+    """
+    campaign_root = tmp_path / "campaigns" / "belowdown"
+    episode_dir = campaign_root / "belowdown-ep-12"
+    version_dir = episode_dir / "v016"
+    version_dir.mkdir(parents=True)
+
+    existing = WorldStateCheckpoint(
+        url="https://example.test/story",
+        title="Belowdown Ep. 12",
+        author=None,
+        model="bible",
+        player_characters=[Character(name="Wulf", description="Orc tank.", class_name="Sea Wolf", race="Orc", aliases=[])],
+        npcs=[],
+        locations=[],
+        beats=[],
+        analyzed_at="2026-05-04T00:00:00+00:00",
+    )
+    (campaign_root / "entities_bible.json").write_text(existing.model_dump_json(indent=2), encoding="utf-8")
+
+    incoming = WorldStateCheckpoint(
+        url="https://example.test/story-current",
+        title="Belowdown Ep. 12",
+        author=None,
+        model="scraper-direct",
+        player_characters=[Character(name="Wolf", description="Orc warrior.", class_name="Sea Wolf", race="Orc", aliases=[])],
+        npcs=[],
+        locations=[
+            Location(name="Dungeon - 13th Floor", appearance="Dusty dangerous level."),
+            Location(name="The Town", appearance="Main hub."),
+        ],
+        beats=[
+            StoryBeat(index=1, beat="Descent and Ambush", highlights=["Skeletons."]),
+            StoryBeat(index=2, beat="Gargoyles", highlights=["Defeated."]),
+        ],
+        analyzed_at="2026-06-14T00:00:00+00:00",
+    )
+    entities_path = version_dir / "02_entities.json"
+    entities_path.write_text(incoming.model_dump_json(indent=2), encoding="utf-8")
+
+    # Explicit clean result that "the LLM" (per prompt rules) would return:
+    # bible name kept, incoming name in aliases, locs/beats as provided by merge (no dups).
+    clean_merged = WorldStateCheckpoint(
+        url=existing.url,
+        title=existing.title,
+        author=existing.author,
+        model="bible",
+        player_characters=[
+            Character(
+                name="Wulf",
+                description="Orc warrior.",
+                class_name="Sea Wolf",
+                race="Orc",
+                aliases=["Wolf"],
+            )
+        ],
+        npcs=[],
+        locations=[
+            Location(name="Dungeon - 13th Floor", appearance="Dusty dangerous level."),
+            Location(name="The Town", appearance="Main hub."),
+        ],
+        beats=[
+            StoryBeat(index=1, beat="Descent and Ambush", highlights=["Skeletons."]),
+            StoryBeat(index=2, beat="Gargoyles", highlights=["Defeated."]),
+        ],
+        analyzed_at=existing.analyzed_at,
+    )
+
+    def local_fake_merge(ex, inc, model="test-model"):
+        return clean_merged, ["name priority applied"]
+
+    monkeypatch.setattr("entities._merge_entities_with_llm", local_fake_merge)
+
+    bible_path, version_copy_path, result, warnings = write_entities_bible(
+        campaign_root=campaign_root,
+        version_dir=version_dir,
+        entities_path=entities_path,
+    )
+
+    assert bible_path == campaign_root / "entities_bible.json"
+    assert version_copy_path == version_dir / "02_5_entities_bible.json"
+    assert bible_path.exists() and version_copy_path.exists()
+    assert result == clean_merged
+    assert any("name priority" in w.lower() for w in warnings)
+
+    written = json.loads(bible_path.read_text(encoding="utf-8"))
+    assert written["player_characters"][0]["name"] == "Wulf"
+    assert "Wolf" in written["player_characters"][0]["aliases"]
+    assert len(written["locations"]) == 2
+    assert len(written["beats"]) == 2
+
+
+def test_merge_entities_with_llm_uses_payload_for_locations_and_beats(monkeypatch):
+    """Directly exercises the fixed _merge_entities_with_llm: it must take locations and
+    beats from the LLM payload (the source of truth per the continuity prompt) rather
+    than performing its own concatenation. Mocks only the external LLM API boundary.
+    """
+    from unittest.mock import MagicMock
+
+    existing = WorldStateCheckpoint(
+        url="u",
+        title="t",
+        author=None,
+        model="m",
+        player_characters=[],
+        npcs=[],
+        locations=[Location(name="Old Place", appearance="old")],
+        beats=[StoryBeat(index=1, beat="Old Beat", highlights=["old"])],
+        analyzed_at="2026-01-01T00:00:00+00:00",
+    )
+    incoming = WorldStateCheckpoint(
+        url="u2",
+        title="t2",
+        author=None,
+        model="m",
+        player_characters=[],
+        npcs=[],
+        locations=[Location(name="New Place", appearance="new")],
+        beats=[StoryBeat(index=1, beat="New Beat", highlights=["new"])],
+        analyzed_at="2026-01-02T00:00:00+00:00",
+    )
+
+    # The "LLM" returns a payload that has already done the (dedup/priority) work.
+    payload_json = json.dumps({
+        "player_characters": [],
+        "npcs": [],
+        "locations": [{"name": "Canonical Place", "appearance": "from bible or merged"}],
+        "beats": [{"index": 1, "beat": "Canonical Beat", "highlights": ["from llm"]}],
+        "warnings": ["llm did the merge"],
+    })
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value = MagicMock(
+        choices=[MagicMock(message=MagicMock(content=payload_json))]
+    )
+
+    monkeypatch.setattr("entities.build_openai_client", lambda model: mock_client)
+
+    merged, warnings = entities._merge_entities_with_llm(existing, incoming)
+
+    # Must come from payload, not any concat of existing + incoming
+    assert len(merged.locations) == 1
+    assert merged.locations[0].name == "Canonical Place"
+    assert merged.locations[0].appearance == "from bible or merged"
+
+    assert len(merged.beats) == 1
+    assert merged.beats[0].beat == "Canonical Beat"
+
+    assert "llm did the merge" in warnings
 

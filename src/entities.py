@@ -50,6 +50,8 @@ class StoryBeat(BaseModel):
 class ContinuityMergePayload(BaseModel):
     player_characters: list[Character] = Field(default_factory=list)
     npcs: list[Character] = Field(default_factory=list)
+    locations: list[Location] = Field(default_factory=list)
+    beats: list[StoryBeat] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
 
 
@@ -126,6 +128,8 @@ def _merge_entities_with_llm(
     merge_payload = ContinuityMergePayload.model_validate(payload)
     merged_characters = merge_payload.player_characters or list(existing.player_characters)
     merged_npcs = merge_payload.npcs or list(existing.npcs)
+    merged_locations = merge_payload.locations or list(existing.locations)
+    merged_beats = merge_payload.beats or list(existing.beats)
 
     merged = WorldStateCheckpoint(
         url=existing.url or incoming.url,
@@ -134,8 +138,8 @@ def _merge_entities_with_llm(
         model=model,
         player_characters=merged_characters,
         npcs=merged_npcs,
-        locations=list(existing.locations) + list(incoming.locations),
-        beats=list(existing.beats) + list(incoming.beats),
+        locations=merged_locations,
+        beats=merged_beats,
         analyzed_at=existing.analyzed_at or incoming.analyzed_at,
     )
 

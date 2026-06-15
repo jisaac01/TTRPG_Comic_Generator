@@ -160,7 +160,13 @@ def _format_output_goal(generation_mode: str = "page") -> str:
 
 def _format_page_elements_instruction(title: str, page_number: int, generation_mode: str = "page") -> str:
     if generation_mode == "panel":
-        return ""
+        return (
+            "Panel framing: When generating a single panel image (or the content of any individual panel), "
+            "the depicted scene must completely fill the image frame with zero external padding, margins, "
+            "whitespace, or borders around the content. All visual elements, characters, setting, and action "
+            "must extend fully to the four edges of the generated image (tight crop / full-bleed within the "
+            "panel rectangle). Do not introduce vignette, extra space, or decorative framing that shrinks the active content area."
+        )
     if page_number == 1:
         return f'Page elements: Include the title "{title}" on the page.'
     return f"Page elements: Include page number {page_number} at the bottom of the page."
