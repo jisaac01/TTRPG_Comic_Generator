@@ -1,6 +1,17 @@
 # Copilot instructions
 
-- For full-suite verification and regression checks, run the workspace command directly in a terminal: `source .venv/bin/activate && python -m pytest -q`.
-- For scoped or focused pytest runs, use the dedicated focused-test workflow or run the selector directly in a terminal, for example `source .venv/bin/activate && python -m pytest -q tests/test_pipeline.py -k image_generation`.
-- The `source .venv/bin/activate &&` prefix ensures the virtual environment is loaded before pytest runs.
-- Keep the current LLM-backed continuity flow as the source of truth; avoid reintroducing deterministic merge-only assumptions.
+Canonical agent guidelines: **[AGENTS.md](../AGENTS.md)**.
+
+## Quick commands
+
+- Full suite: `source .venv/bin/activate && python -m pytest -q`
+- Focused run: `source .venv/bin/activate && python -m pytest -q tests/test_pipeline.py -k image_generation`
+
+Always activate the venv before pytest. Write tests first; assert on outputs and behaviors, not implementation plumbing.
+
+## Project-specific reminders
+
+- Tests are the source of truth — the app is generated to satisfy them.
+- No backwards compatibility, no legacy fallbacks, no hacky workarounds.
+- Entity continuity uses the LLM merge path in `entities.py`; do not revert to deterministic-only merge.
+- Pipeline runs are versioned under `campaigns/<campaign>/<episode>/vNNN/`; never overwrite prior versions.
