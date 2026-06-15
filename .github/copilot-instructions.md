@@ -1,6 +1,6 @@
 # Copilot instructions
 
-- Always use the existing VS Code task named "Run Pytest" for verification and regression checks.
-- If you need a scoped test run, supply optional pytest arguments when the task prompts (for example, `tests/test_pipeline.py -k image_generation`); leave it blank for the full suite.
-- Do not run raw `python -m pytest -q` in this workspace; use the task path instead.
+- For full-suite verification and regression checks, run the workspace command directly in a terminal: `source .venv/bin/activate && python -m pytest -q`.
+- For scoped or focused pytest runs, use the dedicated focused-test workflow or run the selector directly in a terminal, for example `source .venv/bin/activate && python -m pytest -q tests/test_pipeline.py -k image_generation`.
+- The `source .venv/bin/activate &&` prefix ensures the virtual environment is loaded before pytest runs.
 - Keep the current LLM-backed continuity flow as the source of truth; avoid reintroducing deterministic merge-only assumptions.
