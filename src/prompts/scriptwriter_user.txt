@@ -1,6 +1,7 @@
 Story title: {title}
 
 Faithfully adapt the story bible into an interesting, readable, and visually compelling comic book.
+What are the most salient moments in the story? Was a foe vanquished? Did a main character die? Was a key plot point resolved? Was there a TPK?
 Write exactly {panel_count} story panels.
 
 {first_page_panel_1_narration_directive}

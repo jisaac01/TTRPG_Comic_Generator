@@ -203,6 +203,26 @@ def test_generate_panel_prompt_uses_panel_scope_and_avoids_page_context(tmp_path
     assert "fill the entire image frame" in prompt_text or "extend fully to the four edges" in prompt_text
 
 
+def test_generate_page_prompt_includes_new_panel_fields(tmp_path):
+    entities_path, script_path, template_path = _write_inputs(tmp_path)
+    script = json.loads(script_path.read_text(encoding="utf-8"))
+    script["pages"][0]["panels"][0]["summary"] = "Del enters the marsh with a torch."
+    script["pages"][0]["panels"][0]["characters"] = ["Del", "Vendetta"]
+    script["pages"][0]["panels"][0]["camera_framing"] = "Low-angle tracking shot from behind Del."
+    script_path.write_text(json.dumps(script), encoding="utf-8")
+
+    prompt_text = prompter.generate_page_prompt(
+        script_checkpoint_path=script_path,
+        entities_checkpoint_path=entities_path,
+        art_style_template_path=template_path,
+        output_path=tmp_path / "04_page_1_prompt.txt",
+    )
+
+    assert "- Summary: Del enters the marsh with a torch." in prompt_text
+    assert "- Characters: Del, Vendetta" in prompt_text
+    assert "- Camera Framing: Low-angle tracking shot from behind Del." in prompt_text
+
+
 def test_generate_page_prompt_uses_page_number_on_later_pages(tmp_path):
     entities_path, script_path, template_path = _write_inputs(tmp_path)
     script = json.loads(script_path.read_text(encoding="utf-8"))

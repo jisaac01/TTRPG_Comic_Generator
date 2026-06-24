@@ -40,6 +40,9 @@ class Panel(BaseModel):
 
     index: int = Field(ge=1)
     page_number: int = Field(ge=1, description="Which page this panel appears on")
+    summary: str = Field(default="", description="One-sentence description of the panel's story purpose")
+    characters: list[str] = Field(default_factory=list, description="Characters to show or focus on")
+    camera_framing: str = Field(default="", description="Visual direction for framing and camera angle")
     panel_scale: Literal["small", "medium", "large", "splash"]
     panel_shape: Literal["standard", "wide", "tall", "inset", "irregular"]
     setting: str = Field(min_length=1)
@@ -331,6 +334,9 @@ def merge_panel_scripts_into_page(
             Panel(
                 index=source.index,
                 page_number=page_number,
+                summary=source.summary,
+                characters=list(source.characters),
+                camera_framing=source.camera_framing,
                 panel_scale=source.panel_scale,
                 panel_shape=source.panel_shape,
                 setting=source.setting,
@@ -385,6 +391,9 @@ def renumber_script_page_checkpoints(
                 Panel(
                     index=next_index,
                     page_number=page_number,
+                    summary=panel.summary,
+                    characters=list(panel.characters),
+                    camera_framing=panel.camera_framing,
                     panel_scale=panel.panel_scale,
                     panel_shape=panel.panel_shape,
                     setting=panel.setting,
@@ -496,6 +505,9 @@ def _normalize_panels(
             Panel(
                 index=idx,
                 page_number=panel.page_number,
+                summary=panel.summary,
+                characters=list(panel.characters),
+                camera_framing=panel.camera_framing,
                 panel_scale=panel.panel_scale,
                 panel_shape=panel.panel_shape,
                 setting=panel.setting,
@@ -642,6 +654,9 @@ def write_script(
             Panel(
                 index=panel.index,
                 page_number=page_num,
+                summary=panel.summary,
+                characters=list(panel.characters),
+                camera_framing=panel.camera_framing,
                 panel_scale=panel.panel_scale,
                 panel_shape=panel.panel_shape,
                 setting=panel.setting,

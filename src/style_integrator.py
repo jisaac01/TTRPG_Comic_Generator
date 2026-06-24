@@ -127,6 +127,9 @@ def _normalize_panels_from_source(
             Panel(
                 index=source.index,
                 page_number=source.page_number,
+                summary=source.summary,
+                characters=list(source.characters),
+                camera_framing=source.camera_framing,
                 panel_scale=source.panel_scale,
                 panel_shape=source.panel_shape,
                 setting=styled.setting,

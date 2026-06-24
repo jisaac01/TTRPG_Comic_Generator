@@ -35,6 +35,9 @@ def _default_art_direction_template_json() -> str:
 def _collect_panel_text(script: ScriptCheckpoint) -> str:
     parts: list[str] = []
     for panel in script.panels:
+        parts.append(panel.summary)
+        parts.extend(panel.characters)
+        parts.append(panel.camera_framing)
         parts.append(panel.setting)
         parts.append(panel.visual_action)
         parts.extend(panel.dialogue_overlay)
@@ -180,8 +183,16 @@ def _format_panel_block(script: ScriptCheckpoint) -> str:
             if panel.dialogue_overlay
             else "None"
         )
+        characters = (
+            ", ".join(panel.characters)
+            if panel.characters
+            else "None"
+        )
         panel_content = [
             f"Panel {panel.index}:",
+            f"- Summary: {panel.summary or 'None'}",
+            f"- Characters: {characters}",
+            f"- Camera Framing: {panel.camera_framing or 'None'}",
             f"- Panel Scale: {panel.panel_scale}",
             f"- Panel Shape: {panel.panel_shape}",
             f"- Setting: {panel.setting}",
@@ -194,7 +205,7 @@ def _format_panel_block(script: ScriptCheckpoint) -> str:
             panel_content.append(
                 f"- Narrative Overlays & Text Direction: {overlays_text}"
             )
-        
+
         panel_lines.append("\n".join(panel_content))
 
     return "\n\n".join(panel_lines)

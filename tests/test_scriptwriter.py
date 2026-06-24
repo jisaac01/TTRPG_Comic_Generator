@@ -9,6 +9,34 @@ import master_beater
 from model_defaults import DEFAULT_MODEL
 
 
+def test_panel_model_accepts_summary_characters_and_camera_framing() -> None:
+    panel = scriptwriter.Panel(
+        index=1,
+        page_number=1,
+        panel_scale="medium",
+        panel_shape="standard",
+        setting="Marsh edge",
+        visual_action="Del raises a torch while Vendetta watches the reeds.",
+        summary="Del leads the party into the foggy marsh at dusk.",
+        characters=["Del", "Vendetta"],
+        camera_framing="Low angle tracking shot from behind Del.",
+        dialogue_overlay=["Del: Stay close."],
+    )
+
+    assert panel.summary == "Del leads the party into the foggy marsh at dusk."
+    assert panel.characters == ["Del", "Vendetta"]
+    assert panel.camera_framing == "Low angle tracking shot from behind Del."
+
+
+def test_scriptwriter_system_prompt_mentions_new_panel_fields() -> None:
+    prompt_path = Path(__file__).resolve().parents[1] / "src" / "prompts" / "scriptwriter_system.txt"
+    prompt_text = prompt_path.read_text(encoding="utf-8")
+
+    assert "summary" in prompt_text.lower()
+    assert "characters" in prompt_text.lower()
+    assert "camera" in prompt_text.lower()
+
+
 def _write_input_checkpoints(tmp_path: Path) -> tuple[Path, Path, Path]:
     raw_input = {
         "url": "https://example.test/story",

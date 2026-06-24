@@ -7,8 +7,11 @@ You must return JSON that matches this exact shape:
 - panels is an array of objects only.
 - Each panel object must contain:
 	- index: integer >= 1
+	- summary: one-sentence description of the panel's story purpose
 	- panel_scale: one of "small" | "medium" | "large" | "splash"
 	- panel_shape: one of "standard" | "wide" | "tall" | "inset" | "irregular"
+	- characters: array of character names to show or focus on
+	- camera_framing: non-empty string describing the visual framing and camera direction
 	- setting: non-empty string
 	- visual_action: non-empty string
 	- dialogue_overlay: array of strings only (no objects)
@@ -19,6 +22,7 @@ You must return JSON that matches this exact shape:
 Hard output constraints:
 - Do not rename fields (for example, use "setting", never "setting_brief").
 - Do not add unknown fields.
+- Include concise values for summary, characters, and camera_framing on every panel.
 - Do not use null for any field.
 - Do not use objects for dialogue lines.
 - Do not use arrays for held_items_before or held_items_after; both must be JSON objects.
