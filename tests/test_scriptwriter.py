@@ -196,6 +196,57 @@ def test_write_script_writes_checkpoint_and_normalizes_panel_indices(tmp_path):
     assert payload["pages"][0]["panels"][1]["held_items_before"]["Del"] == ["torch"]
 
 
+def test_write_script_filters_panel_characters_to_referenced_entities(tmp_path):
+    raw_path, entities_path, architecture_path = _write_input_checkpoints(tmp_path)
+    entities = json.loads(entities_path.read_text(encoding="utf-8"))
+    entities["player_characters"].append(
+        {
+            "name": "Orion",
+            "description": "A former ally absent from this scene",
+        }
+    )
+    entities_path.write_text(json.dumps(entities), encoding="utf-8")
+
+    def fake_generator(_world, _story_bible, _model):
+        return scriptwriter.ScriptPayload(
+            pages=[
+                scriptwriter.Page(
+                    page_number=1,
+                    panel_count=1,
+                    panels=[
+                        scriptwriter.Panel(
+                            index=1,
+                            page_number=1,
+                            panel_scale="medium",
+                            panel_shape="standard",
+                            setting="Marsh edge",
+                            visual_action="Del raises a torch while Vendetta watches the reeds.",
+                            summary="Del and Vendetta move through the marsh.",
+                            characters=["Del", "Vendetta", "Orion"],
+                            camera_framing="Low angle tracking shot from behind Del.",
+                            dialogue_overlay=["Del: Stay close."],
+                            held_items_before={"Del": [], "Vendetta": []},
+                            held_items_after={"Del": ["torch"], "Vendetta": []},
+                            narrative_overlays_and_text_direction=[],
+                        )
+                    ],
+                )
+            ]
+        )
+
+    checkpoint = scriptwriter.write_script(
+        raw_checkpoint_path=raw_path,
+        entities_checkpoint_path=entities_path,
+        story_bible_checkpoint_path=architecture_path,
+        output_path=tmp_path / "03_script.json",
+        system_prompt_text="TEST_SYSTEM_PROMPT",
+        user_prompt_text="TEST_USER_PROMPT",
+        generator=fake_generator,
+    )
+
+    assert checkpoint.pages[0].panels[0].characters == ["Del", "Vendetta"]
+
+
 def test_write_script_accepts_any_panel_count_without_error(tmp_path):
     raw_path, entities_path, architecture_path = _write_input_checkpoints(tmp_path)
 

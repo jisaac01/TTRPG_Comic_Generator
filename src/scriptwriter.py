@@ -492,21 +492,79 @@ def _generate_with_instructor_ollama(
     )
 
 
+def _normalize_name(value: str) -> str:
+    return " ".join(value.split()).strip().lower()
+
+
+def _character_is_referenced(name: str, panel_text: str) -> bool:
+    pattern = r"(?<!\\w)" + re.escape(name) + r"(?!\\w)"
+    return re.search(pattern, panel_text, flags=re.IGNORECASE) is not None
+
+
+def _collect_panel_context(panel: Panel) -> str:
+    parts = [
+        panel.summary,
+        panel.camera_framing,
+        panel.setting,
+        panel.visual_action,
+        *panel.dialogue_overlay,
+        *panel.narrative_overlays_and_text_direction,
+    ]
+    return " ".join(parts)
+
+
+def _filter_panel_characters(panel: Panel, world: WorldStateInput) -> list[str]:
+    canonical_names: dict[str, str] = {}
+    for character in [*world.player_characters, *world.npcs]:
+        canonical_names[_normalize_name(character.name)] = character.name
+        for alias in character.aliases or []:
+            alias_name = alias.strip()
+            if alias_name:
+                canonical_names[_normalize_name(alias_name)] = character.name
+
+    if not canonical_names:
+        return []
+
+    panel_text = _collect_panel_context(panel)
+    filtered: list[str] = []
+    seen: set[str] = set()
+    for raw_name in panel.characters:
+        normalized_name = _normalize_name(raw_name)
+        if not normalized_name:
+            continue
+        if normalized_name not in canonical_names:
+            continue
+        if not _character_is_referenced(raw_name, panel_text):
+            continue
+        canonical_name = canonical_names[normalized_name]
+        if canonical_name in seen:
+            continue
+        seen.add(canonical_name)
+        filtered.append(canonical_name)
+
+    return filtered
+
+
 def _normalize_panels(
     panels: list[Panel],
     story_bible: StoryBibleCheckpoint,
+    world: WorldStateInput | None = None,
 ) -> list[Panel]:
     normalized: list[Panel] = []
     for idx, panel in enumerate(panels, start=1):
         # With story_bible (text-only), we don't have per-panel metadata like panel_scale/shape.
         # The LLM generates these values based on the narrative context.
         # We just normalize the panel indices to ensure consistency.
+        characters = list(panel.characters)
+        if world is not None:
+            characters = _filter_panel_characters(panel, world)
+
         normalized.append(
             Panel(
                 index=idx,
                 page_number=panel.page_number,
                 summary=panel.summary,
-                characters=list(panel.characters),
+                characters=characters,
                 camera_framing=panel.camera_framing,
                 panel_scale=panel.panel_scale,
                 panel_shape=panel.panel_shape,
@@ -630,8 +688,9 @@ def write_script(
     for page in payload.pages:
         flat_panels.extend(page.panels)
     
-    # Normalize panels
-    panels = _normalize_panels(flat_panels, story_bible)
+    # Normalize panels and prune character lists to the canonical entities that are actually
+    # referenced by the panel content.
+    panels = _normalize_panels(flat_panels, story_bible, world)
     
     # Distribute panels sequentially across pages
     # If total_pages=3 and we have 18 panels, page 1 gets 0-5, page 2 gets 6-11, page 3 gets 12-17
