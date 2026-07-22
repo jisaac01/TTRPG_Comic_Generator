@@ -83,3 +83,40 @@ def test_should_copy_prompt_artifacts_only_when_config_unchanged() -> None:
     changed = dict(config)
     changed["generation_mode"] = "panel"
     assert should_copy_prompt_artifacts(None, config, changed) is False
+
+
+def test_run_config_round_trip_preserves_art_style() -> None:
+    config = RunConfig(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        art_style="bundled:brutalist",
+    )
+
+    restored = RunConfig.from_dict(config.to_dict())
+
+    assert restored.art_style == "bundled:brutalist"
+
+
+def test_effective_rerun_from_bumps_when_art_style_changes() -> None:
+    prev = run_config_snapshot(
+        RunConfig(
+            url="https://example.test/story",
+            campaign="dreadmarsh",
+            art_style="bundled:brutalist",
+        )
+    )
+    new = dict(prev)
+    new["art_style"] = "campaign:custom"
+
+    assert effective_rerun_from("prompt", prev, new) == "style"
+
+
+def test_run_config_snapshot_includes_art_style() -> None:
+    snap = run_config_snapshot(
+        RunConfig(
+            url="https://example.test/story",
+            campaign="dreadmarsh",
+            art_style="bundled:brutalist",
+        )
+    )
+    assert snap["art_style"] == "bundled:brutalist"

@@ -1153,8 +1153,8 @@ async def test_two_campaigns_are_isolated(tmp_path):
 
 @pytest.mark.asyncio
 async def test_campaign_level_art_template_is_used_by_default(tmp_path):
-    """Campaign-level art_direction_template.json is passed to Phase 4 when present."""
-    template_path = tmp_path / "dreadmarsh" / "art_direction_template.json"
+    """Campaign art_direction/<style>.json is used when present."""
+    template_path = tmp_path / "dreadmarsh" / "art_direction" / "custom.json"
     template_path.parent.mkdir(parents=True, exist_ok=True)
     template_path.write_text(
         '{"base_style": "Brutalist ink style.", "characters": "Consistent iconic silhouettes.", '
@@ -1185,12 +1185,16 @@ async def test_campaign_level_art_template_is_used_by_default(tmp_path):
     version_template_path = _version_dir_from_result(result) / "art_direction_template.json"
     assert kwargs["art_style_template_path"] == version_template_path
     assert version_template_path.read_text(encoding="utf-8") == template_path.read_text(encoding="utf-8")
+    assert result.get("run_config", {}).get("art_style") == "campaign:custom" or (
+        pipeline.art_style == "campaign:custom"
+    )
 
 
 @pytest.mark.asyncio
-async def test_campaign_art_template_is_created_on_first_run(tmp_path):
-    """First run auto-creates campaign-level art_direction_template.json when missing."""
-    template_path = tmp_path / "dreadmarsh" / "art_direction_template.json"
+async def test_bundled_default_art_style_used_when_campaign_has_none(tmp_path):
+    """First run uses bundled default style without creating a campaign art file."""
+    campaign_template = tmp_path / "dreadmarsh" / "art_direction_template.json"
+    campaign_art_dir = tmp_path / "dreadmarsh" / "art_direction"
 
     pipeline = ComicPipeline(
         url="https://example.test/story",
@@ -1209,21 +1213,68 @@ async def test_campaign_art_template_is_created_on_first_run(tmp_path):
     ):
         result = await pipeline.run()
 
-    assert template_path.exists()
-    assert template_path.read_text(encoding="utf-8") == DEFAULT_ART_DIRECTION_TEMPLATE_PATH.read_text(
-        encoding="utf-8"
-    )
+    assert not campaign_template.exists()
+    assert not campaign_art_dir.exists() or not any(campaign_art_dir.glob("*.json"))
 
     _, kwargs = mock_integrate.call_args
     version_template_path = _version_dir_from_result(result) / "art_direction_template.json"
     assert kwargs["art_style_template_path"] == version_template_path
-    assert version_template_path.read_text(encoding="utf-8") == template_path.read_text(encoding="utf-8")
+    assert version_template_path.read_text(encoding="utf-8") == (
+        DEFAULT_ART_DIRECTION_TEMPLATE_PATH.read_text(encoding="utf-8")
+    )
+    assert pipeline.art_style == "bundled:brutalist"
+
+
+@pytest.mark.asyncio
+async def test_art_style_id_selects_named_style(tmp_path):
+    """art_style id selects a specific campaign style over the campaign default order."""
+    art_dir = tmp_path / "dreadmarsh" / "art_direction"
+    first = art_dir / "aaa.json"
+    selected = art_dir / "zzz.json"
+    art_dir.mkdir(parents=True, exist_ok=True)
+    first.write_text(
+        '{"base_style": "First style.", "characters": "Cast A.", '
+        '"color_palette": "BW.", "layout_and_composition": "Single page.", '
+        '"lettering_and_dialog": "Hand lettering.", '
+        '"text_rendering_guide": "Balloons and boxes."}',
+        encoding="utf-8",
+    )
+    selected.write_text(
+        '{"base_style": "Selected style.", "characters": "Cast Z.", '
+        '"color_palette": "Color.", "layout_and_composition": "Single page.", '
+        '"lettering_and_dialog": "Sharp lettering.", '
+        '"text_rendering_guide": "Distinct balloons and boxes."}',
+        encoding="utf-8",
+    )
+
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=2,
+        art_style="campaign:zzz",
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
+        patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT) as mock_integrate,
+        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT),
+    ):
+        result = await pipeline.run()
+
+    version_template_path = _version_dir_from_result(result) / "art_direction_template.json"
+    _, kwargs = mock_integrate.call_args
+    assert kwargs["art_style_template_path"] == version_template_path
+    assert version_template_path.read_text(encoding="utf-8") == selected.read_text(encoding="utf-8")
 
 
 @pytest.mark.asyncio
 async def test_explicit_art_template_overrides_campaign_default(tmp_path):
     """Explicit art_style_template constructor arg takes precedence over campaign default."""
-    campaign_template = tmp_path / "dreadmarsh" / "art_direction_template.json"
+    campaign_template = tmp_path / "dreadmarsh" / "art_direction" / "campaign.json"
     campaign_template.parent.mkdir(parents=True, exist_ok=True)
     campaign_template.write_text(
         '{"base_style": "Campaign default.", "characters": "Consistent campaign cast designs.", '

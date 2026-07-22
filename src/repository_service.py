@@ -8,6 +8,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from art_styles import (
+    ART_DIRECTION_TEMPLATE_FILENAME,
+    DEFAULT_ART_STYLE_STEM,
+    campaign_art_direction_dir,
+)
 from prompt_templates import (
     MASTER_BEATER_SYSTEM_PROMPT_FILENAME,
     MASTER_BEATER_USER_PROMPT_FILENAME,
@@ -17,8 +22,6 @@ from prompt_templates import (
     STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME,
     STYLE_INTEGRATOR_USER_PROMPT_FILENAME,
 )
-
-ART_DIRECTION_TEMPLATE_FILENAME = "art_direction_template.json"
 EPISODE_META_FILENAME = "episode_meta.json"
 RUN_STATUS_FILENAME = "run_status.json"
 VERSION_PATTERN = re.compile(r"v\d{3}")
@@ -169,8 +172,24 @@ class RepositoryService:
 
     def get_campaign_prompts(self, campaign: str) -> CampaignPrompts:
         campaign_root = self.campaigns_root / campaign
+        art_dir = campaign_art_direction_dir(self.campaigns_root, campaign)
+        campaign_styles = (
+            sorted(
+                p
+                for p in art_dir.glob("*.json")
+                if p.is_file() and not p.stem.startswith("_")
+            )
+            if art_dir.exists()
+            else []
+        )
+        # Prefer an existing campaign style for editing; otherwise a campaign save target.
+        art_path = (
+            campaign_styles[0]
+            if campaign_styles
+            else art_dir / f"{DEFAULT_ART_STYLE_STEM}.json"
+        )
         return CampaignPrompts(
-            art_direction_template=campaign_root / ART_DIRECTION_TEMPLATE_FILENAME,
+            art_direction_template=art_path,
             master_beater_system=campaign_root / MASTER_BEATER_SYSTEM_PROMPT_FILENAME,
             master_beater_user=campaign_root / MASTER_BEATER_USER_PROMPT_FILENAME,
             scriptwriter_system=campaign_root / SCRIPTWRITER_SYSTEM_PROMPT_FILENAME,

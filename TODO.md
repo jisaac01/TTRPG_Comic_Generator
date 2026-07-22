@@ -4,6 +4,12 @@
 - [ ] remove validation (e.g. carried items)
 - [ ] camera angle, panel lighting
 - [ ] figure out why the entities bible is created in the beater step and not in the entities step
+- [ ] Does re-run start from the selected version, or just the last? 
+- [x] Add a style selector (Run + Output; bundled + campaign `art_direction/`)
+- [ ] Style template editing UX beyond Prompts-tab multi-style list
+- [ ] Add entities_bible to prompts page for editing
+- [ ] Allow editing version files
+- [ ] Add "professional" pipeline tooling, whatever that means, for the resume
 ---
 
 ## Plan: Implement Panel-by-Panel Generation Mode

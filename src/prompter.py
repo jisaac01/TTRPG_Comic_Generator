@@ -5,19 +5,19 @@ import json
 import re
 from pathlib import Path
 
+from art_styles import (
+    ART_DIRECTION_TEMPLATE_FILENAME,
+    default_art_direction_template_path,
+)
 from entities import WorldStateCheckpoint
 from prompt_templates import (
-    DEFAULT_PROMPTS_DIR,
     PAGE_PROMPT_TEMPLATE_FILENAME,
     render_prompt_template,
 )
 from scriptwriter import ScriptCheckpoint
 
 
-ART_DIRECTION_TEMPLATE_FILENAME = "art_direction_template.json"
-DEFAULT_ART_DIRECTION_TEMPLATE_PATH = (
-    DEFAULT_PROMPTS_DIR / ART_DIRECTION_TEMPLATE_FILENAME
-)
+DEFAULT_ART_DIRECTION_TEMPLATE_PATH = default_art_direction_template_path()
 ART_DIRECTION_TEMPLATE_FIELDS = (
     ("base_style", "Base Style"),
     ("characters", "Characters"),
@@ -215,7 +215,7 @@ def generate_page_prompt(
     script_checkpoint_path: Path = Path("campaigns/<campaign>/<episode>/v001/03_script.json"),
     entities_checkpoint_path: Path = Path("campaigns/<campaign>/<episode>/v001/02_entities.json"),
     art_style_template_path: Path = Path(
-        f"campaigns/<campaign>/{ART_DIRECTION_TEMPLATE_FILENAME}"
+        "campaigns/<campaign>/art_direction/<style>.json"
     ),
     output_path: Path = Path("campaigns/<campaign>/<episode>/v001/04_page_1_prompt.txt"),
     page_prompt_template_path: Path | None = None,
@@ -272,7 +272,7 @@ def _run_cli() -> None:
         required=True,
         help=(
             "Path to the reusable art direction template JSON file "
-            f"(e.g. campaigns/<campaign>/{ART_DIRECTION_TEMPLATE_FILENAME})"
+            "(e.g. src/prompts/art_direction/brutalist.json)"
         ),
     )
     parser.add_argument(

@@ -38,8 +38,13 @@ from pipeline_events import (
     VersionCreated,
     RunCompleted,
 )
-from prompter import (
+from art_styles import (
     ART_DIRECTION_TEMPLATE_FILENAME,
+    default_art_style,
+    list_art_styles,
+    resolve_art_style,
+)
+from prompter import (
     DEFAULT_ART_DIRECTION_TEMPLATE_PATH,
     _load_art_template,
 )
@@ -485,6 +490,7 @@ class ComicPipeline:
         aspect_ratio: str = "3:2",
         generation_mode: Literal["page", "panel"] = "page",
         art_style_template: Path | None = None,
+        art_style: str | None = None,
         master_beater_system_prompt: Path | None = None,
         master_beater_user_prompt: Path | None = None,
         scriptwriter_system_prompt: Path | None = None,
@@ -510,6 +516,7 @@ class ComicPipeline:
         self.aspect_ratio = aspect_ratio
         self.generation_mode = generation_mode
         self.art_style_template = art_style_template
+        self.art_style = art_style
         self.master_beater_system_prompt = master_beater_system_prompt
         self.master_beater_user_prompt = master_beater_user_prompt
         self.scriptwriter_system_prompt = scriptwriter_system_prompt
@@ -533,6 +540,7 @@ class ComicPipeline:
             "recap_version": self.recap_version,
             "aspect_ratio": self.aspect_ratio,
             "generation_mode": self.generation_mode,
+            "art_style": self.art_style,
             "skip_style": self.skip_style,
             "generate_images": self.generate_images,
             "rerun_from": self._effective_rerun_from or self.rerun_from,
@@ -651,21 +659,35 @@ class ComicPipeline:
         )
         return updated, content_changed, True
 
+    def _resolve_selected_art_style_id(self) -> str | None:
+        """Return the art style id to persist for this run (if resolvable)."""
+        if self.art_style is not None:
+            return self.art_style
+        if self.art_style_template is not None:
+            return None
+        try:
+            return default_art_style(self.campaigns_root, self.campaign).id
+        except FileNotFoundError:
+            return None
+
     def _resolve_art_template(self, version_dir: Path, episode_dir: Path) -> Path:
-        """Resolve art style template: explicit > campaign-level > inline default."""
+        """Resolve art style template: explicit path > art_style id > default style."""
         if self.art_style_template is not None:
             return self.art_style_template
-        campaign_template = (
-            self.campaigns_root / self.campaign / ART_DIRECTION_TEMPLATE_FILENAME
-        )
-        if campaign_template.exists():
-            return campaign_template
-        # Fall back to a template in the version dir if one was cloned from a prior version.
-        version_template = version_dir / ART_DIRECTION_TEMPLATE_FILENAME
-        if version_template.exists():
-            return version_template
-        # Last resort: same directory as this script (legacy support during migration).
-        return Path(ART_DIRECTION_TEMPLATE_FILENAME)
+        if self.art_style is not None:
+            return resolve_art_style(
+                self.campaigns_root, self.campaign, self.art_style
+            ).path
+        try:
+            return default_art_style(self.campaigns_root, self.campaign).path
+        except FileNotFoundError:
+            # Fall back to a template in the version dir if one was cloned from a prior version.
+            version_template = version_dir / ART_DIRECTION_TEMPLATE_FILENAME
+            if version_template.exists():
+                return version_template
+            if DEFAULT_ART_DIRECTION_TEMPLATE_PATH.exists():
+                return DEFAULT_ART_DIRECTION_TEMPLATE_PATH
+            raise
 
     def _campaign_prompt_path(self, filename: str) -> Path:
         return self.campaigns_root / self.campaign / filename
@@ -736,20 +758,6 @@ class ComicPipeline:
 
         shutil.copy2(template_path, version_template_path)
         return version_template_path
-
-    def _ensure_campaign_art_template(self) -> None:
-        """Create a default campaign art template if one does not already exist."""
-        if self.art_style_template is not None:
-            return
-
-        campaign_template = (
-            self.campaigns_root / self.campaign / ART_DIRECTION_TEMPLATE_FILENAME
-        )
-        if campaign_template.exists():
-            return
-
-        campaign_template.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(DEFAULT_ART_DIRECTION_TEMPLATE_PATH, campaign_template)
 
     async def run(self) -> dict[str, object]:
         self._version_dir: Path | None = None
@@ -869,7 +877,9 @@ class ComicPipeline:
                     )
                 )
 
-        self._ensure_campaign_art_template()
+        # Persist resolved art style id when not already set (for run_status).
+        if self.art_style is None and self.art_style_template is None:
+            self.art_style = self._resolve_selected_art_style_id()
         self._ensure_campaign_prompt_templates()
         entities_path = version_dir / "02_entities.json"
         story_bible_path = version_dir / "02_5_story_bible.json"
@@ -1607,7 +1617,15 @@ async def _run_cli() -> None:
         default=None,
         help=(
             "Explicit path to an art direction template JSON file. "
-            f"If omitted, the pipeline looks for campaigns/<campaign>/{ART_DIRECTION_TEMPLATE_FILENAME}"
+            "Overrides --art-style when both are set."
+        ),
+    )
+    parser.add_argument(
+        "--art-style",
+        default=None,
+        help=(
+            "Named art style id or stem (e.g. 'bundled:brutalist', 'brutalist'). "
+            "Resolves against bundled prompts/art_direction/ then campaign art_direction/."
         ),
     )
     parser.add_argument(
@@ -1704,6 +1722,21 @@ async def _run_cli() -> None:
     args = parser.parse_args()
     rerun_from_arg = args.rerun_from
 
+    art_style_id = args.art_style
+    if art_style_id and ":" not in art_style_id:
+        # Bare stem: prefer campaign match, else bundled.
+        matches = [
+            s
+            for s in list_art_styles(Path(args.campaigns_root), args.campaign)
+            if s.stem == art_style_id
+        ]
+        campaign_match = next((s for s in matches if s.source == "campaign"), None)
+        bundled_match = next((s for s in matches if s.source == "bundled"), None)
+        chosen = campaign_match or bundled_match
+        if chosen is None:
+            raise SystemExit(f"Unknown art style stem: {art_style_id!r}")
+        art_style_id = chosen.id
+
     pipeline = ComicPipeline(
         url=args.url,
         campaign=args.campaign,
@@ -1714,6 +1747,7 @@ async def _run_cli() -> None:
         panel_count=args.panel_count,
         total_pages=args.total_pages,
         art_style_template=Path(args.art_style_template) if args.art_style_template else None,
+        art_style=art_style_id,
         master_beater_system_prompt=Path(args.master_beater_system_prompt)
         if args.master_beater_system_prompt
         else None,

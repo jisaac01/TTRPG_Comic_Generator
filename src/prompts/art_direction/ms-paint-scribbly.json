@@ -1,0 +1,8 @@
+{
+  "base_style": "Clumsy, scribbly, and utterly pathetic digital drawing made to look like it was created in MS Paint with a mouse; features messy, unstable lines and a low-quality, pixel-by-pixel feel.",
+  "characters": "Scribbly, barely-there character shapes with unstable mouse-drawn outlines and ridiculous proportions. Bodies look unfinished or redrawn mid-stroke; hair and gear are approximate blobs that only vaguely match between panels. Faces are flat, wrong, and funny—crossed eyes, misplaced noses, smiles that don't connect. Same characters should be recognizable mainly by color blobs and labels, not clean design.",
+  "color_palette": "Simple colors on a plain, stark white background.",
+  "layout_and_composition": "An awkward, confusing composition that is vaguely similar but also 'not really' matching the reference; details are misplaced or distorted in a ridiculous and low-effort manner.",
+  "lettering_and_dialog": "Includes jagged, pixelated text labels for objects (e.g., 'DOG?', 'TREE', 'SUN thing') with multiple spelling mistakes and arrows pointing randomly, sometimes to the wrong item. Includes one small, jagged speech bubble containing the word 'OOF.'",
+  "text_rendering_guide": "Dialogue: ugly jagged pixel bubbles with short dumb lines and typos. Captions: scribbled rectangular labels that look freehand and wrong. Voice Over: loose floating pixel text, barely attached to anything. Chyrons: chaotic object labels ('DOG?', 'TREE', 'SUN thing') with arrows that miss. Sound Effects: loud, clumsy default-style letters overlapping the art without care."
+}

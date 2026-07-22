@@ -121,6 +121,7 @@ class _FakeSettingsService:
 class _FakeRepositoryService:
     def __init__(self) -> None:
         self._campaigns = ["flail", "kingmaker"]
+        self.campaigns_root = Path("campaigns")
 
     def list_campaigns(self) -> list[str]:
         return list(self._campaigns)
@@ -183,6 +184,18 @@ def test_run_page_exposes_generation_mode_selector() -> None:
     assert state["generation_mode_dropdown"].value == "page"
 
 
+def test_run_page_exposes_art_style_selector() -> None:
+    page = _FakePage()
+    event_log = ft.ListView()
+    _container, state = build_run_page(_services(), page, event_log, ft)
+
+    assert "art_style_dropdown" in state
+    options = state["art_style_dropdown"].options
+    assert options
+    assert any(o.key == "bundled:brutalist" for o in options)
+    assert state["art_style_dropdown"].value == "bundled:brutalist"
+
+
 def test_run_page_build_config_maps_form_fields() -> None:
     page = _FakePage()
     event_log = ft.ListView()
@@ -200,6 +213,7 @@ def test_run_page_build_config_maps_form_fields() -> None:
     state["total_pages_field"].value = "2"
     state["aspect_ratio_dropdown"].value = "3:2"
     state["generation_mode_dropdown"].value = "panel"
+    state["art_style_dropdown"].value = "bundled:brutalist"
 
     config = state["build_config"]()
     assert config.url == "https://example.com/flail-ep-1"
@@ -211,6 +225,7 @@ def test_run_page_build_config_maps_form_fields() -> None:
     assert config.total_pages == 2
     assert config.aspect_ratio == "3:2"
     assert config.generation_mode == "panel"
+    assert config.art_style == "bundled:brutalist"
     assert config.generate_images is True
     assert config.image_generation_model == "gemini-3.1-flash-image"
     assert not hasattr(config, "beater_model")

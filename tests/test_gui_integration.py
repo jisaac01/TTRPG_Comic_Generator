@@ -298,7 +298,9 @@ def _make_campaign_prompts(tmp_path: Path, campaign: str = "test_camp") -> Path:
     camp_dir.mkdir(parents=True)
 
     art = {name: f"value for {name}" for name, _ in ART_DIRECTION_TEMPLATE_FIELDS}
-    (camp_dir / "art_direction_template.json").write_text(json.dumps(art), encoding="utf-8")
+    art_dir = camp_dir / "art_direction"
+    art_dir.mkdir(parents=True, exist_ok=True)
+    (art_dir / "brutalist.json").write_text(json.dumps(art), encoding="utf-8")
     for filename in (
         "master_beater_system.txt",
         "master_beater_user.txt",
@@ -473,7 +475,6 @@ def test_prompt_page_campaign_switch_reloads_editor_content(tmp_path):
     second = campaigns_root / "other_camp"
     second.mkdir(parents=True, exist_ok=True)
     for filename in (
-        "art_direction_template.json",
         "master_beater_system.txt",
         "master_beater_user.txt",
         "scriptwriter_system.txt",
@@ -485,6 +486,10 @@ def test_prompt_page_campaign_switch_reloads_editor_content(tmp_path):
         src = campaigns_root / "test_camp" / filename
         dst = second / filename
         dst.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+    art_src = campaigns_root / "test_camp" / "art_direction" / "brutalist.json"
+    art_dst = second / "art_direction" / "brutalist.json"
+    art_dst.parent.mkdir(parents=True, exist_ok=True)
+    art_dst.write_text(art_src.read_text(encoding="utf-8"), encoding="utf-8")
     (campaigns_root / "test_camp" / "scriptwriter_system.txt").write_text(
         "script A", encoding="utf-8"
     )
@@ -519,7 +524,6 @@ def test_prompt_page_campaign_switch_uses_event_data(tmp_path):
     second = campaigns_root / "other_camp"
     second.mkdir(parents=True, exist_ok=True)
     for filename in (
-        "art_direction_template.json",
         "master_beater_system.txt",
         "master_beater_user.txt",
         "scriptwriter_system.txt",
@@ -531,6 +535,10 @@ def test_prompt_page_campaign_switch_uses_event_data(tmp_path):
         src = campaigns_root / "test_camp" / filename
         dst = second / filename
         dst.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+    art_src = campaigns_root / "test_camp" / "art_direction" / "brutalist.json"
+    art_dst = second / "art_direction" / "brutalist.json"
+    art_dst.parent.mkdir(parents=True, exist_ok=True)
+    art_dst.write_text(art_src.read_text(encoding="utf-8"), encoding="utf-8")
     (second / "scriptwriter_system.txt").write_text("from event data", encoding="utf-8")
 
     page = _FakePage()
@@ -596,10 +604,12 @@ def test_prompt_page_uses_src_prompts_when_no_campaign_selected(tmp_path):
 
     assert state["campaign_dropdown"].value is None
     assert len(state["file_list"].content.controls) == 8
-    assert state["editor"].value == (
-        DEFAULT_PROMPTS_DIR / "art_direction_template.json"
-    ).read_text(encoding="utf-8")
-    assert str(DEFAULT_PROMPTS_DIR) in state["source_dir_text"].value
+    from prompter import DEFAULT_ART_DIRECTION_TEMPLATE_PATH
+
+    assert state["editor"].value == DEFAULT_ART_DIRECTION_TEMPLATE_PATH.read_text(
+        encoding="utf-8"
+    )
+    assert str(DEFAULT_ART_DIRECTION_TEMPLATE_PATH.parent) in state["source_dir_text"].value
 
 
 def test_prompt_page_shows_campaign_source_dir_for_campaign_file(tmp_path):
@@ -663,10 +673,10 @@ def test_prompt_page_save_rejects_invalid_art_template(tmp_path):
     services = _prompt_services(campaigns_root)
     _view, state = build_prompt_page(services, page, ft)
 
-    target = campaigns_root / "test_camp" / "art_direction_template.json"
+    target = campaigns_root / "test_camp" / "art_direction" / "brutalist.json"
     original = target.read_text(encoding="utf-8")
-    state["selected_key"][0] = "art_direction_template"
-    state["paths"]["art_direction_template"] = target
+    state["selected_key"][0] = "art_style:brutalist"
+    state["paths"]["art_style:brutalist"] = target
     state["editor"].value = '{"base_style": "cool"}'  # missing fields
     state["on_save"](None)
 
@@ -684,10 +694,10 @@ def test_prompt_page_save_valid_art_template(tmp_path):
     services = _prompt_services(campaigns_root)
     _view, state = build_prompt_page(services, page, ft)
 
-    target = campaigns_root / "test_camp" / "art_direction_template.json"
+    target = campaigns_root / "test_camp" / "art_direction" / "brutalist.json"
     valid_art = {name: f"updated {name}" for name, _ in ART_DIRECTION_TEMPLATE_FIELDS}
-    state["selected_key"][0] = "art_direction_template"
-    state["paths"]["art_direction_template"] = target
+    state["selected_key"][0] = "art_style:brutalist"
+    state["paths"]["art_style:brutalist"] = target
     state["editor"].value = json.dumps(valid_art)
     state["on_save"](None)
 

@@ -117,43 +117,36 @@ The GUI provides:
 
 ## Campaign setup
 
-Each campaign has its own folder under `campaigns/`. On the first pipeline run, the campaign folder is bootstrapped automatically with reusable defaults for:
+Each campaign has its own folder under `campaigns/`. On the first pipeline run, the campaign folder is bootstrapped automatically with reusable text-prompt defaults for:
 
-- `master_beater_system.txt`
-- `master_beater_user.txt`
-- `art_direction_template.json`
-- `scriptwriter_system.txt`
-- `scriptwriter_user.txt`
-- `style_integrator_system.txt`
-- `style_integrator_user.txt`
-- `entities_continuity_system.txt`
-- `entities_continuity_user.txt`
+- `master_beater_system.txt` / `master_beater_user.txt`
+- `scriptwriter_system.txt` / `scriptwriter_user.txt`
+- `style_integrator_system.txt` / `style_integrator_user.txt`
+- `entities_continuity_system.txt` / `entities_continuity_user.txt`
 - `page_prompt.txt`
 
-All default files are copied from the shared `src/prompts/` directory. Edit the campaign copies when you want campaign-specific behavior.
+Art styles live in a named library under `src/prompts/art_direction/` (e.g. `brutalist.json`, `acid-drenched-doom-metal.json`). The Run and Output tabs let you pick a style per run. Campaign-local overrides go in `campaigns/<campaign>/art_direction/<name>.json` and appear in the selector as `name (campaign)`.
 
-If you want to pre-seed defaults manually, copy them the same way:
+If you want to pre-seed a campaign-local art style:
 
 ```bash
-mkdir -p campaigns/dreadmarsh
-cp src/prompts/art_direction_template.json campaigns/dreadmarsh/art_direction_template.json
-cp src/prompts/master_beater_system.txt campaigns/dreadmarsh/master_beater_system.txt
-cp src/prompts/master_beater_user.txt campaigns/dreadmarsh/master_beater_user.txt
-cp src/prompts/scriptwriter_system.txt campaigns/dreadmarsh/scriptwriter_system.txt
-cp src/prompts/scriptwriter_user.txt campaigns/dreadmarsh/scriptwriter_user.txt
-cp src/prompts/style_integrator_system.txt campaigns/dreadmarsh/style_integrator_system.txt
-cp src/prompts/style_integrator_user.txt campaigns/dreadmarsh/style_integrator_user.txt
-cp src/prompts/entities_continuity_system.txt campaigns/dreadmarsh/entities_continuity_system.txt
-cp src/prompts/entities_continuity_user.txt campaigns/dreadmarsh/entities_continuity_user.txt
-cp src/prompts/page_prompt.txt campaigns/dreadmarsh/page_prompt.txt
+mkdir -p campaigns/dreadmarsh/art_direction
+cp src/prompts/art_direction/brutalist.json campaigns/dreadmarsh/art_direction/brutalist.json
+# edit the campaign copy, or add another file under art_direction/
 ```
 
-Different campaigns can have completely different art styles:
+To migrate existing campaign folders that still use the old single-file name:
 
 ```bash
-mkdir -p campaigns/belowdown
-cp src/prompts/art_direction_template.json campaigns/belowdown/art_direction_template.json
-# Then edit campaigns/belowdown/art_direction_template.json for a different style.
+python scripts/migrate_campaign_art_styles.py          # dry-run
+python scripts/migrate_campaign_art_styles.py --write  # apply
+```
+
+To harvest distinct styles from campaign/version data into the bundled library:
+
+```bash
+python scripts/harvest_art_styles.py          # dry-run
+python scripts/harvest_art_styles.py --write  # write src/prompts/art_direction/
 ```
 
 ## Running the pipeline
@@ -220,7 +213,8 @@ python src/pipeline.py belowdown https://scrybequill.com/share/...
 --style-model NAME           default: DEFAULT_MODEL (src/model_defaults.py)
 --panel-count N              default: 6 (panels per page)
 --total-pages N              default: 1 (number of comic pages)
---art-style-template PATH    Override campaign-level template for this run only
+--art-style NAME             Named style (stem or id, e.g. brutalist or bundled:brutalist)
+--art-style-template PATH    Explicit art direction JSON path (overrides --art-style)
 --master-beater-system-prompt PATH
                              Override the master beater system prompt template for this run only
 --master-beater-user-prompt PATH
@@ -289,10 +283,16 @@ You can also generate images outside a full pipeline run from the Output tab: se
 ## Directory layout
 
 ```
+src/prompts/art_direction/          # bundled art style library
+  brutalist.json
+  acid-drenched-doom-metal.json
+  ...
+
 campaigns/
   index.json                        # global lookup: campaign+URL → episode folder
   dreadmarsh/
-    art_direction_template.json     # campaign-level art direction
+    art_direction/                  # optional campaign-local art styles
+      brutalist.json
     master_beater_system.txt        # campaign-level master beater system prompt
     master_beater_user.txt          # campaign-level master beater user prompt
     scriptwriter_system.txt         # campaign-level scriptwriter system prompt
@@ -318,22 +318,14 @@ campaigns/
         05_page_1.png                           # generated page image (page mode)
         05_page_1_panel_1.png                   # generated panel image (panel mode)
         06_page_1.png                           # stitched page image (panel mode)
-        run_status.json                         # run outcome and errors
-        art_direction_template.json
-        master_beater_system.txt
-        master_beater_user.txt
-        scriptwriter_system.txt
-        scriptwriter_user.txt
-        style_integrator_system.txt
-        style_integrator_user.txt
-        entities_continuity_system.txt
-        entities_continuity_user.txt
-        page_prompt.txt
+        run_status.json                         # run outcome, settings (incl. art_style), errors
+        art_direction_template.json             # snapshot of the style used for this version
         prompts/                                # interpolated prompts sent to models
       v002/                         # second run; prior phases cloned, new phase re-run
         ...
   belowdown/
-    art_direction_template.json
+    art_direction/
+      filth-stained-gothic.json
     ...
 ```
 
@@ -383,7 +375,7 @@ python src/scriptwriter.py \
 ```bash
 python src/style_integrator.py \
   --script-input campaigns/dreadmarsh/<episode>/v001/03_script_page_001.json \
-  --art-style-template campaigns/dreadmarsh/art_direction_template.json \
+  --art-style-template src/prompts/art_direction/brutalist.json \
   --output campaigns/dreadmarsh/<episode>/v001/03_5_styled_script_page_001.json
 ```
 
@@ -393,21 +385,21 @@ python src/style_integrator.py \
 python src/prompter.py \
   --script-input campaigns/dreadmarsh/<episode>/v001/03_5_styled_script_page_001.json \
   --entities-input campaigns/dreadmarsh/<episode>/v001/02_entities.json \
-  --art-style-template campaigns/dreadmarsh/art_direction_template.json \
+  --art-style-template src/prompts/art_direction/brutalist.json \
   --output campaigns/dreadmarsh/<episode>/v001/04_page_1_prompt.txt
 
 # Panel mode — use a single-panel script checkpoint and a panel prompt filename:
 python src/prompter.py \
   --script-input campaigns/dreadmarsh/<episode>/v001/03_5_styled_script_page_001.json \
   --entities-input campaigns/dreadmarsh/<episode>/v001/02_entities.json \
-  --art-style-template campaigns/dreadmarsh/art_direction_template.json \
+  --art-style-template src/prompts/art_direction/brutalist.json \
   --output campaigns/dreadmarsh/<episode>/v001/04_page_1_panel_1_prompt.txt
 
 # Skip-style flow (pipeline --skip-style):
 python src/prompter.py \
   --script-input campaigns/dreadmarsh/<episode>/v001/03_script_page_001.json \
   --entities-input campaigns/dreadmarsh/<episode>/v001/02_entities.json \
-  --art-style-template campaigns/dreadmarsh/art_direction_template.json \
+  --art-style-template src/prompts/art_direction/brutalist.json \
   --output campaigns/dreadmarsh/<episode>/v001/04_page_1_prompt.txt
 ```
 

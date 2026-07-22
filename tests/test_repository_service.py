@@ -47,7 +47,9 @@ def test_repository_service_discovers_campaigns_episodes_versions_and_prompts(tm
     campaigns_root = tmp_path / "campaigns"
     campaign_root = campaigns_root / "dreadmarsh"
     campaign_root.mkdir(parents=True)
-    (campaign_root / "art_direction_template.json").write_text("{}", encoding="utf-8")
+    art_dir = campaign_root / "art_direction"
+    art_dir.mkdir()
+    (art_dir / "brutalist.json").write_text("{}", encoding="utf-8")
     for filename in (
         "master_beater_system.txt",
         "master_beater_user.txt",
@@ -98,7 +100,7 @@ def test_repository_service_discovers_campaigns_episodes_versions_and_prompts(tm
 
     campaign_prompts = service.get_campaign_prompts("dreadmarsh")
     assert campaign_prompts.page_prompt == campaign_root / "page_prompt.txt"
-    assert campaign_prompts.art_direction_template == campaign_root / "art_direction_template.json"
+    assert campaign_prompts.art_direction_template == art_dir / "brutalist.json"
 
     version_prompts = service.get_version_prompts("dreadmarsh", "dreadmarsh-crossing", "v002")
     assert version_prompts.page_prompt == episode_dir / "v002" / "prompts" / "page_prompt.txt"

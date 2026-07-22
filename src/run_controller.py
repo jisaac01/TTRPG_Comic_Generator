@@ -95,6 +95,7 @@ class RunController:
             total_pages=config.total_pages,
             aspect_ratio=config.aspect_ratio,
             art_style_template=config.art_style_template,
+            art_style=config.art_style,
             master_beater_system_prompt=config.master_beater_system_prompt,
             master_beater_user_prompt=config.master_beater_user_prompt,
             scriptwriter_system_prompt=config.scriptwriter_system_prompt,

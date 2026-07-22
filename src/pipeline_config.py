@@ -48,6 +48,8 @@ class RunConfig:
 
     # Optional template/prompt overrides (explicit paths)
     art_style_template: Path | None = None
+    # Selector id: "bundled:<stem>" or "campaign:<stem>" (resolved by pipeline)
+    art_style: str | None = None
     master_beater_system_prompt: Path | None = None
     master_beater_user_prompt: Path | None = None
     scriptwriter_system_prompt: Path | None = None
@@ -137,6 +139,7 @@ SETTING_MIN_STAGE: dict[str, RerunFrom] = {
     "panel_count": "beater",
     "total_pages": "beater",
     "generation_mode": "script",
+    "art_style": "style",
     "aspect_ratio": "prompt",
 }
 
@@ -145,11 +148,12 @@ SETTING_FIELD_MIN_STAGE: dict[str, RerunFrom] = {
     "panels": "beater",
     "pages": "beater",
     "generation_mode": "script",
+    "art_style": "style",
     "aspect_ratio": "prompt",
 }
 
 PROMPT_AFFECTING_KEYS = frozenset(
-    {"aspect_ratio", "generation_mode", "panel_count", "total_pages"}
+    {"aspect_ratio", "generation_mode", "panel_count", "total_pages", "art_style"}
 )
 
 RUN_CONFIG_KEYS = (
@@ -158,6 +162,7 @@ RUN_CONFIG_KEYS = (
     "recap_version",
     "aspect_ratio",
     "generation_mode",
+    "art_style",
     "skip_style",
     "generate_images",
     "rerun_from",
@@ -172,6 +177,7 @@ def run_config_snapshot(config: RunConfig) -> dict:
         "recap_version": config.recap_version,
         "aspect_ratio": config.aspect_ratio,
         "generation_mode": config.generation_mode,
+        "art_style": config.art_style,
         "skip_style": config.skip_style,
         "generate_images": config.generate_images,
         "rerun_from": config.rerun_from,

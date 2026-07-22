@@ -1,0 +1,8 @@
+{
+  "base_style": "Clumsy, scribbly, and utterly pathetic digital drawing created in MS Paint with a mouse by a child; features messy, unstable lines and a low-quality, pixel-by-pixel feel.",
+  "characters": "Characters look like they were drawn by a kid with a mouse: wobbly outlines, uneven stick-limb proportions, and faces that are basically dots and crooked mouths. Costume and identity still try to stay the same across panels, but everything is slightly wrong—too-big heads, floating hands, and clothes that don't quite connect. No polish, no shading skill; pure low-effort MS Paint charm.",
+  "color_palette": "Simple colors on a plain, stark white background.",
+  "layout_and_composition": "An awkward, confusing composition of mismatched panel sizes and art that run into each other; details are misplaced or distorted in a ridiculous and low-effort manner. Panels are crooked and slightly off rectangular.",
+  "lettering_and_dialog": "Includes jagged, pixelated text labels for objects (e.g., 'DOG?', 'TREE', 'SUN thing') with spelling mistakes and arrows pointing randomly, sometimes to the wrong item. Includes one small, jagged speech bubble containing the word 'OOF.'",
+  "text_rendering_guide": "Dialogue: tiny, jagged pixel speech bubbles with misspelled or one-word text (e.g. 'OOF', 'wat', 'uhh'). Captions: crude freehand boxes with bad spelling and random capitalization. Voice Over: optional, equally bad, floating pixel text with no real bubble. Chyrons: misspelled object labels with wonky arrows pointing at the wrong thing. Sound Effects: blocky default-font noise words ('BONK', 'CRASH??') drawn with the pencil tool, not integrated well."
+}

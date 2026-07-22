@@ -13,6 +13,13 @@ from pathlib import Path
 from typing import Any, cast
 
 from app_paths import default_campaigns_root
+from art_styles import (
+    DEFAULT_ART_STYLE_STEM,
+    campaign_art_direction_dir,
+    default_art_direction_template_path,
+    default_art_style,
+    list_art_styles,
+)
 from model_defaults import DEFAULT_MODEL
 from pipeline_config import (
     STAGE_ORDER,
@@ -32,7 +39,7 @@ from pipeline_events import (
 from image_generator import ImageGenerator
 from image_stitcher import stitch_panel_images
 from prompt_templates import DEFAULT_PROMPTS_DIR
-from prompter import ART_DIRECTION_TEMPLATE_FIELDS, ART_DIRECTION_TEMPLATE_FILENAME
+from prompter import ART_DIRECTION_TEMPLATE_FIELDS
 from repository_service import CampaignPrompts, RepositoryService
 from run_controller import RunController
 from scraper import configure_playwright_runtime, normalize_recap_version, playwright_browser_executable
@@ -185,6 +192,11 @@ def build_run_page(
         ],
         width=180,
     )
+    art_style_dropdown = _ft.Dropdown(
+        label="Art style",
+        options=[],
+        width=240,
+    )
     run_button = _ft.Button("Run", disabled=False)
     running_ring = _ft.ProgressRing(width=16, height=16, stroke_width=2, visible=False)
     running_gif = _ft.Image(src=LOADING_GIF_URL, width=20, height=20, visible=False)
@@ -211,6 +223,27 @@ def build_run_page(
             campaign_dropdown.value = current
         else:
             campaign_dropdown.value = campaigns_now[0] if campaigns_now else None
+
+    def _refresh_art_style_options(preferred: str | None = None) -> None:
+        campaign = campaign_dropdown.value or ""
+        styles = list_art_styles(services.repository.campaigns_root, campaign)
+        art_style_dropdown.options = [
+            _ft.dropdown.Option(s.id, s.label) for s in styles
+        ]
+        ids = {s.id for s in styles}
+        if preferred and preferred in ids:
+            art_style_dropdown.value = preferred
+        elif art_style_dropdown.value in ids:
+            pass
+        elif styles:
+            try:
+                art_style_dropdown.value = default_art_style(
+                    services.repository.campaigns_root, campaign
+                ).id
+            except FileNotFoundError:
+                art_style_dropdown.value = styles[0].id
+        else:
+            art_style_dropdown.value = None
 
     def _refresh_episode_options() -> None:
         _episodes_by_slug.clear()
@@ -266,6 +299,7 @@ def build_run_page(
             total_pages=int(total_pages_field.value or 1),
             aspect_ratio=aspect_ratio_dropdown.value or "3:2",
             generation_mode=generation_mode_dropdown.value or "page",
+            art_style=art_style_dropdown.value or None,
         )
 
     def on_pipeline_event(event: PipelineEventUnion) -> None:
@@ -332,6 +366,7 @@ def build_run_page(
         if selected is not None:
             campaign_dropdown.value = selected
         _refresh_episode_options()
+        _refresh_art_style_options()
         _sync_mode_controls()
         page.update()
 
@@ -370,6 +405,7 @@ def build_run_page(
 
     _refresh_campaign_options(campaigns[0] if campaigns else None)
     _refresh_episode_options()
+    _refresh_art_style_options()
     _sync_mode_controls()
 
     container = _ft.Column(
@@ -379,7 +415,16 @@ def build_run_page(
             campaign_status_text,
             _ft.Row([run_mode_dropdown, url_field, episode_dropdown], spacing=12),
             _ft.Row([rerun_dropdown, recap_dropdown, skip_style_checkbox, generate_images_checkbox], spacing=12),
-            _ft.Row([panel_count_field, total_pages_field, generation_mode_dropdown, aspect_ratio_dropdown], spacing=12),
+            _ft.Row(
+                [
+                    panel_count_field,
+                    total_pages_field,
+                    generation_mode_dropdown,
+                    aspect_ratio_dropdown,
+                    art_style_dropdown,
+                ],
+                spacing=12,
+            ),
             _ft.Row([run_button, running_ring, running_gif, running_text, phase_badge, status_summary], spacing=12),
             run_error_text,
             version_text,
@@ -403,6 +448,7 @@ def build_run_page(
         "total_pages_field": total_pages_field,
         "generation_mode_dropdown": generation_mode_dropdown,
         "aspect_ratio_dropdown": aspect_ratio_dropdown,
+        "art_style_dropdown": art_style_dropdown,
         "run_button": run_button,
         "running_ring": running_ring,
         "running_gif": running_gif,
@@ -437,7 +483,7 @@ def _validate_art_template(text: str) -> str | None:
 
 
 _PROMPT_FILE_LABELS: list[tuple[str, str]] = [
-    ("art_direction_template", ART_DIRECTION_TEMPLATE_FILENAME),
+    ("art_direction_template", f"art_direction/{DEFAULT_ART_STYLE_STEM}.json"),
     ("master_beater_system", "master_beater_system.txt"),
     ("master_beater_user", "master_beater_user.txt"),
     ("scriptwriter_system", "scriptwriter_system.txt"),
@@ -512,6 +558,8 @@ def build_prompt_page(
             campaign_dropdown.value = campaigns[0] if campaigns else None
 
     def _default_prompt_path_for_key(key: str) -> Path | None:
+        if key == "art_direction_template":
+            return default_art_direction_template_path()
         filename = next((fn for k, fn in _PROMPT_FILE_LABELS if k == key), None)
         if not filename:
             return None
@@ -527,6 +575,11 @@ def build_prompt_page(
         campaign_path = _paths.get(key)
         if campaign_path and campaign_path.exists():
             return campaign_path
+        if key.startswith("art_style:") or key == "art_direction_template":
+            # Prefer campaign path (even if missing) for display; content falls back below.
+            if campaign_path is not None and not campaign_path.exists():
+                return _default_prompt_path_for_key("art_direction_template")
+            return _default_prompt_path_for_key("art_direction_template")
         return _default_prompt_path_for_key(key)
 
     def _refresh_file_list() -> None:
@@ -534,15 +587,70 @@ def build_prompt_page(
         rows.controls.clear()
         _paths.clear()
         prompts = _get_prompts()
-        for key, filename in _PROMPT_FILE_LABELS:
-            if prompts is not None:
-                path: Path = getattr(prompts, key)
-                _paths[key] = path
-            source_path = _resolve_source_path_for_key(key)
-            exists_mark = "" if (source_path and source_path.exists()) else " ✗"
-            rows.controls.append(
-                _ft.Radio(value=key, label=f"{filename}{exists_mark}")
+        campaign = campaign_dropdown.value or ""
+        # Art styles: list campaign-local styles; always include a default save target.
+        art_entries: list[tuple[str, str, Path]] = []
+        if campaign:
+            art_dir = campaign_art_direction_dir(
+                services.repository.campaigns_root, campaign
             )
+            campaign_styles = (
+                sorted(
+                    p
+                    for p in art_dir.glob("*.json")
+                    if p.is_file() and not p.stem.startswith("_")
+                )
+                if art_dir.exists()
+                else []
+            )
+            if campaign_styles:
+                for path in campaign_styles:
+                    key = f"art_style:{path.stem}"
+                    art_entries.append((key, f"art_direction/{path.name}", path))
+            else:
+                # Save target for the default style when none exist yet.
+                target = art_dir / f"{DEFAULT_ART_STYLE_STEM}.json"
+                art_entries.append(
+                    ("art_direction_template", f"art_direction/{target.name}", target)
+                )
+        else:
+            default_path = default_art_direction_template_path()
+            art_entries.append(
+                (
+                    "art_direction_template",
+                    f"art_direction/{default_path.name}",
+                    default_path,
+                )
+            )
+
+        for key, label, path in art_entries:
+            _paths[key] = path
+            source_path = path if path.exists() else _default_prompt_path_for_key(
+                "art_direction_template"
+            )
+            exists_mark = "" if (source_path and source_path.exists()) else " ✗"
+            rows.controls.append(_ft.Radio(value=key, label=f"{label}{exists_mark}"))
+
+        if prompts is not None:
+            for key, filename in _PROMPT_FILE_LABELS:
+                if key == "art_direction_template":
+                    continue
+                path = getattr(prompts, key)
+                _paths[key] = path
+                source_path = _resolve_source_path_for_key(key)
+                exists_mark = "" if (source_path and source_path.exists()) else " ✗"
+                rows.controls.append(
+                    _ft.Radio(value=key, label=f"{filename}{exists_mark}")
+                )
+        else:
+            for key, filename in _PROMPT_FILE_LABELS:
+                if key == "art_direction_template":
+                    continue
+                source_path = _default_prompt_path_for_key(key)
+                exists_mark = "" if (source_path and source_path.exists()) else " ✗"
+                rows.controls.append(
+                    _ft.Radio(value=key, label=f"{filename}{exists_mark}")
+                )
 
     def _select_default_file() -> None:
         options = file_list.content.controls
@@ -591,7 +699,7 @@ def build_prompt_page(
         if not path:
             return
         text = editor.value or ""
-        if key == "art_direction_template":
+        if key == "art_direction_template" or key.startswith("art_style:"):
             err = _validate_art_template(text)
             if err:
                 validation_text.value = err
@@ -600,6 +708,7 @@ def build_prompt_page(
                 return
         validation_text.value = ""
         editor.border_color = None
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
         _refresh_file_list()
         _load_selected()
@@ -609,10 +718,18 @@ def build_prompt_page(
         key = _selected_key[0]
         if not key:
             return
-        filename = next((fn for k, fn in _PROMPT_FILE_LABELS if k == key), None)
-        if not filename:
-            return
-        default_path = DEFAULT_PROMPTS_DIR / filename
+        if key == "art_direction_template" or key.startswith("art_style:"):
+            default_path = default_art_direction_template_path()
+            if key.startswith("art_style:"):
+                stem = key.split(":", 1)[1]
+                candidate = default_path.parent / f"{stem}.json"
+                if candidate.exists():
+                    default_path = candidate
+        else:
+            filename = next((fn for k, fn in _PROMPT_FILE_LABELS if k == key), None)
+            if not filename:
+                return
+            default_path = DEFAULT_PROMPTS_DIR / filename
         if not default_path.exists():
             return
         editor.value = default_path.read_text(encoding="utf-8")
@@ -855,6 +972,11 @@ def build_output_page(
         ],
         width=180,
     )
+    art_style_dropdown = _ft.Dropdown(
+        label="Art style",
+        options=[],
+        width=240,
+    )
     version_path_text = _ft.Text("", size=11, selectable=True)
     output_status_text = _ft.Text("", size=12)
 
@@ -864,6 +986,7 @@ def build_output_page(
         "recap_version": "standard",
         "aspect_ratio": "3:2",
         "generation_mode": "page",
+        "art_style": None,
     }
     _committed_settings: dict[str, Any] = {}
 
@@ -927,12 +1050,37 @@ def build_output_page(
                 config.update(_legacy_episode_run_config(campaign, episode_slug))
         return config
 
+    def _refresh_art_style_options(preferred: str | None = None) -> None:
+        campaign = campaign_dropdown.value or ""
+        styles = list_art_styles(services.repository.campaigns_root, campaign)
+        art_style_dropdown.options = [
+            _ft.dropdown.Option(s.id, s.label) for s in styles
+        ]
+        ids = {s.id for s in styles}
+        if preferred and preferred in ids:
+            art_style_dropdown.value = preferred
+        elif art_style_dropdown.value in ids:
+            pass
+        elif styles:
+            try:
+                art_style_dropdown.value = default_art_style(
+                    services.repository.campaigns_root, campaign
+                ).id
+            except FileNotFoundError:
+                art_style_dropdown.value = styles[0].id
+        else:
+            art_style_dropdown.value = None
+
     def _apply_settings_to_controls(config: dict[str, Any]) -> None:
         panel_count_field.value = str(config.get("panel_count", 6))
         total_pages_field.value = str(config.get("total_pages", 1))
         recap_dropdown.value = str(config.get("recap_version", "standard"))
         aspect_ratio_settings_dropdown.value = str(config.get("aspect_ratio", "3:2"))
         generation_mode_dropdown.value = str(config.get("generation_mode", "page"))
+        preferred_style = config.get("art_style")
+        _refresh_art_style_options(
+            preferred=str(preferred_style) if preferred_style else None
+        )
 
     def _read_settings_from_controls() -> dict[str, Any]:
         aspect_ratio = aspect_ratio_settings_dropdown.value or "3:2"
@@ -947,6 +1095,7 @@ def build_output_page(
             "recap_version": normalize_recap_version(recap_dropdown.value or "standard"),
             "aspect_ratio": aspect_ratio,
             "generation_mode": generation_mode,
+            "art_style": art_style_dropdown.value or None,
         }
 
     def _apply_stage_gating() -> None:
@@ -955,6 +1104,7 @@ def build_output_page(
         panel_count_field.disabled = not setting_field_enabled("panels", stage)
         total_pages_field.disabled = not setting_field_enabled("pages", stage)
         generation_mode_dropdown.disabled = not setting_field_enabled("generation_mode", stage)
+        art_style_dropdown.disabled = not setting_field_enabled("art_style", stage)
         aspect_ratio_settings_dropdown.disabled = not setting_field_enabled("aspect_ratio", stage)
 
     def _sync_settings_controls() -> None:
@@ -972,10 +1122,11 @@ def build_output_page(
         mode_label = (
             "Panel by Panel" if config.get("generation_mode") == "panel" else "Page by Page"
         )
+        style_label = config.get("art_style") or "default"
         settings_text.value = (
             f"Panels: {config['panel_count']}  |  Pages: {config['total_pages']}  |  "
             f"Recap: {config['recap_version']}  |  Aspect ratio: {config['aspect_ratio']}  |  "
-            f"Generation: {mode_label}"
+            f"Generation: {mode_label}  |  Art style: {style_label}"
         )
 
     def _validate_rerun_settings() -> str | None:
@@ -1017,6 +1168,7 @@ def build_output_page(
             total_pages=int(settings["total_pages"]),
             aspect_ratio=cast(AspectRatio, settings["aspect_ratio"]),
             generation_mode=cast(Any, settings["generation_mode"]),
+            art_style=settings.get("art_style"),
         )
 
     def _set_run_status() -> str | None:
@@ -1463,6 +1615,7 @@ def build_output_page(
                 recap_dropdown,
                 aspect_ratio_settings_dropdown,
                 generation_mode_dropdown,
+                art_style_dropdown,
             ], spacing=10),
             _ft.Row([quick_rerun_button, quick_rerun_gif, quick_rerun_text], spacing=10),
             output_status_text,
@@ -1531,6 +1684,7 @@ def build_output_page(
         "recap_dropdown": recap_dropdown,
         "aspect_ratio_dropdown": aspect_ratio_settings_dropdown,
         "generation_mode_dropdown": generation_mode_dropdown,
+        "art_style_dropdown": art_style_dropdown,
         "refresh_campaigns": _refresh_campaign_options,
         "refresh_episodes": _refresh_episodes,
         "refresh_all": _refresh_all,
