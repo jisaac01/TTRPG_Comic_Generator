@@ -18,6 +18,7 @@ from scriptwriter import ScriptCheckpoint
 
 
 DEFAULT_ART_DIRECTION_TEMPLATE_PATH = default_art_direction_template_path()
+# Suggested classic fields and pretty labels (not a required allowlist).
 ART_DIRECTION_TEMPLATE_FIELDS = (
     ("base_style", "Base Style"),
     ("characters", "Characters"),
@@ -26,10 +27,42 @@ ART_DIRECTION_TEMPLATE_FIELDS = (
     ("lettering_and_dialog", "Lettering & Dialog"),
     ("text_rendering_guide", "Text Rendering Guide"),
 )
+ART_DIRECTION_FIELD_LABELS = dict(ART_DIRECTION_TEMPLATE_FIELDS)
 
 
 def _default_art_direction_template_json() -> str:
     return DEFAULT_ART_DIRECTION_TEMPLATE_PATH.read_text(encoding="utf-8").strip()
+
+
+def _humanize_art_key(field_name: str) -> str:
+    return ART_DIRECTION_FIELD_LABELS.get(
+        field_name,
+        field_name.replace("_", " ").strip().title(),
+    )
+
+
+def _normalize_art_template_object(template: dict, *, source: str) -> dict[str, str]:
+    """Normalize a loaded art-direction JSON object: keep every non-empty string key in order."""
+    invalid_fields: list[str] = []
+    normalized_template: dict[str, str] = {}
+    for field_name, value in template.items():
+        key = str(field_name)
+        if not isinstance(value, str) or not value.strip():
+            invalid_fields.append(key)
+            continue
+        normalized_template[key] = value.strip()
+
+    if invalid_fields:
+        raise ValueError(
+            "Art direction template fields must be non-empty strings "
+            f"at {source}: {', '.join(invalid_fields)}"
+        )
+    if not normalized_template:
+        raise ValueError(
+            "Art direction template must contain at least one non-empty string field "
+            f"at {source}."
+        )
+    return normalized_template
 
 
 def _collect_panel_text(script: ScriptCheckpoint) -> str:
@@ -114,28 +147,15 @@ def _load_art_template(art_style_template_path: Path) -> dict[str, str]:
             f"Art direction template file must contain a JSON object at {art_style_template_path}."
         )
 
-    normalized_template: dict[str, str] = {}
-    missing_fields: list[str] = []
-    for field_name, field_label in ART_DIRECTION_TEMPLATE_FIELDS:
-        value = template.get(field_name)
-        if not isinstance(value, str) or not value.strip():
-            missing_fields.append(f"{field_name} ({field_label})")
-            continue
-        normalized_template[field_name] = value.strip()
-
-    if missing_fields:
-        raise ValueError(
-            "Art direction template file is missing required non-empty string fields "
-            f"at {art_style_template_path}: {', '.join(missing_fields)}"
-        )
-
-    return normalized_template
+    return _normalize_art_template_object(
+        template, source=str(art_style_template_path)
+    )
 
 
 def _format_art_direction(template: dict[str, str]) -> str:
     return "\n".join(
-        f"{field_label}: {template[field_name]}"
-        for field_name, field_label in ART_DIRECTION_TEMPLATE_FIELDS
+        f"{_humanize_art_key(field_name)}: {value}"
+        for field_name, value in template.items()
     )
 
 

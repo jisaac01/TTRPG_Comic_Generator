@@ -11,7 +11,6 @@ from pydantic import BaseModel, Field
 from llm_client import build_instructor_client
 from model_defaults import DEFAULT_MODEL
 from prompter import (
-    ART_DIRECTION_TEMPLATE_FIELDS,
     _format_art_direction,
     _load_art_template,
 )

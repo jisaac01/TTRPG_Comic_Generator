@@ -41,7 +41,6 @@ from pipeline_events import (
 from image_generator import ImageGenerator
 from image_stitcher import stitch_panel_images
 from prompt_templates import DEFAULT_PROMPTS_DIR
-from prompter import ART_DIRECTION_TEMPLATE_FIELDS
 from repository_service import CampaignPrompts, RepositoryService
 from run_controller import RunController
 from scraper import configure_playwright_runtime, normalize_recap_version, playwright_browser_executable
@@ -469,19 +468,18 @@ def build_run_page(
 
 def _validate_art_template(text: str) -> str | None:
     """Return an error message if *text* is not a valid art direction template, else None."""
+    from prompter import _normalize_art_template_object
+
     try:
         obj = json.loads(text)
     except json.JSONDecodeError as exc:
         return f"Invalid JSON: {exc}"
     if not isinstance(obj, dict):
         return "Template must be a JSON object"
-    missing = [
-        f"{name} ({label})"
-        for name, label in ART_DIRECTION_TEMPLATE_FIELDS
-        if not isinstance(obj.get(name), str) or not obj[name].strip()
-    ]
-    if missing:
-        return "Missing fields: " + ", ".join(missing)
+    try:
+        _normalize_art_template_object(obj, source="editor")
+    except ValueError as exc:
+        return str(exc)
     return None
 
 

@@ -686,7 +686,7 @@ def test_prompt_page_save_rejects_invalid_art_template(tmp_path):
     original = target.read_text(encoding="utf-8")
     state["selected_key"][0] = "campaign:brutalist"
     state["paths"]["campaign:brutalist"] = target
-    state["editor"].value = '{"base_style": "cool"}'  # missing fields
+    state["editor"].value = "{}"  # empty object is invalid
     state["on_save"](None)
 
     assert state["validation_text"].value != ""
@@ -783,9 +783,22 @@ def test_validate_art_template_fails_bad_json():
     assert err is not None and "JSON" in err
 
 
-def test_validate_art_template_fails_missing_fields():
-    err = _validate_art_template('{"base_style": "cool"}')
-    assert err is not None and "Missing" in err
+def test_validate_art_template_fails_empty_object():
+    err = _validate_art_template("{}")
+    assert err is not None and "at least one" in err.lower()
+
+
+def test_validate_art_template_accepts_custom_keys_only():
+    err = _validate_art_template('{"line_weight": "Heavy ink only."}')
+    assert err is None
+
+
+def test_validate_art_template_accepts_extra_keys():
+    from prompter import ART_DIRECTION_TEMPLATE_FIELDS
+
+    art = {name: f"val {name}" for name, _ in ART_DIRECTION_TEMPLATE_FIELDS}
+    art["shadow_behavior"] = "Shadows stretch across panels."
+    assert _validate_art_template(json.dumps(art)) is None
 
 
 # ---------------------------------------------------------------------------

@@ -256,6 +256,68 @@ def test_generate_page_prompt_fails_when_template_missing(tmp_path):
         )
 
 
+def test_generate_page_prompt_includes_extra_art_direction_keys(tmp_path):
+    entities_path, script_path, template_path = _write_inputs(tmp_path)
+    template = json.loads(template_path.read_text(encoding="utf-8"))
+    template["environmental_atmosphere"] = (
+        "Thick, physical atmosphere dominated by palpable smog."
+    )
+    template["shadow_behavior"] = (
+        "Shadows function as active visual actors in deep bruised purples."
+    )
+    template_path.write_text(json.dumps(template), encoding="utf-8")
+
+    prompt_text = prompter.generate_page_prompt(
+        script_checkpoint_path=script_path,
+        entities_checkpoint_path=entities_path,
+        art_style_template_path=template_path,
+        output_path=tmp_path / "04_page_1_prompt.txt",
+    )
+
+    assert "Base Style: Brutalist ink style with heavy shadows." in prompt_text
+    assert (
+        "Environmental Atmosphere: Thick, physical atmosphere dominated by palpable smog."
+        in prompt_text
+    )
+    assert (
+        "Shadow Behavior: Shadows function as active visual actors in deep bruised purples."
+        in prompt_text
+    )
+
+
+def test_load_art_template_accepts_custom_keys_only(tmp_path):
+    template_path = tmp_path / "custom_only.json"
+    template_path.write_text(
+        json.dumps({"line_weight": "Heavy, jittery ink lines only."}),
+        encoding="utf-8",
+    )
+
+    loaded = prompter._load_art_template(template_path)
+    assert loaded == {"line_weight": "Heavy, jittery ink lines only."}
+    assert prompter._format_art_direction(loaded) == (
+        "Line Weight: Heavy, jittery ink lines only."
+    )
+
+
+def test_load_art_template_rejects_empty_object(tmp_path):
+    template_path = tmp_path / "empty_obj.json"
+    template_path.write_text("{}", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="at least one"):
+        prompter._load_art_template(template_path)
+
+
+def test_load_art_template_rejects_non_string_values(tmp_path):
+    template_path = tmp_path / "bad_types.json"
+    template_path.write_text(
+        json.dumps({"base_style": "ok", "nested": {"a": 1}}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="non-empty string"):
+        prompter._load_art_template(template_path)
+
+
 def test_generate_page_prompt_uses_custom_page_prompt_template(tmp_path):
     entities_path, script_path, template_path = _write_inputs(tmp_path)
     custom_template = tmp_path / "custom_page_prompt.txt"
