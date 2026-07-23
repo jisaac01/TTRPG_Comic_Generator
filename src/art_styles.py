@@ -71,7 +71,7 @@ def _scan_styles(directory: Path, source: ArtStyleSource) -> list[ArtStyleOption
         stem = path.stem
         if stem.startswith("_"):
             continue
-        label = f"{stem} (campaign)" if source == "campaign" else stem
+        label = f"{stem} (campaign)" if source == "campaign" else f"{stem} (bundled)"
         options.append(
             ArtStyleOption(
                 id=style_id(source, stem),
@@ -116,7 +116,7 @@ def resolve_art_style(
     if stem.startswith("_"):
         raise ValueError(f"Unknown art style {style_id_value!r}: private styles are excluded")
 
-    label = f"{stem} (campaign)" if source == "campaign" else stem
+    label = f"{stem} (campaign)" if source == "campaign" else f"{stem} (bundled)"
     return ArtStyleOption(
         id=style_id(source, stem),
         stem=stem,

@@ -405,8 +405,12 @@ def test_prompt_page_builds_with_campaign_files(tmp_path):
     _view, state = build_prompt_page(services, page, ft)
 
     assert state["campaign_dropdown"].value == "test_camp"
-    # 8 file radio buttons should be present
-    assert len(state["file_list"].content.controls) == 8
+    labels = [c.label for c in state["file_list"].content.controls]
+    # Bundled + campaign art styles, then the 7 non-art prompt templates.
+    assert any("brutalist (bundled)" in label for label in labels)
+    assert any("brutalist (campaign)" in label for label in labels)
+    assert any(label.startswith("page_prompt.txt") for label in labels)
+    assert len(state["file_list"].content.controls) >= 8
 
 
 def test_prompt_page_load_reads_file_into_editor(tmp_path):
@@ -603,13 +607,18 @@ def test_prompt_page_uses_src_prompts_when_no_campaign_selected(tmp_path):
     _view, state = build_prompt_page(services, page, ft)
 
     assert state["campaign_dropdown"].value is None
-    assert len(state["file_list"].content.controls) == 8
+    labels = [c.label for c in state["file_list"].content.controls]
+    assert any("brutalist (bundled)" in label for label in labels)
+    assert not any("(campaign)" in label for label in labels)
     from prompter import DEFAULT_ART_DIRECTION_TEMPLATE_PATH
 
-    assert state["editor"].value == DEFAULT_ART_DIRECTION_TEMPLATE_PATH.read_text(
-        encoding="utf-8"
-    )
-    assert str(DEFAULT_ART_DIRECTION_TEMPLATE_PATH.parent) in state["source_dir_text"].value
+    # First radio is first bundled style alphabetically, not necessarily brutalist.
+    first_key = state["file_list"].content.controls[0].value
+    assert first_key.startswith("bundled:")
+    assert state["editor"].value  # loaded something from bundled library
+    assert "art_direction" in state["source_dir_text"].value or str(
+        DEFAULT_ART_DIRECTION_TEMPLATE_PATH.parent
+    ) in state["source_dir_text"].value
 
 
 def test_prompt_page_shows_campaign_source_dir_for_campaign_file(tmp_path):
@@ -675,8 +684,8 @@ def test_prompt_page_save_rejects_invalid_art_template(tmp_path):
 
     target = campaigns_root / "test_camp" / "art_direction" / "brutalist.json"
     original = target.read_text(encoding="utf-8")
-    state["selected_key"][0] = "art_style:brutalist"
-    state["paths"]["art_style:brutalist"] = target
+    state["selected_key"][0] = "campaign:brutalist"
+    state["paths"]["campaign:brutalist"] = target
     state["editor"].value = '{"base_style": "cool"}'  # missing fields
     state["on_save"](None)
 
@@ -696,14 +705,52 @@ def test_prompt_page_save_valid_art_template(tmp_path):
 
     target = campaigns_root / "test_camp" / "art_direction" / "brutalist.json"
     valid_art = {name: f"updated {name}" for name, _ in ART_DIRECTION_TEMPLATE_FIELDS}
-    state["selected_key"][0] = "art_style:brutalist"
-    state["paths"]["art_style:brutalist"] = target
+    state["selected_key"][0] = "campaign:brutalist"
+    state["paths"]["campaign:brutalist"] = target
     state["editor"].value = json.dumps(valid_art)
     state["on_save"](None)
 
-    assert state["validation_text"].value == ""
+    assert "campaign override" in state["validation_text"].value
     saved = json.loads(target.read_text(encoding="utf-8"))
     assert saved["base_style"] == "updated base_style"
+    assert state["selected_key"][0] == "campaign:brutalist"
+
+
+def test_prompt_page_save_bundled_art_writes_campaign_override(tmp_path):
+    import flet as ft
+    from prompter import ART_DIRECTION_TEMPLATE_FIELDS
+
+    campaigns_root = tmp_path / "campaigns"
+    camp = campaigns_root / "fresh_camp"
+    camp.mkdir(parents=True)
+    # Non-art campaign prompts only — no campaign art_direction yet.
+    for filename in (
+        "master_beater_system.txt",
+        "master_beater_user.txt",
+        "scriptwriter_system.txt",
+        "scriptwriter_user.txt",
+        "style_integrator_system.txt",
+        "style_integrator_user.txt",
+        "page_prompt.txt",
+    ):
+        (camp / filename).write_text(f"default {filename}", encoding="utf-8")
+
+    page = _FakePage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_prompt_page(services, page, ft)
+
+    valid_art = {name: f"override {name}" for name, _ in ART_DIRECTION_TEMPLATE_FIELDS}
+    state["selected_key"][0] = "bundled:brutalist"
+    state["editor"].value = json.dumps(valid_art)
+    state["on_save"](None)
+
+    target = camp / "art_direction" / "brutalist.json"
+    assert target.exists()
+    saved = json.loads(target.read_text(encoding="utf-8"))
+    assert saved["base_style"] == "override base_style"
+    assert state["selected_key"][0] == "campaign:brutalist"
+    labels = [c.label for c in state["file_list"].content.controls]
+    assert any("brutalist (campaign)" in label for label in labels)
 
 
 def test_prompt_page_reset_restores_default(tmp_path):

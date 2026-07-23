@@ -59,7 +59,7 @@ def test_list_art_styles_includes_bundled_and_campaign(tmp_path, monkeypatch):
     assert "campaign:brutalist" in ids
     assert "campaign:custom" in ids
     assert not any(s.stem.startswith("_") or s.id.endswith(":_blank") for s in styles)
-    assert labels["bundled:brutalist"] == "brutalist"
+    assert labels["bundled:brutalist"] == "brutalist (bundled)"
     assert labels["campaign:brutalist"] == "brutalist (campaign)"
     assert labels["campaign:custom"] == "custom (campaign)"
 

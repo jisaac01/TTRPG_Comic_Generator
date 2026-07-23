@@ -193,6 +193,8 @@ def test_run_page_exposes_art_style_selector() -> None:
     options = state["art_style_dropdown"].options
     assert options
     assert any(o.key == "bundled:brutalist" for o in options)
+    labels = {o.key: o.text for o in options}
+    assert labels["bundled:brutalist"] == "brutalist (bundled)"
     assert state["art_style_dropdown"].value == "bundled:brutalist"
 
 

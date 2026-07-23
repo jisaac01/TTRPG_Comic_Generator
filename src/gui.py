@@ -19,6 +19,8 @@ from art_styles import (
     default_art_direction_template_path,
     default_art_style,
     list_art_styles,
+    parse_style_id,
+    style_id,
 )
 from model_defaults import DEFAULT_MODEL
 from pipeline_config import (
@@ -449,6 +451,7 @@ def build_run_page(
         "generation_mode_dropdown": generation_mode_dropdown,
         "aspect_ratio_dropdown": aspect_ratio_dropdown,
         "art_style_dropdown": art_style_dropdown,
+        "refresh_art_styles": _refresh_art_style_options,
         "run_button": run_button,
         "running_ring": running_ring,
         "running_gif": running_gif,
@@ -534,15 +537,21 @@ def build_prompt_page(
     )
 
     validation_text = _ft.Text("", color=_ft.Colors.RED_700, size=12)
-    capture_preview_text = _ft.Text("Next run will capture: all campaign prompts + art template", size=12)
+    capture_preview_text = _ft.Text(
+        "Art styles: bundled library + campaign overrides. "
+        "Saving a bundled style writes a campaign override; pick \"… (campaign)\" on Run/Output to use it.",
+        size=12,
+    )
     source_dir_text = _ft.Text("Source directory: -", size=12, selectable=True)
 
-    # Tracks which field key is selected (e.g. "art_direction_template")
+    # Tracks which field key is selected (e.g. "bundled:brutalist" or "scriptwriter_system")
     _selected_key: list[str] = [""]
-    # Maps field key -> campaign target path for saving
+    # Maps field key -> path for load/save
     _paths: dict[str, Path] = {}
     # Tracks the directory currently used for loading selected prompt
     _active_source_dir: list[Path | None] = [None]
+    # Optional callback after art style save (e.g. refresh Run/Output dropdowns)
+    _on_art_styles_changed: list[Any] = [None]
 
     def _set_loading(loading: bool) -> None:
         loading_ring.visible = loading
@@ -557,9 +566,21 @@ def build_prompt_page(
         else:
             campaign_dropdown.value = campaigns[0] if campaigns else None
 
+    def _is_art_style_key(key: str) -> bool:
+        return key.startswith("bundled:") or key.startswith("campaign:")
+
     def _default_prompt_path_for_key(key: str) -> Path | None:
-        if key == "art_direction_template":
-            return default_art_direction_template_path()
+        if _is_art_style_key(key):
+            try:
+                source, stem = parse_style_id(key)
+            except ValueError:
+                return default_art_direction_template_path()
+            if source == "bundled":
+                return default_art_direction_template_path().parent / f"{stem}.json"
+            campaign = campaign_dropdown.value or ""
+            return campaign_art_direction_dir(
+                services.repository.campaigns_root, campaign
+            ) / f"{stem}.json"
         filename = next((fn for k, fn in _PROMPT_FILE_LABELS if k == key), None)
         if not filename:
             return None
@@ -572,14 +593,22 @@ def build_prompt_page(
         return services.repository.get_campaign_prompts(campaign)
 
     def _resolve_source_path_for_key(key: str) -> Path | None:
-        campaign_path = _paths.get(key)
-        if campaign_path and campaign_path.exists():
-            return campaign_path
-        if key.startswith("art_style:") or key == "art_direction_template":
-            # Prefer campaign path (even if missing) for display; content falls back below.
-            if campaign_path is not None and not campaign_path.exists():
-                return _default_prompt_path_for_key("art_direction_template")
-            return _default_prompt_path_for_key("art_direction_template")
+        mapped = _paths.get(key)
+        if mapped and mapped.exists():
+            return mapped
+        if _is_art_style_key(key):
+            # Bundled always loads from library; campaign may fall back to matching bundled.
+            try:
+                source, stem = parse_style_id(key)
+            except ValueError:
+                return default_art_direction_template_path()
+            if source == "bundled":
+                return default_art_direction_template_path().parent / f"{stem}.json"
+            if mapped is not None and mapped.exists():
+                return mapped
+            # Campaign file missing: show bundled content as a starting point.
+            bundled = default_art_direction_template_path().parent / f"{stem}.json"
+            return bundled if bundled.exists() else mapped
         return _default_prompt_path_for_key(key)
 
     def _refresh_file_list() -> None:
@@ -588,48 +617,15 @@ def build_prompt_page(
         _paths.clear()
         prompts = _get_prompts()
         campaign = campaign_dropdown.value or ""
-        # Art styles: list campaign-local styles; always include a default save target.
-        art_entries: list[tuple[str, str, Path]] = []
-        if campaign:
-            art_dir = campaign_art_direction_dir(
-                services.repository.campaigns_root, campaign
-            )
-            campaign_styles = (
-                sorted(
-                    p
-                    for p in art_dir.glob("*.json")
-                    if p.is_file() and not p.stem.startswith("_")
-                )
-                if art_dir.exists()
-                else []
-            )
-            if campaign_styles:
-                for path in campaign_styles:
-                    key = f"art_style:{path.stem}"
-                    art_entries.append((key, f"art_direction/{path.name}", path))
-            else:
-                # Save target for the default style when none exist yet.
-                target = art_dir / f"{DEFAULT_ART_STYLE_STEM}.json"
-                art_entries.append(
-                    ("art_direction_template", f"art_direction/{target.name}", target)
-                )
-        else:
-            default_path = default_art_direction_template_path()
-            art_entries.append(
-                (
-                    "art_direction_template",
-                    f"art_direction/{default_path.name}",
-                    default_path,
-                )
-            )
 
-        for key, label, path in art_entries:
-            _paths[key] = path
-            source_path = path if path.exists() else _default_prompt_path_for_key(
-                "art_direction_template"
+        # Full art style list: all bundled + this campaign's overrides.
+        styles = list_art_styles(services.repository.campaigns_root, campaign)
+        for option in styles:
+            _paths[option.id] = option.path
+            exists_mark = "" if option.path.exists() else " ✗"
+            rows.controls.append(
+                _ft.Radio(value=option.id, label=f"{option.label}{exists_mark}")
             )
-            exists_mark = "" if (source_path and source_path.exists()) else " ✗"
-            rows.controls.append(_ft.Radio(value=key, label=f"{label}{exists_mark}"))
 
         if prompts is not None:
             for key, filename in _PROMPT_FILE_LABELS:
@@ -637,7 +633,7 @@ def build_prompt_page(
                     continue
                 path = getattr(prompts, key)
                 _paths[key] = path
-                source_path = _resolve_source_path_for_key(key)
+                source_path = path if path.exists() else _default_prompt_path_for_key(key)
                 exists_mark = "" if (source_path and source_path.exists()) else " ✗"
                 rows.controls.append(
                     _ft.Radio(value=key, label=f"{filename}{exists_mark}")
@@ -695,17 +691,53 @@ def build_prompt_page(
 
     def on_save(_e: Any) -> None:
         key = _selected_key[0]
-        path = _paths.get(key)
-        if not path:
-            return
         text = editor.value or ""
-        if key == "art_direction_template" or key.startswith("art_style:"):
+        if _is_art_style_key(key):
             err = _validate_art_template(text)
             if err:
                 validation_text.value = err
                 editor.border_color = _ft.Colors.RED_700
                 page.update()
                 return
+            campaign = campaign_dropdown.value or ""
+            if not campaign:
+                validation_text.value = "Select a campaign before saving an art style."
+                editor.border_color = _ft.Colors.RED_700
+                page.update()
+                return
+            try:
+                source, stem = parse_style_id(key)
+            except ValueError as exc:
+                validation_text.value = str(exc)
+                editor.border_color = _ft.Colors.RED_700
+                page.update()
+                return
+            # Never mutate the bundled library from the GUI: always write a campaign override.
+            path = campaign_art_direction_dir(
+                services.repository.campaigns_root, campaign
+            ) / f"{stem}.json"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text, encoding="utf-8")
+            saved_id = style_id("campaign", stem)
+            editor.border_color = None
+            _refresh_file_list()
+            _selected_key[0] = saved_id
+            file_list.value = saved_id
+            _load_selected()
+            # Set after load: _load_selected clears validation_text.
+            validation_text.value = (
+                f"Saved campaign override → art_direction/{stem}.json. "
+                f"On Run/Output select \"{stem} (campaign)\" to use it."
+            )
+            callback = _on_art_styles_changed[0]
+            if callable(callback):
+                callback()
+            page.update()
+            return
+
+        path = _paths.get(key)
+        if not path:
+            return
         validation_text.value = ""
         editor.border_color = None
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -718,13 +750,14 @@ def build_prompt_page(
         key = _selected_key[0]
         if not key:
             return
-        if key == "art_direction_template" or key.startswith("art_style:"):
-            default_path = default_art_direction_template_path()
-            if key.startswith("art_style:"):
-                stem = key.split(":", 1)[1]
-                candidate = default_path.parent / f"{stem}.json"
-                if candidate.exists():
-                    default_path = candidate
+        if _is_art_style_key(key):
+            try:
+                _source, stem = parse_style_id(key)
+            except ValueError:
+                return
+            default_path = default_art_direction_template_path().parent / f"{stem}.json"
+            if not default_path.exists():
+                default_path = default_art_direction_template_path()
         else:
             filename = next((fn for k, fn in _PROMPT_FILE_LABELS if k == key), None)
             if not filename:
@@ -831,6 +864,9 @@ def build_prompt_page(
         spacing=8,
     )
 
+    def set_on_art_styles_changed(callback: Any) -> None:
+        _on_art_styles_changed[0] = callback
+
     return container, {
         "campaign_dropdown": campaign_dropdown,
         "file_list": file_list,
@@ -844,6 +880,7 @@ def build_prompt_page(
         "on_open_prompts_folder": on_open_prompts_folder,
         "refresh_file_list": _refresh_file_list,
         "refresh_campaigns": _refresh_campaign_options,
+        "set_on_art_styles_changed": set_on_art_styles_changed,
         "selected_key": _selected_key,
         "paths": _paths,
     }
@@ -1685,6 +1722,7 @@ def build_output_page(
         "aspect_ratio_dropdown": aspect_ratio_settings_dropdown,
         "generation_mode_dropdown": generation_mode_dropdown,
         "art_style_dropdown": art_style_dropdown,
+        "refresh_art_styles": _refresh_art_style_options,
         "refresh_campaigns": _refresh_campaign_options,
         "refresh_episodes": _refresh_episodes,
         "refresh_all": _refresh_all,
@@ -1897,6 +1935,17 @@ def build_main_layout(page: Any, services: AppServices) -> dict[str, Any]:
         on_campaign_created=_on_campaign_created,
         on_run_finished=_on_run_finished,
     )
+
+    def _refresh_art_style_selectors() -> None:
+        """Rebuild Run/Output art style options after Prompts saves or tab switch."""
+        preferred_run = run_page_state["art_style_dropdown"].value
+        run_page_state["refresh_art_styles"](preferred_run)
+        # Preserve Output selection when possible; also pick up new campaign overrides.
+        preferred_out = output_page_state["art_style_dropdown"].value
+        output_page_state["refresh_art_styles"](preferred_out)
+
+    prompt_page_state["set_on_art_styles_changed"](_refresh_art_style_selectors)
+
     prompt_view.visible = False
     output_view.visible = False
 
@@ -1904,6 +1953,13 @@ def build_main_layout(page: Any, services: AppServices) -> dict[str, Any]:
         run_view.visible = name == "Run"
         prompt_view.visible = name == "Prompts"
         output_view.visible = name == "Output"
+        if name == "Prompts":
+            prompt_page_state["refresh_file_list"]()
+        elif name in {"Run", "Output"}:
+            _refresh_art_style_selectors()
+            if name == "Output":
+                # Re-sync settings (including preferred art_style from version) from disk.
+                output_page_state["refresh_all"]()
         append_log_line(event_log, "UI", f"Switched to {name}", ft)
         page.update()
 
