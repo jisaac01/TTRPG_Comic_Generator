@@ -64,6 +64,37 @@ def test_list_art_styles_includes_bundled_and_campaign(tmp_path, monkeypatch):
     assert labels["campaign:custom"] == "custom (campaign)"
 
 
+def test_list_art_styles_interleaves_campaign_with_bundled_by_label(tmp_path, monkeypatch):
+    """Campaign styles sort among bundled styles by label, not after the whole bundled group."""
+    bundled = tmp_path / "bundled"
+    _write_style(bundled / "brutalist.json")
+    _write_style(bundled / "zzz.json")
+
+    campaigns_root = tmp_path / "campaigns"
+    camp_dir = campaign_art_direction_dir(campaigns_root, "flail")
+    _write_style(camp_dir / "aaa.json")
+    _write_style(camp_dir / "brutalist.json")
+
+    monkeypatch.setattr("art_styles.bundled_art_direction_dir", lambda: bundled)
+
+    styles = list_art_styles(campaigns_root, "flail")
+    ids = [s.id for s in styles]
+    labels = [s.label for s in styles]
+
+    assert ids == [
+        "campaign:aaa",
+        "bundled:brutalist",
+        "campaign:brutalist",
+        "bundled:zzz",
+    ]
+    assert labels == [
+        "aaa (campaign)",
+        "brutalist (bundled)",
+        "brutalist (campaign)",
+        "zzz (bundled)",
+    ]
+
+
 def test_list_art_styles_empty_campaign_still_returns_bundled(tmp_path, monkeypatch):
     bundled = tmp_path / "bundled"
     _write_style(bundled / "brutalist.json")

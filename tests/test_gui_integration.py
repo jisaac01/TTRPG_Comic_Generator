@@ -771,6 +771,90 @@ def test_prompt_page_reset_restores_default(tmp_path):
     assert state["editor"].value == default_content
 
 
+def test_prompt_page_file_list_scrolls(tmp_path):
+    import flet as ft
+
+    campaigns_root = _make_campaign_prompts(tmp_path)
+    page = _FakePage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_prompt_page(services, page, ft)
+
+    assert state["file_list"].content.scroll == ft.ScrollMode.AUTO
+
+
+def test_prompt_page_copy_editor_to_clipboard(tmp_path):
+    import flet as ft
+
+    campaigns_root = _make_campaign_prompts(tmp_path)
+    page = _FakePage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_prompt_page(services, page, ft)
+
+    state["editor"].value = "prompt body to copy"
+    assert "on_copy_content" in state
+    state["on_copy_content"](None)
+
+    assert page.clipboard_text == "prompt body to copy"
+
+
+def test_prompt_page_art_styles_sorted_with_campaign_interleaved(tmp_path, monkeypatch):
+    import flet as ft
+    from art_styles import campaign_art_direction_dir
+
+    campaigns_root = _make_campaign_prompts(tmp_path)
+    bundled = tmp_path / "bundled_styles"
+    bundled.mkdir()
+    for stem in ("brutalist", "zzz"):
+        (bundled / f"{stem}.json").write_text(
+            json.dumps(
+                {
+                    "base_style": stem,
+                    "characters": "c",
+                    "color_palette": "p",
+                    "layout_and_composition": "l",
+                    "lettering_and_dialog": "d",
+                    "text_rendering_guide": "t",
+                }
+            ),
+            encoding="utf-8",
+        )
+    camp_dir = campaign_art_direction_dir(campaigns_root, "test_camp")
+    camp_dir.mkdir(parents=True, exist_ok=True)
+    for stem in ("aaa", "brutalist"):
+        (camp_dir / f"{stem}.json").write_text(
+            json.dumps(
+                {
+                    "base_style": stem,
+                    "characters": "c",
+                    "color_palette": "p",
+                    "layout_and_composition": "l",
+                    "lettering_and_dialog": "d",
+                    "text_rendering_guide": "t",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    monkeypatch.setattr("art_styles.bundled_art_direction_dir", lambda: bundled)
+    monkeypatch.setattr("gui.default_art_direction_template_path", lambda: bundled / "brutalist.json")
+
+    page = _FakePage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_prompt_page(services, page, ft)
+
+    art_labels = [
+        c.label
+        for c in state["file_list"].content.controls
+        if "(bundled)" in c.label or "(campaign)" in c.label
+    ]
+    assert art_labels == [
+        "aaa (campaign)",
+        "brutalist (bundled)",
+        "brutalist (campaign)",
+        "zzz (bundled)",
+    ]
+
+
 def test_validate_art_template_passes_valid():
     from prompter import ART_DIRECTION_TEMPLATE_FIELDS
 
@@ -830,6 +914,21 @@ def test_output_page_lists_files_for_selected_version(tmp_path):
     assert "01_raw_text.json" in labels
     assert "03_script.json" in labels
     assert "04_page_1_prompt.txt" in labels
+
+
+def test_output_page_copy_preview_to_clipboard(tmp_path):
+    import flet as ft
+
+    campaigns_root = _make_output_versions(tmp_path)
+    page = _FakePage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+
+    state["preview"].value = "preview body to copy"
+    assert "on_copy_content" in state
+    state["on_copy_content"](None)
+
+    assert page.clipboard_text == "preview body to copy"
 
 
 def test_output_page_json_preview_is_pretty(tmp_path):

@@ -85,16 +85,11 @@ def _scan_styles(directory: Path, source: ArtStyleSource) -> list[ArtStyleOption
 
 
 def list_art_styles(campaigns_root: Path, campaign: str) -> list[ArtStyleOption]:
-    """Return bundled styles, then campaign-local styles, sorted within each group by label."""
-    bundled = sorted(
-        _scan_styles(bundled_art_direction_dir(), "bundled"),
-        key=lambda s: s.label.lower(),
+    """Return bundled and campaign-local styles sorted together by label."""
+    styles = _scan_styles(bundled_art_direction_dir(), "bundled") + _scan_styles(
+        campaign_art_direction_dir(campaigns_root, campaign), "campaign"
     )
-    campaign_styles = sorted(
-        _scan_styles(campaign_art_direction_dir(campaigns_root, campaign), "campaign"),
-        key=lambda s: s.label.lower(),
-    )
-    return bundled + campaign_styles
+    return sorted(styles, key=lambda s: s.label.lower())
 
 
 def resolve_art_style(

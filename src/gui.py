@@ -523,7 +523,10 @@ def build_prompt_page(
     loading_text = _ft.Text("Reloading...", size=12, visible=False)
 
     file_list = _ft.RadioGroup(
-        content=_ft.Column(spacing=2)
+        content=_ft.Column(
+            spacing=2,
+            scroll=_ft.ScrollMode.AUTO,
+        )
     )
 
     editor = _ft.TextField(
@@ -532,6 +535,10 @@ def build_prompt_page(
         max_lines=40,
         expand=True,
         text_style=_ft.TextStyle(font_family="monospace", size=12),
+    )
+    copy_content_button = _ft.IconButton(
+        icon=_ft.Icons.CONTENT_COPY,
+        tooltip="Copy to clipboard",
     )
 
     validation_text = _ft.Text("", color=_ft.Colors.RED_700, size=12)
@@ -789,6 +796,12 @@ def build_prompt_page(
             _safe_set_clipboard(page, str(source_path))
         page.update()
 
+    def on_copy_content(_e: Any) -> None:
+        _safe_set_clipboard(page, editor.value or "")
+        page.update()
+
+    copy_content_button.on_click = on_copy_content
+
     def on_campaign_changed(event: Any) -> None:
         selected = _extract_change_value(event)
         if selected is not None:
@@ -830,7 +843,12 @@ def build_prompt_page(
                         content=_ft.Column(
                             controls=[
                                 _ft.Text("Files", size=13, weight=_ft.FontWeight.W_500),
-                                file_list,
+                                _ft.Container(
+                                    content=file_list,
+                                    height=320,
+                                    expand=True,
+                                    clip_behavior=_ft.ClipBehavior.HARD_EDGE,
+                                ),
                             ],
                             spacing=4,
                         ),
@@ -838,6 +856,10 @@ def build_prompt_page(
                     ),
                     _ft.Column(
                         controls=[
+                            _ft.Row(
+                                controls=[copy_content_button],
+                                alignment=_ft.MainAxisAlignment.END,
+                            ),
                             editor,
                             validation_text,
                             _ft.Row(
@@ -869,12 +891,14 @@ def build_prompt_page(
         "campaign_dropdown": campaign_dropdown,
         "file_list": file_list,
         "editor": editor,
+        "copy_content_button": copy_content_button,
         "validation_text": validation_text,
         "capture_preview_text": capture_preview_text,
         "source_dir_text": source_dir_text,
         "on_save": on_save,
         "on_load": on_load,
         "on_reset": on_reset,
+        "on_copy_content": on_copy_content,
         "on_open_prompts_folder": on_open_prompts_folder,
         "refresh_file_list": _refresh_file_list,
         "refresh_campaigns": _refresh_campaign_options,
@@ -971,6 +995,10 @@ def build_output_page(
         read_only=True,
         expand=True,
         text_style=_ft.TextStyle(font_family="monospace", size=12),
+    )
+    copy_content_button = _ft.IconButton(
+        icon=_ft.Icons.CONTENT_COPY,
+        tooltip="Copy to clipboard",
     )
 
     run_status_text = _ft.Text("", size=12, selectable=True)
@@ -1457,6 +1485,12 @@ def build_output_page(
             _set_output_busy_state(False)
             page.update()
 
+    def on_copy_content(_e: Any) -> None:
+        _safe_set_clipboard(page, preview.value or "")
+        page.update()
+
+    copy_content_button.on_click = on_copy_content
+
     def on_file_change(_e: Any) -> None:
         _load_selected_file()
         page.update()
@@ -1684,7 +1718,13 @@ def build_output_page(
                         width=340,
                     ),
                     _ft.Column(
-                        controls=[preview],
+                        controls=[
+                            _ft.Row(
+                                controls=[copy_content_button],
+                                alignment=_ft.MainAxisAlignment.END,
+                            ),
+                            preview,
+                        ],
                         expand=True,
                         spacing=4,
                     ),
@@ -1705,6 +1745,8 @@ def build_output_page(
         "version_dropdown": version_dropdown,
         "file_list": file_list,
         "preview": preview,
+        "copy_content_button": copy_content_button,
+        "on_copy_content": on_copy_content,
         "run_status_text": run_status_text,
         "settings_text": settings_text,
         "version_path_text": version_path_text,
