@@ -792,9 +792,36 @@ def test_prompt_page_copy_editor_to_clipboard(tmp_path):
 
     state["editor"].value = "prompt body to copy"
     assert "on_copy_content" in state
-    state["on_copy_content"](None)
+    asyncio.run(state["on_copy_content"](None))
 
     assert page.clipboard_text == "prompt body to copy"
+
+
+def test_set_clipboard_uses_flet_clipboard_service_when_page_has_no_setter():
+    """Modern Flet pages lack set_clipboard; use Clipboard().set instead."""
+    import flet as ft
+
+    from gui import _set_clipboard
+
+    class _PageWithoutSetter:
+        pass
+
+    class _FakeClipboard:
+        last_value: str | None = None
+
+        def set(self, value: str):
+            async def _set() -> None:
+                _FakeClipboard.last_value = value
+
+            return _set()
+
+    class _FakeFt:
+        Clipboard = _FakeClipboard
+
+    asyncio.run(_set_clipboard(_PageWithoutSetter(), "via service", _FakeFt()))
+    assert _FakeClipboard.last_value == "via service"
+    # Sanity: real flet still exposes Clipboard.
+    assert hasattr(ft, "Clipboard")
 
 
 def test_prompt_page_art_styles_sorted_with_campaign_interleaved(tmp_path, monkeypatch):
@@ -926,7 +953,7 @@ def test_output_page_copy_preview_to_clipboard(tmp_path):
 
     state["preview"].value = "preview body to copy"
     assert "on_copy_content" in state
-    state["on_copy_content"](None)
+    asyncio.run(state["on_copy_content"](None))
 
     assert page.clipboard_text == "preview body to copy"
 

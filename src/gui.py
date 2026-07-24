@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import re
 import subprocess
@@ -789,15 +790,15 @@ def build_prompt_page(
             source_dir_text.value = f"Source directory: {source_dir} (open failed)"
             page.update()
 
-    def on_copy_source_path(_e: Any) -> None:
+    async def on_copy_source_path(_e: Any) -> None:
         key = _selected_key[0]
         source_path = _resolve_source_path_for_key(key)
         if source_path and source_path.exists():
-            _safe_set_clipboard(page, str(source_path))
+            await _set_clipboard(page, str(source_path), _ft)
         page.update()
 
-    def on_copy_content(_e: Any) -> None:
-        _safe_set_clipboard(page, editor.value or "")
+    async def on_copy_content(_e: Any) -> None:
+        await _set_clipboard(page, editor.value or "", _ft)
         page.update()
 
     copy_content_button.on_click = on_copy_content
@@ -922,10 +923,24 @@ def _format_preview(path: Path) -> str:
     return json.dumps(parsed, indent=2, ensure_ascii=True)
 
 
-def _safe_set_clipboard(page: Any, text: str) -> None:
+async def _set_clipboard(page: Any, text: str, _ft: Any) -> None:
+    """Copy *text* to the system clipboard.
+
+    Prefer an explicit ``page.set_clipboard`` when present (tests / older Flet).
+    Otherwise use Flet's ``Clipboard`` service (``await Clipboard().set(...)``),
+    which is the supported API in current Flet releases.
+    """
     setter = getattr(page, "set_clipboard", None)
     if callable(setter):
-        setter(text)
+        result = setter(text)
+        if inspect.isawaitable(result):
+            await result
+        return
+
+    clipboard_cls = getattr(_ft, "Clipboard", None)
+    if clipboard_cls is None:
+        raise RuntimeError("Clipboard is unavailable: no Flet Clipboard service")
+    await clipboard_cls().set(text)
 
 
 def _extract_change_value(event: Any) -> str | None:
@@ -1485,8 +1500,8 @@ def build_output_page(
             _set_output_busy_state(False)
             page.update()
 
-    def on_copy_content(_e: Any) -> None:
-        _safe_set_clipboard(page, preview.value or "")
+    async def on_copy_content(_e: Any) -> None:
+        await _set_clipboard(page, preview.value or "", _ft)
         page.update()
 
     copy_content_button.on_click = on_copy_content
