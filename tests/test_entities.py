@@ -931,3 +931,94 @@ def test_merge_entities_with_llm_uses_payload_for_locations_and_beats(monkeypatc
 
     assert "llm did the merge" in warnings
 
+
+# ---------------------------------------------------------------------------
+# Character prompt formatting
+# ---------------------------------------------------------------------------
+
+
+def test_format_character_details_puts_race_and_class_beside_name():
+    character = Character(
+        name="Del",
+        description="A druid in mossy robes",
+        **{"class": "Druid"},
+        race="Half-Elf",
+        physical_description="Tall and moss-slick.",
+        clothing_armor="Mossy robes.",
+    )
+
+    text = entities.format_character_details(character)
+
+    assert text.startswith("Del (Race: Half-Elf; Class: Druid):")
+    assert "Physical: Tall and moss-slick." in text
+    assert "Clothing/Armor: Mossy robes." in text
+    assert "Physical:" in text.splitlines()[1]
+
+
+def test_format_character_details_uses_line_breaks_and_labeled_fields():
+    character = Character(
+        name="Del",
+        description="fallback",
+        physical_description="Tall.",
+        clothing_armor="Robes.",
+        weapons="Staff.",
+        character_quirks="Sniffs the air.",
+    )
+
+    text = entities.format_character_details(character)
+    lines = text.splitlines()
+
+    assert lines[0] == "Del:"
+    assert lines[1] == "Physical: Tall."
+    assert lines[2] == "Clothing/Armor: Robes."
+    assert lines[3] == "Weapons: Staff."
+    assert lines[4] == "Quirks: Sniffs the air."
+
+
+def test_format_character_details_skips_none_and_unknown_attributes():
+    character = Character(
+        name="Del",
+        description="A druid in mossy robes",
+        **{"class": "Unknown"},
+        race="None.",
+        physical_description="None",
+        clothing_armor="  unknown  ",
+        weapons="Staff.",
+        character_quirks="None.",
+    )
+
+    text = entities.format_character_details(character)
+
+    assert "Race:" not in text
+    assert "Class:" not in text
+    assert "Physical:" not in text
+    assert "Clothing/Armor:" not in text
+    assert "Quirks:" not in text
+    assert "Weapons: Staff." in text
+    assert text.startswith("Del:")
+
+
+def test_format_character_details_falls_back_to_description():
+    character = Character(name="Del", description="A druid in mossy robes")
+
+    text = entities.format_character_details(character)
+
+    assert text == "Del:\nA druid in mossy robes"
+
+
+def test_format_character_details_bullet_mode_indents_body():
+    character = Character(
+        name="Del",
+        description="fallback",
+        race="Elf",
+        physical_description="Tall.",
+        weapons="Bow.",
+    )
+
+    text = entities.format_character_details(character, bullet=True)
+    lines = text.splitlines()
+
+    assert lines[0] == "- Del (Race: Elf):"
+    assert lines[1] == "  Physical: Tall."
+    assert lines[2] == "  Weapons: Bow."
+

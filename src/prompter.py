@@ -9,7 +9,7 @@ from art_styles import (
     ART_DIRECTION_TEMPLATE_FILENAME,
     default_art_direction_template_path,
 )
-from entities import WorldStateCheckpoint
+from entities import WorldStateCheckpoint, format_character_details
 from prompt_templates import (
     PAGE_PROMPT_TEMPLATE_FILENAME,
     render_prompt_template,
@@ -88,36 +88,12 @@ def _character_is_referenced(name: str, panel_text: str) -> bool:
 def _format_character_details(world: WorldStateCheckpoint, script: ScriptCheckpoint) -> str:
     panel_text = _collect_panel_text(script)
     all_characters = list(world.player_characters) + list(world.npcs)
-    details = []
-    for character in all_characters:
-        if not _character_is_referenced(character.name, panel_text):
-            continue
-
-        summary_parts = []
-        if character.physical_description:
-            summary_parts.append(f"physical {character.physical_description}")
-        if character.clothing_armor:
-            summary_parts.append(f"clothing/armor {character.clothing_armor}")
-        if character.weapons:
-            summary_parts.append(f"weapons {character.weapons}")
-        if character.character_quirks:
-            summary_parts.append(f"quirks {character.character_quirks}")
-
-        if summary_parts:
-            parts = [f"{character.name}: " + "; ".join(summary_parts)]
-        else:
-            parts = [f"{character.name}: {character.description}"]
-
-        extras = []
-        if character.class_name:
-            extras.append(f"class {character.class_name}")
-        if character.race:
-            extras.append(f"race {character.race}")
-        if extras:
-            parts.append("(" + "; ".join(extras) + ")")
-        details.append(" ".join(parts))
-
-    return " | ".join(details)
+    details = [
+        format_character_details(character)
+        for character in all_characters
+        if _character_is_referenced(character.name, panel_text)
+    ]
+    return "\n\n".join(details)
 
 
 def _load_art_template(art_style_template_path: Path) -> dict[str, str]:

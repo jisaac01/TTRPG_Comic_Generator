@@ -36,6 +36,77 @@ class Character(BaseModel):
     aliases: list[str] = Field(default_factory=list)
 
 
+# Placeholder values that should not appear in prompt text.
+_PLACEHOLDER_DETAIL_VALUES = frozenset(
+    {
+        "none",
+        "none.",
+        "unknown",
+        "unknown.",
+        "n/a",
+        "na",
+        "null",
+        "null.",
+    }
+)
+
+
+def clean_character_detail(value: str | None) -> str | None:
+    """Return a stripped detail value, or None when empty / placeholder."""
+    if value is None:
+        return None
+    stripped = value.strip()
+    if not stripped or stripped.casefold() in _PLACEHOLDER_DETAIL_VALUES:
+        return None
+    return stripped
+
+
+def is_usable_character_detail(value: str | None) -> bool:
+    """Return True when a character field is present and not a placeholder."""
+    return clean_character_detail(value) is not None
+
+
+def format_character_details(character: Character, *, bullet: bool = False) -> str:
+    """Format one character for LLM / image prompts.
+
+    Order: name with race then class beside it, then labeled body fields on
+    separate lines. Placeholder values (None, Unknown, etc.) are omitted.
+    """
+    identity_parts: list[str] = []
+    race = clean_character_detail(character.race)
+    class_name = clean_character_detail(character.class_name)
+    if race:
+        identity_parts.append(f"Race: {race}")
+    if class_name:
+        identity_parts.append(f"Class: {class_name}")
+
+    if identity_parts:
+        header = f"{character.name} ({'; '.join(identity_parts)}):"
+    else:
+        header = f"{character.name}:"
+
+    body_lines: list[str] = []
+    for label, value in (
+        ("Physical", character.physical_description),
+        ("Clothing/Armor", character.clothing_armor),
+        ("Weapons", character.weapons),
+        ("Quirks", character.character_quirks),
+    ):
+        cleaned = clean_character_detail(value)
+        if cleaned:
+            body_lines.append(f"{label}: {cleaned}")
+
+    if not body_lines:
+        description = clean_character_detail(character.description)
+        if description:
+            body_lines.append(description)
+
+    lines = [header, *body_lines]
+    if bullet:
+        return "\n".join([f"- {lines[0]}"] + [f"  {line}" for line in lines[1:]])
+    return "\n".join(lines)
+
+
 class Location(BaseModel):
     name: str = Field(min_length=1)
     appearance: str = Field(min_length=1)

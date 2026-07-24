@@ -131,6 +131,8 @@ def test_generate_page_prompt_uses_specialized_character_fields(tmp_path):
     entities = json.loads(entities_path.read_text(encoding="utf-8"))
     entities["player_characters"][0].update(
         {
+            "class": "Druid",
+            "race": "Half-Elf",
             "physical_description": "Tall, gaunt, and moss-slick from the marsh.",
             "clothing_armor": "Mossy robes and a leather satchel.",
             "weapons": "Torch and carved staff.",
@@ -146,10 +148,43 @@ def test_generate_page_prompt_uses_specialized_character_fields(tmp_path):
         output_path=tmp_path / "04_page_1_prompt.txt",
     )
 
-    assert "physical Tall, gaunt, and moss-slick from the marsh." in prompt_text
-    assert "clothing/armor Mossy robes and a leather satchel." in prompt_text
-    assert "weapons Torch and carved staff." in prompt_text
-    assert "quirks Always sniffs the air before speaking." in prompt_text
+    assert "Del (Race: Half-Elf; Class: Druid):" in prompt_text
+    assert "Physical: Tall, gaunt, and moss-slick from the marsh." in prompt_text
+    assert "Clothing/Armor: Mossy robes and a leather satchel." in prompt_text
+    assert "Weapons: Torch and carved staff." in prompt_text
+    assert "Quirks: Always sniffs the air before speaking." in prompt_text
+    # Characters are separated by blank lines, not pipes.
+    assert " | " not in prompt_text.split("Character details", 1)[-1]
+
+
+def test_generate_page_prompt_skips_placeholder_character_fields(tmp_path):
+    entities_path, script_path, template_path = _write_inputs(tmp_path)
+
+    entities = json.loads(entities_path.read_text(encoding="utf-8"))
+    entities["player_characters"][0].update(
+        {
+            "class": "Unknown",
+            "race": "None.",
+            "physical_description": "None",
+            "clothing_armor": "Mossy robes.",
+            "weapons": "unknown",
+        }
+    )
+    entities_path.write_text(json.dumps(entities), encoding="utf-8")
+
+    prompt_text = prompter.generate_page_prompt(
+        script_checkpoint_path=script_path,
+        entities_checkpoint_path=entities_path,
+        art_style_template_path=template_path,
+        output_path=tmp_path / "04_page_1_prompt.txt",
+    )
+
+    assert "Del:" in prompt_text
+    assert "Race:" not in prompt_text
+    assert "Class:" not in prompt_text
+    assert "Physical:" not in prompt_text
+    assert "Weapons:" not in prompt_text
+    assert "Clothing/Armor: Mossy robes." in prompt_text
 
 
 def test_generate_page_prompt_contains_interpolated_fields(tmp_path):
@@ -170,9 +205,9 @@ def test_generate_page_prompt_contains_interpolated_fields(tmp_path):
     assert "Panel count: 2" in prompt_text
     assert "Panel 1:" in prompt_text
     assert "Panel 2:" in prompt_text
-    assert "Del: A druid in mossy robes" in prompt_text
-    assert "Vendetta: A wary vampire scout" in prompt_text
-    assert "Offscreen NPC: A merchant who is not present in this scene" not in prompt_text
+    assert "Del:\nA druid in mossy robes" in prompt_text
+    assert "Vendetta:\nA wary vampire scout" in prompt_text
+    assert "Offscreen NPC" not in prompt_text
 
 
 def test_generate_panel_prompt_uses_panel_scope_and_avoids_page_context(tmp_path):

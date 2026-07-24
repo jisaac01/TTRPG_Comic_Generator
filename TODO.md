@@ -10,6 +10,9 @@
 - [ ] Add entities_bible to prompts page for editing
 - [ ] Allow editing version files
 - [ ] Add "professional" pipeline tooling, whatever that means, for the resume
+- [ ] Move character descriptions into the style step (so they are styled)
+- [ ] Add some descriptors like age, hair style, height, skin color, to physical description prompt
+
 ---
 
 ## Plan: Implement Panel-by-Panel Generation Mode

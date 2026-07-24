@@ -11,7 +11,7 @@ from typing import Callable, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from entities import Character, Location, StoryBeat
+from entities import Character, Location, StoryBeat, format_character_details
 from llm_client import build_instructor_client
 from model_defaults import DEFAULT_MODEL
 from prompt_templates import (
@@ -99,38 +99,12 @@ def _build_instructor_client(model: str):
     return build_instructor_client(model)
 
 
-def _format_character_details(character: Character) -> str:
-    summary_parts = []
-    if character.physical_description:
-        summary_parts.append(f"Physical: {character.physical_description}")
-    if character.clothing_armor:
-        summary_parts.append(f"Clothing/Armor: {character.clothing_armor}")
-    if character.weapons:
-        summary_parts.append(f"Weapons: {character.weapons}")
-    if character.character_quirks:
-        summary_parts.append(f"Quirks: {character.character_quirks}")
-
-    if summary_parts:
-        details = [f"- {character.name}: " + "; ".join(summary_parts)]
-    else:
-        details = [f"- {character.name}: {character.description}"]
-
-    extras: list[str] = []
-    if character.class_name:
-        extras.append(f"Class: {character.class_name}")
-    if character.race:
-        extras.append(f"Race: {character.race}")
-    if extras:
-        details.append("  " + "; ".join(extras))
-    return "\n".join(details)
-
-
 def _format_entities_for_prompt(world: WorldStateInput) -> str:
     pc_blob = "\n".join(
-        _format_character_details(char) for char in world.player_characters
+        format_character_details(char, bullet=True) for char in world.player_characters
     )
     npc_blob = "\n".join(
-        _format_character_details(char) for char in world.npcs
+        format_character_details(char, bullet=True) for char in world.npcs
     )
     locations_blob = "\n".join(
         f"- {location.name}: {location.appearance}" for location in world.locations
