@@ -75,28 +75,35 @@ def _preserve_case(source: str, target: str) -> str:
 
 
 def _normalize_aliases_in_text(text: str, world: WorldStateCheckpoint) -> str:
-    """Replace alias mentions only when they begin a sentence or the text itself."""
-    normalized = text
+    """Replace whole-word alias mentions with canonical character names.
 
+    Replacements apply anywhere in the text (not only sentence starts). Longer
+    aliases are applied first so multi-word variants win over shorter ones.
+    """
+    replacements: list[tuple[str, str]] = []
     for character in [*world.player_characters, *world.npcs]:
         canonical_name = character.name.strip()
+        if not canonical_name:
+            continue
         for alias in character.aliases or []:
             alias_text = alias.strip()
-            if not alias_text or alias_text.lower() == canonical_name.lower():
+            if not alias_text or alias_text.casefold() == canonical_name.casefold():
                 continue
+            replacements.append((alias_text, canonical_name))
 
-            pattern = re.compile(
-                rf"(^|[.!?]\s+|\n)(\s*)({re.escape(alias_text)})(?=\b)",
-                re.IGNORECASE | re.MULTILINE,
-            )
-            normalized = pattern.sub(
-                lambda match: (
-                    match.group(1)
-                    + match.group(2)
-                    + _preserve_case(match.group(3), canonical_name)
-                ),
-                normalized,
-            )
+    # Longer aliases first (e.g. "Maisie Faye" before a hypothetical "Faye").
+    replacements.sort(key=lambda pair: len(pair[0]), reverse=True)
+
+    normalized = text
+    for alias_text, canonical_name in replacements:
+        pattern = re.compile(
+            rf"(?<!\w)({re.escape(alias_text)})(?!\w)",
+            re.IGNORECASE,
+        )
+        normalized = pattern.sub(
+            lambda match, canon=canonical_name: _preserve_case(match.group(1), canon),
+            normalized,
+        )
 
     return normalized
 

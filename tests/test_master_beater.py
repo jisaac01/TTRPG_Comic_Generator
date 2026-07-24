@@ -134,12 +134,15 @@ Continuation scene."""
     assert hasattr(received_world, 'beats')
 
 
-def test_create_story_bible_normalizes_aliases_conservatively(tmp_path):
+def test_create_story_bible_normalizes_aliases_as_whole_words(tmp_path):
     raw_input = {
         "url": "https://example.test/story",
         "title": "Swamp Trouble",
         "author": "GM",
-        "content": "Wolf crossed the marsh. Sea Wolf prowled the reeds.",
+        "content": (
+            "Wolf crossed the marsh. Then Wolf met Maisie Faye near the gate. "
+            "Wolfgang stayed behind while the werewolf howled."
+        ),
         "quotes": [],
         "source_selector": "div.story-content",
         "scraped_at": "2026-05-04T00:00:00+00:00",
@@ -154,7 +157,12 @@ def test_create_story_bible_normalizes_aliases_conservatively(tmp_path):
                 "name": "Wulf",
                 "description": "A weathered sailor.",
                 "aliases": ["Wolf"],
-            }
+            },
+            {
+                "name": "Maisie Fae",
+                "description": "A seer.",
+                "aliases": ["Maisie Faye"],
+            },
         ],
         "npcs": [],
         "locations": [],
@@ -185,7 +193,10 @@ def test_create_story_bible_normalizes_aliases_conservatively(tmp_path):
         generator=fake_generator,
     )
 
-    assert received_content == "Wulf crossed the marsh. Sea Wolf prowled the reeds."
+    assert received_content == (
+        "Wulf crossed the marsh. Then Wulf met Maisie Fae near the gate. "
+        "Wolfgang stayed behind while the werewolf howled."
+    )
 
 
 def test_create_story_bible_rejects_invalid_scene_count(tmp_path):
