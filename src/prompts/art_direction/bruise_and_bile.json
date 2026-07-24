@@ -4,5 +4,9 @@
   "color_palette": "'The Bruise & The Bile' theme: sickly mustard yellows, deep bruised purples, dried-scab red accents, sickly green glows, and heavy, bubbling charcoal blacks over heavy-grained yellowed parchment and smog-choked grey light.",
   "layout_and_composition": "5-panel strip with uneven, hand-carved charcoal border lines. Composition relies on high-tension cinematic camera work (shaky action perspectives, extreme close-ups, and long-shot shadow silhouettes) obscured by physical environmental textures like smog, lens grease, and splatter.",
   "lettering_and_dialog": "Dialogue bubbles are hand-torn, graying vellum strips with cramped, ink-blotted, shaky calligraphy and precise tiny script to reflect character emotion. SFX are large, jagged charcoal letters scratched directly into the panel artwork.",
-  "text_rendering_guide": "Dialogue: Hand-torn graying vellum strips, cramped ink-blotted calligraphy (shaky or precise depending on tone). Captions: N/A. Voice Over: N/A. Chyrons: N/A. Sound Effects: Raw, jagged charcoal lettering scratched into environmental surfaces/backgrounds (e.g., *CREEEEEEAK...*, *SKREEEEEEEEEE!*, *THWIP—SQUELCH!*)."
+  "text_rendering_guide": "Dialogue: Hand-torn graying vellum strips, cramped ink-blotted calligraphy (shaky or precise depending on tone). Captions: N/A. Voice Over: N/A. Chyrons: N/A. Sound Effects: Raw, jagged charcoal lettering scratched into environmental surfaces/backgrounds (e.g., *CREEEEEEAK...*, *SKREEEEEEEEEE!*, *THWIP—SQUELCH!*).",
+  "environmental_atmosphere": "Thick physical atmosphere of palpable smog, stagnant green-filmed water, and cinematic lens degradation (grease, dried splatter, heavy charcoal vignetting).",
+  "sound_effects_integration": "Sound effects carved and scratched directly into background geometry and structures, never floating as isolated graphics.",
+  "shadow_behavior": "Shadows as active actors—deep bruised purples that stretch and reach across panels to heighten tension.",
+  "silhouette_rendering": "High-chaos or wide shots collapse character detail into thick, bubbling-black muddy charcoal silhouettes emphasizing scale and density."
 }
