@@ -9,7 +9,7 @@ from art_styles import (
     ART_DIRECTION_TEMPLATE_FILENAME,
     default_art_direction_template_path,
 )
-from entities import WorldStateCheckpoint, format_character_details
+from entities import Character, WorldStateCheckpoint, format_character_details
 from prompt_templates import (
     PAGE_PROMPT_TEMPLATE_FILENAME,
     render_prompt_template,
@@ -28,6 +28,29 @@ ART_DIRECTION_TEMPLATE_FIELDS = (
     ("text_rendering_guide", "Text Rendering Guide"),
 )
 ART_DIRECTION_FIELD_LABELS = dict(ART_DIRECTION_TEMPLATE_FIELDS)
+
+# Tokens skipped when expanding multi-word names into short-form match candidates.
+# Prevents titles like "Lord" / "Lady" from matching unrelated panel text.
+_NAME_MATCH_STOPWORDS = frozenset(
+    {
+        "a",
+        "an",
+        "and",
+        "captain",
+        "dame",
+        "dr",
+        "lady",
+        "lord",
+        "master",
+        "mr",
+        "mrs",
+        "ms",
+        "of",
+        "or",
+        "sir",
+        "the",
+    }
+)
 
 
 def _default_art_direction_template_json() -> str:
@@ -80,9 +103,57 @@ def _collect_panel_text(script: ScriptCheckpoint) -> str:
     return " ".join(parts)
 
 
-def _character_is_referenced(name: str, panel_text: str) -> bool:
-    pattern = r"(?<!\\w)" + re.escape(name) + r"(?!\\w)"
+def _phrase_is_referenced(phrase: str, panel_text: str) -> bool:
+    stripped = phrase.strip()
+    if not stripped:
+        return False
+    pattern = r"(?<!\w)" + re.escape(stripped) + r"(?!\w)"
     return re.search(pattern, panel_text, flags=re.IGNORECASE) is not None
+
+
+def _character_reference_phrases(character: Character) -> list[str]:
+    """Phrases that count as a mention of this character in panel/script text.
+
+    Includes the canonical name, aliases (STT / spelling variants), and non-title
+    tokens from multi-word names so short forms like "Maisie" match "Maisie Fae".
+    """
+    phrases: list[str] = []
+    seen: set[str] = set()
+
+    def add(value: str) -> None:
+        stripped = value.strip()
+        if not stripped:
+            return
+        key = stripped.casefold()
+        if key in seen:
+            return
+        seen.add(key)
+        phrases.append(stripped)
+
+    add(character.name)
+    for alias in character.aliases or []:
+        add(alias)
+
+    # Expand multi-word phrases into short-form tokens after collecting full phrases.
+    for phrase in list(phrases):
+        tokens = phrase.split()
+        if len(tokens) < 2:
+            continue
+        for token in tokens:
+            if token.casefold() in _NAME_MATCH_STOPWORDS:
+                continue
+            if len(token) < 2:
+                continue
+            add(token)
+
+    return phrases
+
+
+def _character_is_referenced(character: Character, panel_text: str) -> bool:
+    return any(
+        _phrase_is_referenced(phrase, panel_text)
+        for phrase in _character_reference_phrases(character)
+    )
 
 
 def _format_character_details(world: WorldStateCheckpoint, script: ScriptCheckpoint) -> str:
@@ -91,7 +162,7 @@ def _format_character_details(world: WorldStateCheckpoint, script: ScriptCheckpo
     details = [
         format_character_details(character)
         for character in all_characters
-        if _character_is_referenced(character.name, panel_text)
+        if _character_is_referenced(character, panel_text)
     ]
     return "\n\n".join(details)
 

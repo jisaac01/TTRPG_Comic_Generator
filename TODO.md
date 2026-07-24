@@ -14,6 +14,7 @@
 - [ ] Add some descriptors like age, hair style, height, skin color, to physical description prompt
 - [ ] *** Convert the prompt to the markdown style and try it ***
 - [ ] Add a json/markdown mode to output everything in those formats
+- [x] Fix bug where characters is blank
 
 ---
 

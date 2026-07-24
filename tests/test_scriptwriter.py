@@ -196,16 +196,9 @@ def test_write_script_writes_checkpoint_and_normalizes_panel_indices(tmp_path):
     assert payload["pages"][0]["panels"][1]["held_items_before"]["Del"] == ["torch"]
 
 
-def test_write_script_filters_panel_characters_to_referenced_entities(tmp_path):
+def test_write_script_preserves_panel_characters_list(tmp_path):
+    """Script characters come from the model; do not prune against the entities bible."""
     raw_path, entities_path, architecture_path = _write_input_checkpoints(tmp_path)
-    entities = json.loads(entities_path.read_text(encoding="utf-8"))
-    entities["player_characters"].append(
-        {
-            "name": "Orion",
-            "description": "A former ally absent from this scene",
-        }
-    )
-    entities_path.write_text(json.dumps(entities), encoding="utf-8")
 
     def fake_generator(_world, _story_bible, _model):
         return scriptwriter.ScriptPayload(
@@ -220,13 +213,16 @@ def test_write_script_filters_panel_characters_to_referenced_entities(tmp_path):
                             panel_scale="medium",
                             panel_shape="standard",
                             setting="Marsh edge",
-                            visual_action="Del raises a torch while Vendetta watches the reeds.",
-                            summary="Del and Vendetta move through the marsh.",
-                            characters=["Del", "Vendetta", "Orion"],
-                            camera_framing="Low angle tracking shot from behind Del.",
-                            dialogue_overlay=["Del: Stay close."],
-                            held_items_before={"Del": [], "Vendetta": []},
-                            held_items_after={"Del": ["torch"], "Vendetta": []},
+                            visual_action="Maisie points at Vincent while a carnie blocks the gate.",
+                            summary="The party is denied entry.",
+                            characters=["Maisie", "Vincent", "Carnie"],
+                            camera_framing="Wide shot of the pier gate.",
+                            dialogue_overlay=[
+                                "Maisie: The coils tighten slowly.",
+                                "Carnie: One ticket, one person.",
+                            ],
+                            held_items_before={},
+                            held_items_after={},
                             narrative_overlays_and_text_direction=[],
                         )
                     ],
@@ -244,7 +240,7 @@ def test_write_script_filters_panel_characters_to_referenced_entities(tmp_path):
         generator=fake_generator,
     )
 
-    assert checkpoint.pages[0].panels[0].characters == ["Del", "Vendetta"]
+    assert checkpoint.pages[0].panels[0].characters == ["Maisie", "Vincent", "Carnie"]
 
 
 def test_write_script_accepts_any_panel_count_without_error(tmp_path):

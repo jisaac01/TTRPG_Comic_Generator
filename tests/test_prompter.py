@@ -210,6 +210,82 @@ def test_generate_page_prompt_contains_interpolated_fields(tmp_path):
     assert "Offscreen NPC" not in prompt_text
 
 
+def test_generate_page_prompt_includes_character_matched_by_short_name(tmp_path):
+    entities_path, script_path, template_path = _write_inputs(tmp_path)
+
+    entities = json.loads(entities_path.read_text(encoding="utf-8"))
+    entities["player_characters"].append(
+        {
+            "name": "Maisie Fae",
+            "description": "A seer with a sharp tongue",
+            "aliases": ["Maisie Faye"],
+        }
+    )
+    entities_path.write_text(json.dumps(entities), encoding="utf-8")
+
+    script = json.loads(script_path.read_text(encoding="utf-8"))
+    script["pages"][0]["panels"][0]["visual_action"] = (
+        "Maisie points a dramatic finger at the guards."
+    )
+    script["pages"][0]["panels"][0]["dialogue_overlay"] = [
+        "Maisie: He's a ghost, you idiots!"
+    ]
+    script["pages"][0]["panels"][0]["characters"] = ["Maisie"]
+    script_path.write_text(json.dumps(script), encoding="utf-8")
+
+    prompt_text = prompter.generate_page_prompt(
+        script_checkpoint_path=script_path,
+        entities_checkpoint_path=entities_path,
+        art_style_template_path=template_path,
+        output_path=tmp_path / "04_page_1_prompt.txt",
+    )
+
+    assert "Maisie Fae" in prompt_text
+    assert "A seer with a sharp tongue" in prompt_text
+    assert "Offscreen NPC" not in prompt_text
+
+
+def test_generate_page_prompt_includes_character_matched_by_alias(tmp_path):
+    entities_path, script_path, template_path = _write_inputs(tmp_path)
+
+    entities = json.loads(entities_path.read_text(encoding="utf-8"))
+    entities["player_characters"].append(
+        {
+            "name": "Maisie Fae",
+            "description": "A seer with a sharp tongue",
+            "aliases": ["Maisie Faye"],
+        }
+    )
+    entities_path.write_text(json.dumps(entities), encoding="utf-8")
+
+    script = json.loads(script_path.read_text(encoding="utf-8"))
+    script["pages"][0]["panels"][0]["visual_action"] = (
+        "Maisie Faye holds the ticket toward the gate."
+    )
+    script["pages"][0]["panels"][0]["dialogue_overlay"] = []
+    script["pages"][0]["panels"][0]["characters"] = ["Maisie Faye"]
+    script_path.write_text(json.dumps(script), encoding="utf-8")
+
+    prompt_text = prompter.generate_page_prompt(
+        script_checkpoint_path=script_path,
+        entities_checkpoint_path=entities_path,
+        art_style_template_path=template_path,
+        output_path=tmp_path / "04_page_1_prompt.txt",
+    )
+
+    assert "Maisie Fae" in prompt_text
+    assert "A seer with a sharp tongue" in prompt_text
+
+
+def test_character_is_referenced_uses_word_boundaries(tmp_path):
+    """Short names must not match as substrings of longer unrelated words."""
+    from entities import Character
+
+    character = Character(name="Del", description="A druid")
+    assert prompter._character_is_referenced(character, "Del raises a torch.")
+    assert not prompter._character_is_referenced(character, "Delano raises a torch.")
+
+
 def test_generate_panel_prompt_uses_panel_scope_and_avoids_page_context(tmp_path):
     entities_path, script_path, template_path = _write_inputs(tmp_path)
     script = json.loads(script_path.read_text(encoding="utf-8"))
