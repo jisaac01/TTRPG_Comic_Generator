@@ -308,7 +308,8 @@ campaigns/
       v001/
         01_raw_text.json
         02_entities.json
-        02_5_entities_bible.json            # version-local merged entity continuity
+        02_5_entities_bible.json            # version-local full campaign entities bible
+        02_5_episode_entities.json          # this episode's cast, enriched from the bible
         02_5_story_bible.json
         02_6_story_bible_page_001.json          # per-page story bible slices
         03_script_page_001.json               # per-page script checkpoints
@@ -439,8 +440,9 @@ pytest
 | File | Contents |
 |---|---|
 | `01_raw_text.json` | Sanitized story text, title, author, cached recap variants |
-| `02_entities.json` | Characters, locations, and story beats for this episode |
-| `02_5_entities_bible.json` | Version-local copy of the merged campaign entities bible |
+| `02_entities.json` | Characters, locations, and story beats extracted for this episode |
+| `02_5_entities_bible.json` | Version-local copy of the merged campaign entities bible (full cast) |
+| `02_5_episode_entities.json` | Episode cast only: names from `02_entities.json`, records from the bible |
 | `02_5_story_bible.json` | Full story bible with scene breakdown |
 | `02_6_story_bible_page_NNN.json` | Per-page story bible slice used by the scriptwriter |
 | `02_6_story_bible_page_NNN_panel_NNN.json` | Per-panel story bible slice (panel mode only) |

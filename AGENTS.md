@@ -76,7 +76,7 @@ Each run creates a new version folder (`v001`, `v002`, …) under `campaigns/<ca
 | Phase | Module | Key outputs |
 |-------|--------|-------------|
 | 1 Scrape | `scraper.py` | `01_raw_text.json` |
-| 2 Entities | `entities.py` | `02_entities.json`, campaign `entities_bible.json` (LLM merge) |
+| 2 Entities | `entities.py` | `02_entities.json`, campaign `entities_bible.json` (LLM merge), `02_5_episode_entities.json` (episode cast enriched from bible) |
 | 3 Beater | `master_beater.py` | `02_5_story_bible.json`, `02_6_story_bible_page_*.json` |
 | 4 Script | `scriptwriter.py` | `03_script_page_*.json` (panel mode also writes per-panel checkpoints) |
 | 4.5 Style | `style_integrator.py` | `03_5_styled_script_page_*.json` |

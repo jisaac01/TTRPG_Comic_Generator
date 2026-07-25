@@ -14,12 +14,15 @@ from entities import (
     WorldStateCheckpoint,
     _build_beats,
     write_entities_bible,
+    write_episode_entities,
+    project_episode_entities,
     _build_npcs,
     _build_player_characters,
     _build_locations,
     _dedupe_by_name,
     _normalize_name,
     build_entities_from_raw,
+    EPISODE_ENTITIES_FILENAME,
 )
 from scraper import RawTextCheckpoint, ScrapedEntity, ScrapedQuote
 
@@ -871,6 +874,138 @@ def test_write_entities_bible_writes_locations_and_beats_from_merge_result(monke
     assert "Wolf" in written["player_characters"][0]["aliases"]
     assert len(written["locations"]) == 2
     assert len(written["beats"]) == 2
+
+
+def test_project_episode_entities_keeps_only_episode_cast_with_bible_records():
+    episode = WorldStateCheckpoint(
+        url="https://example.test/ep3",
+        title="Bells Pt 3",
+        author="GM",
+        model="scraper-direct",
+        player_characters=[
+            Character(name="Maisie Faye", description="Episode-only seer blurb."),
+            Character(name="Vincent Poe", description="Episode Vincent."),
+        ],
+        npcs=[
+            Character(name="Choir Master", description="Episode choir master."),
+            Character(name="One-off Guard", description="Only appears this episode."),
+        ],
+        locations=[
+            Location(name="Cathedral", appearance="Episode damp cathedral."),
+            Location(name="New Pier", appearance="Only this episode."),
+        ],
+        beats=[
+            StoryBeat(index=1, beat="Episode beat", highlights=["Episode beat"]),
+        ],
+        analyzed_at="2026-05-04T00:00:00+00:00",
+    )
+    bible = WorldStateCheckpoint(
+        url="https://example.test/campaign",
+        title="Campaign bible",
+        author="GM",
+        model="bible",
+        player_characters=[
+            Character(
+                name="Amos",
+                description="Campaign-only party member from earlier episodes.",
+                physical_description="Average build.",
+            ),
+            Character(
+                name="Maisie Fae",
+                description="Canonical seer.",
+                aliases=["Maisie Faye"],
+                physical_description="Sharp-eyed seer.",
+                character_quirks="Snarky.",
+            ),
+            Character(
+                name="Vincent Poe",
+                description="Canonical Vincent.",
+                physical_description="All black.",
+            ),
+        ],
+        npcs=[
+            Character(
+                name="Choir Master",
+                description="Canonical choir master.",
+                character_quirks="Cowardly.",
+            ),
+            Character(name="Black Mary", description="Not in this episode."),
+        ],
+        locations=[
+            Location(name="Cathedral", appearance="Canonical rot-filled cathedral."),
+            Location(name="Old Sewers", appearance="Not in this episode."),
+        ],
+        beats=[
+            StoryBeat(index=1, beat="Old campaign beat", highlights=["old"]),
+        ],
+        analyzed_at="2026-01-01T00:00:00+00:00",
+    )
+
+    projected = project_episode_entities(episode, bible)
+
+    assert [c.name for c in projected.player_characters] == ["Maisie Fae", "Vincent Poe"]
+    assert projected.player_characters[0].physical_description == "Sharp-eyed seer."
+    assert projected.player_characters[0].aliases == ["Maisie Faye"]
+    assert projected.player_characters[1].physical_description == "All black."
+
+    assert [c.name for c in projected.npcs] == ["Choir Master", "One-off Guard"]
+    assert projected.npcs[0].character_quirks == "Cowardly."
+    assert projected.npcs[1].description == "Only appears this episode."
+
+    # Full-campaign cast must not leak in.
+    assert all(c.name != "Amos" for c in projected.player_characters)
+    assert all(c.name != "Black Mary" for c in projected.npcs)
+
+    assert [loc.name for loc in projected.locations] == ["Cathedral", "New Pier"]
+    assert projected.locations[0].appearance == "Canonical rot-filled cathedral."
+    assert projected.locations[1].appearance == "Only this episode."
+
+    # Beats stay episode-local.
+    assert projected.beats == episode.beats
+    assert projected.url == episode.url
+    assert projected.title == episode.title
+
+
+def test_write_episode_entities_writes_checkpoint(tmp_path):
+    episode = WorldStateCheckpoint(
+        url="https://example.test/ep",
+        title="Ep",
+        author=None,
+        model="scraper-direct",
+        player_characters=[Character(name="Wolf", description="Episode spelling.")],
+        npcs=[],
+        locations=[],
+        beats=[],
+        analyzed_at="2026-05-04T00:00:00+00:00",
+    )
+    bible = WorldStateCheckpoint(
+        url="https://example.test/campaign",
+        title="Campaign",
+        author=None,
+        model="bible",
+        player_characters=[
+            Character(name="Wulf", description="Canonical.", aliases=["Wolf"]),
+        ],
+        npcs=[],
+        locations=[],
+        beats=[],
+        analyzed_at="2026-01-01T00:00:00+00:00",
+    )
+    episode_path = tmp_path / "02_entities.json"
+    output_path = tmp_path / EPISODE_ENTITIES_FILENAME
+    episode_path.write_text(episode.model_dump_json(indent=2), encoding="utf-8")
+
+    result = write_episode_entities(
+        entities_path=episode_path,
+        bible=bible,
+        output_path=output_path,
+    )
+
+    assert output_path.exists()
+    assert result.player_characters[0].name == "Wulf"
+    written = json.loads(output_path.read_text(encoding="utf-8"))
+    assert written["player_characters"][0]["name"] == "Wulf"
+    assert written["player_characters"][0]["aliases"] == ["Wolf"]
 
 
 def test_merge_entities_with_llm_uses_payload_for_locations_and_beats(monkeypatch):

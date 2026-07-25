@@ -304,6 +304,12 @@ def _resolve_bible_source(
     return incoming
 
 
+# Version-local full campaign cast after continuity merge (past + present).
+ENTITIES_BIBLE_VERSION_FILENAME = "02_5_entities_bible.json"
+# Episode cast only: names present in 02_entities.json, records enriched from the bible.
+EPISODE_ENTITIES_FILENAME = "02_5_episode_entities.json"
+
+
 def write_entities_bible(
     *,
     campaign_root: Path,
@@ -326,7 +332,7 @@ def write_entities_bible(
         entities_path.read_text(encoding="utf-8")
     )
     bible_path = campaign_root / "entities_bible.json"
-    version_copy_path = version_dir / "02_5_entities_bible.json"
+    version_copy_path = version_dir / ENTITIES_BIBLE_VERSION_FILENAME
 
     existing = _resolve_bible_source(campaign_root, version_dir, incoming)
     merged, warnings = _merge_entities_with_llm(existing, incoming)
@@ -344,6 +350,135 @@ def write_entities_bible(
     )
 
     return bible_path, version_copy_path, merged, warnings
+
+
+def _character_identity_keys(character: Character) -> set[str]:
+    keys = {_normalize_name(character.name)}
+    for alias in character.aliases or []:
+        alias_name = alias.strip()
+        if alias_name:
+            keys.add(_normalize_name(alias_name))
+    return {key for key in keys if key}
+
+
+def _index_characters_by_identity(
+    characters: list[Character],
+) -> dict[str, Character]:
+    index: dict[str, Character] = {}
+    for character in characters:
+        for key in _character_identity_keys(character):
+            index[key] = character
+    return index
+
+
+def _resolve_character_from_bible(
+    episode_character: Character,
+    *,
+    bible_pcs: dict[str, Character],
+    bible_npcs: dict[str, Character],
+    default_role: str,
+) -> tuple[Character, str]:
+    """Return (bible_or_episode_character, 'pc'|'npc')."""
+    for key in _character_identity_keys(episode_character):
+        if key in bible_pcs:
+            return bible_pcs[key], "pc"
+        if key in bible_npcs:
+            return bible_npcs[key], "npc"
+    return episode_character, default_role
+
+
+def project_episode_entities(
+    episode: WorldStateCheckpoint,
+    bible: WorldStateCheckpoint,
+) -> WorldStateCheckpoint:
+    """Build an episode-scoped world state from scraped entities + bible records.
+
+    Membership comes from the episode checkpoint (who appears this session).
+    When a name/alias matches the bible, the bible's canonical character record
+    is used (name, aliases, descriptions). Locations work the same way by name.
+    Beats always stay episode-local. Characters only in the campaign bible are
+    excluded so later stages cannot invent absent cast members.
+    """
+    bible_pcs = _index_characters_by_identity(bible.player_characters)
+    bible_npcs = _index_characters_by_identity(bible.npcs)
+    bible_locations = {
+        _normalize_name(location.name): location for location in bible.locations
+    }
+
+    player_characters: list[Character] = []
+    npcs: list[Character] = []
+    seen_keys: set[str] = set()
+
+    def _add(character: Character, role: str) -> None:
+        identity = _character_identity_keys(character)
+        if identity & seen_keys:
+            return
+        seen_keys.update(identity)
+        if role == "pc":
+            player_characters.append(character)
+        else:
+            npcs.append(character)
+
+    for character in episode.player_characters:
+        resolved, role = _resolve_character_from_bible(
+            character,
+            bible_pcs=bible_pcs,
+            bible_npcs=bible_npcs,
+            default_role="pc",
+        )
+        _add(resolved, role)
+
+    for character in episode.npcs:
+        resolved, role = _resolve_character_from_bible(
+            character,
+            bible_pcs=bible_pcs,
+            bible_npcs=bible_npcs,
+            default_role="npc",
+        )
+        _add(resolved, role)
+
+    locations: list[Location] = []
+    seen_locations: set[str] = set()
+    for location in episode.locations:
+        key = _normalize_name(location.name)
+        if not key or key in seen_locations:
+            continue
+        seen_locations.add(key)
+        locations.append(bible_locations.get(key, location))
+
+    return WorldStateCheckpoint(
+        url=episode.url,
+        title=episode.title,
+        author=episode.author,
+        model=episode.model,
+        player_characters=player_characters,
+        npcs=npcs,
+        locations=locations,
+        beats=list(episode.beats),
+        analyzed_at=episode.analyzed_at,
+    )
+
+
+def write_episode_entities(
+    *,
+    entities_path: Path,
+    bible: WorldStateCheckpoint,
+    output_path: Path,
+) -> WorldStateCheckpoint:
+    """Project episode entities through the bible and write 02_5_episode_entities.json."""
+    if not entities_path.exists():
+        raise FileNotFoundError(f"Entities checkpoint not found at {entities_path}.")
+
+    episode = WorldStateCheckpoint.model_validate_json(
+        entities_path.read_text(encoding="utf-8")
+    )
+    projected = project_episode_entities(episode, bible)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(
+        json.dumps(projected.model_dump(mode="json"), indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    return projected
 
 
 def _build_player_characters(raw: RawTextCheckpoint) -> list[Character]:

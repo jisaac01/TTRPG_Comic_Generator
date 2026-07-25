@@ -12,9 +12,11 @@ from pathlib import Path
 from typing import Callable, Literal, cast
 
 from entities import (
+    EPISODE_ENTITIES_FILENAME,
     WorldStateCheckpoint,
     build_entities_from_raw,
     write_entities_bible,
+    write_episode_entities,
 )
 from image_generator import ImageGenerator
 from image_stitcher import stitch_panel_images
@@ -408,8 +410,8 @@ def _generate_script_pages_panel_mode(
     version_dir: Path,
     story_bible_path: Path,
     raw_path: Path,
-    version_bible_path: Path,
-    bible_entities: WorldStateInput,
+    episode_entities_path: Path,
+    episode_entities: WorldStateInput,
     total_pages: int,
     script_model: str,
     prompt_template_paths: dict[str, Path],
@@ -437,7 +439,7 @@ def _generate_script_pages_panel_mode(
         script_path = _script_panel_path(version_dir, unit.page_number, unit.panel_index)
         script_system_prompt, script_user_prompt = prepare_scriptwriter_prompts(
             version_dir=version_dir,
-            world=bible_entities,
+            world=episode_entities,
             story_bible=unit.checkpoint,
             system_prompt_path=prompt_template_paths[SCRIPTWRITER_SYSTEM_PROMPT_FILENAME],
             user_prompt_path=prompt_template_paths[SCRIPTWRITER_USER_PROMPT_FILENAME],
@@ -446,7 +448,7 @@ def _generate_script_pages_panel_mode(
         )
         panel_scripts[key] = write_script(
             raw_checkpoint_path=raw_path,
-            entities_checkpoint_path=version_bible_path,
+            entities_checkpoint_path=episode_entities_path,
             story_bible_checkpoint_path=story_path,
             output_path=script_path,
             model=script_model,
@@ -946,6 +948,15 @@ class ComicPipeline:
                     )
                 )
 
+        # Episode-scoped cast: only names from 02_entities.json, records from the bible.
+        # Downstream text stages (beater/script/prompt) use this, not the full campaign bible.
+        episode_entities_path = version_dir / EPISODE_ENTITIES_FILENAME
+        episode_entities = write_episode_entities(
+            entities_path=entities_path,
+            bible=bible_entities,
+            output_path=episode_entities_path,
+        )
+
         story_bible: StoryBibleCheckpoint | None = None
         if story_bible_path.exists():
             self._emit(
@@ -973,7 +984,7 @@ class ComicPipeline:
                 beater_system_prompt, beater_user_prompt = prepare_beater_prompts(
                     version_dir=version_dir,
                     content=raw.content,
-                    world=bible_entities,
+                    world=episode_entities,
                     scene_count=scene_count,
                     raw_quotes=[
                         {"text": quote.text, "attribution": quote.attribution}
@@ -984,7 +995,7 @@ class ComicPipeline:
                 )
                 story_bible = create_story_bible(
                     raw_checkpoint_path=raw_path,
-                    entities_checkpoint_path=version_bible_path,
+                    entities_checkpoint_path=episode_entities_path,
                     output_path=story_bible_path,
                     model=self.beater_model,
                     scene_count=scene_count,
@@ -1043,8 +1054,8 @@ class ComicPipeline:
                         version_dir=version_dir,
                         story_bible_path=story_bible_path,
                         raw_path=raw_path,
-                        version_bible_path=version_bible_path,
-                        bible_entities=cast(WorldStateInput, bible_entities),
+                        episode_entities_path=episode_entities_path,
+                        episode_entities=cast(WorldStateInput, episode_entities),
                         total_pages=self.total_pages,
                         script_model=self.script_model,
                         prompt_template_paths=prompt_template_paths,
@@ -1062,7 +1073,7 @@ class ComicPipeline:
                     ):
                         script_system_prompt, script_user_prompt = prepare_scriptwriter_prompts(
                             version_dir=version_dir,
-                            world=cast(WorldStateInput, bible_entities),
+                            world=cast(WorldStateInput, episode_entities),
                             story_bible=story_bible_page,
                             system_prompt_path=prompt_template_paths[SCRIPTWRITER_SYSTEM_PROMPT_FILENAME],
                             user_prompt_path=prompt_template_paths[SCRIPTWRITER_USER_PROMPT_FILENAME],
@@ -1072,7 +1083,7 @@ class ComicPipeline:
                         generated_pages.append(
                             write_script(
                                 raw_checkpoint_path=raw_path,
-                                entities_checkpoint_path=version_bible_path,
+                                entities_checkpoint_path=episode_entities_path,
                                 story_bible_checkpoint_path=story_bible_page_path,
                                 output_path=script_page_path,
                                 model=self.script_model,
@@ -1293,7 +1304,7 @@ class ComicPipeline:
                                     )
                                     prompt_text = prepare_page_prompt_template(
                                         version_dir=version_dir,
-                                        world=bible_entities,
+                                        world=episode_entities,
                                         script=panel_script,
                                         art_template=art_template,
                                         template_path=prompt_template_paths[PAGE_PROMPT_TEMPLATE_FILENAME],
@@ -1319,7 +1330,7 @@ class ComicPipeline:
                         try:
                             prompt_text = prepare_page_prompt_template(
                                 version_dir=version_dir,
-                                world=bible_entities,
+                                world=episode_entities,
                                 script=prompt_script,
                                 art_template=art_template,
                                 template_path=prompt_template_paths[PAGE_PROMPT_TEMPLATE_FILENAME],

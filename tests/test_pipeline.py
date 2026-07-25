@@ -529,9 +529,9 @@ async def test_first_run_creates_campaign_episode_version(tmp_path):
 
     version_dir = _version_dir_from_result(result)
     _, architect_kwargs = mock_architect.call_args
-    assert architect_kwargs["entities_checkpoint_path"] == version_dir / "02_5_entities_bible.json"
+    assert architect_kwargs["entities_checkpoint_path"] == version_dir / "02_5_episode_entities.json"
     _, script_kwargs = mock_script.call_args
-    assert script_kwargs["entities_checkpoint_path"] == version_dir / "02_5_entities_bible.json"
+    assert script_kwargs["entities_checkpoint_path"] == version_dir / "02_5_episode_entities.json"
 
     assert result["version"] == "v001"
     version_dir = _version_dir_from_result(result)
@@ -570,10 +570,13 @@ async def test_first_run_writes_entities_bible_artifacts(tmp_path):
     version_dir = _version_dir_from_result(result)
     campaign_bible = tmp_path / "dreadmarsh" / "entities_bible.json"
     version_copy = version_dir / "02_5_entities_bible.json"
+    episode_entities = version_dir / "02_5_episode_entities.json"
 
     assert campaign_bible.exists()
     assert version_copy.exists()
+    assert episode_entities.exists()
     assert json.loads(campaign_bible.read_text(encoding="utf-8"))["player_characters"][0]["name"] == "Del"
+    assert json.loads(episode_entities.read_text(encoding="utf-8"))["player_characters"][0]["name"] == "Del"
 
 
 @pytest.mark.asyncio
