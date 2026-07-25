@@ -9,6 +9,7 @@ from pipeline_config import (
     RunConfig,
     effective_rerun_from,
     run_config_snapshot,
+    setting_field_enabled,
     should_copy_prompt_artifacts,
 )
 
@@ -70,6 +71,28 @@ def test_effective_rerun_from_bumps_when_panel_count_changes() -> None:
     new["panel_count"] = 8
 
     assert effective_rerun_from("style", prev, new) == "beater"
+
+
+def test_effective_rerun_from_bumps_to_beater_when_recap_version_changes() -> None:
+    prev = run_config_snapshot(
+        RunConfig(url="https://example.test/story", campaign="dreadmarsh")
+    )
+    new = dict(prev)
+    new["recap_version"] = "long"
+
+    assert effective_rerun_from("prompt", prev, new) == "beater"
+    assert effective_rerun_from("script", prev, new) == "beater"
+    assert effective_rerun_from("beater", prev, new) == "beater"
+    # Explicit earlier stage still wins (min of requested and config).
+    assert effective_rerun_from("entities", prev, new) == "entities"
+
+
+def test_setting_field_enabled_allows_recap_at_beater_not_script() -> None:
+    assert setting_field_enabled("recap", "beater") is True
+    assert setting_field_enabled("recap", "entities") is True
+    assert setting_field_enabled("recap", "scrape") is True
+    assert setting_field_enabled("recap", "script") is False
+    assert setting_field_enabled("recap", "prompt") is False
 
 
 def test_should_copy_prompt_artifacts_only_when_config_unchanged() -> None:

@@ -641,12 +641,22 @@ class ComicPipeline:
         return stitched_paths, errors
 
     def _apply_recap_selection(self, raw: RawTextCheckpoint) -> tuple[RawTextCheckpoint, bool, bool]:
-        """Select content from recap variants and report selection/content changes."""
+        """Select content from cached recap variants and report selection/content changes.
+
+        Raises ValueError when the requested variant is missing from the scrape
+        checkpoint. Does not re-scrape; re-run from Scrape to refresh variants.
+        """
         selected = self.recap_version
         variants = raw.recap_variants or {}
         chosen = variants.get(selected)
-        if not chosen:
-            return raw, False, False
+        if not chosen or not str(chosen).strip():
+            available = sorted(k for k, v in variants.items() if v and str(v).strip())
+            available_text = ", ".join(repr(k) for k in available) if available else "(none)"
+            raise ValueError(
+                f"Recap variant {selected!r} is not available in the cached scrape. "
+                f"Available: {available_text}. "
+                "Re-run from Scrape to refresh recap variants."
+            )
 
         content_changed = raw.content != chosen
         selection_changed = raw.selected_recap != selected
@@ -848,10 +858,13 @@ class ComicPipeline:
                             warning=f"Recap variant changed to {self.recap_version!r}",
                         )
                     )
-                    entities_path = version_dir / "02_entities.json"
-                    entities_path.unlink(missing_ok=True)
+                    # Recap body feeds the story bible, not keyed entities.
+                    # Keep 02_entities.json; invalidate beater outputs and below.
+                    (version_dir / "02_5_story_bible.json").unlink(missing_ok=True)
                     _delete_matching(version_dir, STORY_BIBLE_PAGE_GLOB)
+                    _delete_matching(version_dir, STORY_BIBLE_PANEL_GLOB)
                     _delete_matching(version_dir, SCRIPT_PAGE_GLOB)
+                    _delete_matching(version_dir, SCRIPT_PANEL_GLOB)
                     _delete_matching(version_dir, STYLED_SCRIPT_PAGE_GLOB)
                     for prompt_file in version_dir.glob("04_page_*.txt"):
                         prompt_file.unlink(missing_ok=True)

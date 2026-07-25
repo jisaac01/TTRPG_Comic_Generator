@@ -135,7 +135,8 @@ STAGE_ORDER: list[RerunFrom] = [
 ]
 
 SETTING_MIN_STAGE: dict[str, RerunFrom] = {
-    "recap_version": "entities",
+    # Recap body text feeds the story bible, not keyed entity extraction.
+    "recap_version": "beater",
     "panel_count": "beater",
     "total_pages": "beater",
     "generation_mode": "script",
@@ -144,7 +145,7 @@ SETTING_MIN_STAGE: dict[str, RerunFrom] = {
 }
 
 SETTING_FIELD_MIN_STAGE: dict[str, RerunFrom] = {
-    "recap": "entities",
+    "recap": "beater",
     "panels": "beater",
     "pages": "beater",
     "generation_mode": "script",

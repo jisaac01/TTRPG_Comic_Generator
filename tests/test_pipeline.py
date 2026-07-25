@@ -842,6 +842,7 @@ async def test_run_skips_all_phases_when_all_checkpoints_exist(tmp_path):
 
 @pytest.mark.asyncio
 async def test_cached_raw_recap_switch_updates_content_and_reruns_downstream(tmp_path):
+    """Recap switch uses cached variants: no scrape/entities rebuild; beater onward runs."""
     _make_episode(tmp_path, "dreadmarsh", "https://example.test/story", "Dreadmarsh Crossing")
 
     pipeline = ComicPipeline(
@@ -863,15 +864,58 @@ async def test_cached_raw_recap_switch_updates_content_and_reruns_downstream(tmp
         result = await pipeline.run()
 
     mock_scrape.assert_not_awaited()
-    mock_entities.assert_called_once()
+    mock_entities.assert_not_called()
     mock_architect.assert_called_once()
     mock_script.assert_called_once()
     mock_prompts.assert_called_once()
 
-    raw_path = _version_dir_from_result(result) / "01_raw_text.json"
+    version_dir = _version_dir_from_result(result)
+    raw_path = version_dir / "01_raw_text.json"
     raw_payload = json.loads(raw_path.read_text(encoding="utf-8"))
     assert raw_payload["selected_recap"] == "short"
     assert raw_payload["content"] == _RAW_CHECKPOINT.recap_variants["short"]
+    assert (version_dir / "02_entities.json").exists()
+
+
+@pytest.mark.asyncio
+async def test_cached_raw_missing_recap_variant_hard_errors_without_scraping(tmp_path):
+    episode_dir = _make_episode(
+        tmp_path, "dreadmarsh", "https://example.test/story", "Dreadmarsh Crossing"
+    )
+    # Leave only the standard variant in the prior scrape.
+    raw = scraper.RawTextCheckpoint.model_validate_json(
+        (episode_dir / "v001" / "01_raw_text.json").read_text(encoding="utf-8")
+    )
+    raw = raw.model_copy(
+        update={
+            "recap_variants": {"standard": raw.recap_variants["standard"]},
+            "selected_recap": "standard",
+            "content": raw.recap_variants["standard"],
+        }
+    )
+    (episode_dir / "v001" / "01_raw_text.json").write_text(
+        raw.model_dump_json(), encoding="utf-8"
+    )
+
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=2,
+        recap_version="long",
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock) as mock_scrape,
+        patch("pipeline.build_entities_from_raw") as mock_entities,
+        patch("pipeline.create_story_bible") as mock_architect,
+    ):
+        with pytest.raises(ValueError, match="Recap variant 'long' is not available"):
+            await pipeline.run()
+
+    mock_scrape.assert_not_awaited()
+    mock_entities.assert_not_called()
+    mock_architect.assert_not_called()
 
 
 @pytest.mark.asyncio
