@@ -11,7 +11,7 @@
 - [ ] Allow editing version files
 - [ ] Add "professional" pipeline tooling, whatever that means, for the resume
 - [ ] Move character descriptions into the style step (so they are styled)
-- [ ] Add some descriptors like age, hair style, height, skin color, to physical description prompt
+- [x] Add some descriptors like age, hair style, height, skin color, to physical description prompt
 - [ ] *** Convert the prompt to the markdown style and try it ***
 - [ ] Add a json/markdown mode to output everything in those formats
 - [x] Fix bug where characters is blank

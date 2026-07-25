@@ -4,6 +4,7 @@ import json
 from collections.abc import Sequence
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -29,9 +30,18 @@ class Character(BaseModel):
         serialization_alias="class",
     )
     race: str | None = None
+    age: str | None = None
+    sex: str | None = None
+    build: str | None = None
+    height: str | None = None
+    hair: str | None = None
+    eyes: str | None = None
+    skin: str | None = None
+    distinguishing_marks: str | None = None
     physical_description: str | None = None
     clothing_armor: str | None = None
     weapons: str | None = None
+    distinctive_props: str | None = None
     character_quirks: str | None = None
     aliases: list[str] = Field(default_factory=list)
 
@@ -50,6 +60,22 @@ _PLACEHOLDER_DETAIL_VALUES = frozenset(
     }
 )
 
+CharacterAudience = Literal["visual", "narrative"]
+
+# Portrait atoms rendered as labeled body lines when present.
+_VISUAL_BODY_FIELDS: tuple[tuple[str, str], ...] = (
+    ("Physical", "physical_description"),
+    ("Build", "build"),
+    ("Height", "height"),
+    ("Hair", "hair"),
+    ("Eyes", "eyes"),
+    ("Skin", "skin"),
+    ("Marks", "distinguishing_marks"),
+    ("Clothing/Armor", "clothing_armor"),
+    ("Weapons", "weapons"),
+    ("Props", "distinctive_props"),
+)
+
 
 def clean_character_detail(value: str | None) -> str | None:
     """Return a stripped detail value, or None when empty / placeholder."""
@@ -66,37 +92,69 @@ def is_usable_character_detail(value: str | None) -> bool:
     return clean_character_detail(value) is not None
 
 
-def format_character_details(character: Character, *, bullet: bool = False) -> str:
-    """Format one character for LLM / image prompts.
-
-    Order: name with race then class beside it, then labeled body fields on
-    separate lines. Placeholder values (None, Unknown, etc.) are omitted.
-    """
+def _format_character_header(character: Character) -> str:
+    """Name with race, class, age, and sex when present."""
     identity_parts: list[str] = []
     race = clean_character_detail(character.race)
     class_name = clean_character_detail(character.class_name)
+    age = clean_character_detail(character.age)
+    sex = clean_character_detail(character.sex)
     if race:
         identity_parts.append(f"Race: {race}")
     if class_name:
         identity_parts.append(f"Class: {class_name}")
+    if age:
+        identity_parts.append(f"age {age}")
+    if sex:
+        identity_parts.append(sex)
 
     if identity_parts:
-        header = f"{character.name} ({'; '.join(identity_parts)}):"
-    else:
-        header = f"{character.name}:"
+        return f"{character.name} ({'; '.join(identity_parts)}):"
+    return f"{character.name}:"
 
+
+def _format_visual_body_lines(character: Character) -> list[str]:
+    """Labeled visual fields that are present and non-placeholder."""
     body_lines: list[str] = []
-    for label, value in (
-        ("Physical", character.physical_description),
-        ("Clothing/Armor", character.clothing_armor),
-        ("Weapons", character.weapons),
-        ("Quirks", character.character_quirks),
-    ):
-        cleaned = clean_character_detail(value)
+    for label, attr in _VISUAL_BODY_FIELDS:
+        cleaned = clean_character_detail(getattr(character, attr))
         if cleaned:
             body_lines.append(f"{label}: {cleaned}")
+    return body_lines
 
-    if not body_lines:
+
+def format_character_details(
+    character: Character,
+    *,
+    bullet: bool = False,
+    audience: CharacterAudience = "narrative",
+) -> str:
+    """Format one character for LLM or image prompts.
+
+    audience=\"visual\" (image prompts): identity header + present portrait
+    atoms, clothing, weapons, and props. Omits narrative description and
+    personality quirks when any visual content exists.
+
+    audience=\"narrative\" (script / beater): identity header, role description,
+    visual summary, and character_quirks.
+
+    Placeholder values (None, Unknown, etc.) are omitted. Falls back to
+    description alone when no specialized visual body fields are present.
+    """
+    header = _format_character_header(character)
+    body_lines = _format_visual_body_lines(character)
+
+    if audience == "narrative":
+        description = clean_character_detail(character.description)
+        quirks = clean_character_detail(character.character_quirks)
+        narrative_lines: list[str] = []
+        if description:
+            narrative_lines.append(description)
+        narrative_lines.extend(body_lines)
+        if quirks:
+            narrative_lines.append(f"Quirks: {quirks}")
+        body_lines = narrative_lines
+    elif not body_lines:
         description = clean_character_detail(character.description)
         if description:
             body_lines.append(description)

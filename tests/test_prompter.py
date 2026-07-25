@@ -133,9 +133,14 @@ def test_generate_page_prompt_uses_specialized_character_fields(tmp_path):
         {
             "class": "Druid",
             "race": "Half-Elf",
+            "age": "40",
+            "sex": "male",
+            "build": "gaunt",
+            "hair": "moss-tangled",
             "physical_description": "Tall, gaunt, and moss-slick from the marsh.",
             "clothing_armor": "Mossy robes and a leather satchel.",
             "weapons": "Torch and carved staff.",
+            "distinctive_props": "walking plant companion Petey",
             "character_quirks": "Always sniffs the air before speaking.",
         }
     )
@@ -148,11 +153,16 @@ def test_generate_page_prompt_uses_specialized_character_fields(tmp_path):
         output_path=tmp_path / "04_page_1_prompt.txt",
     )
 
-    assert "Del (Race: Half-Elf; Class: Druid):" in prompt_text
+    assert "Del (Race: Half-Elf; Class: Druid; age 40; male):" in prompt_text
     assert "Physical: Tall, gaunt, and moss-slick from the marsh." in prompt_text
+    assert "Build: gaunt" in prompt_text
+    assert "Hair: moss-tangled" in prompt_text
     assert "Clothing/Armor: Mossy robes and a leather satchel." in prompt_text
     assert "Weapons: Torch and carved staff." in prompt_text
-    assert "Quirks: Always sniffs the air before speaking." in prompt_text
+    assert "Props: walking plant companion Petey" in prompt_text
+    # Image prompts are visual-only: personality quirks stay out.
+    assert "Quirks:" not in prompt_text
+    assert "sniffs the air" not in prompt_text
     # Characters are separated by blank lines, not pipes.
     assert " | " not in prompt_text.split("Character details", 1)[-1]
 

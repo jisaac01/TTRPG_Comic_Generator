@@ -12,10 +12,19 @@ Return JSON with this shape:
       "description": "A concise canonical summary of role, personality, and narrative importance.",
       "class": "...",
       "race": "...",
-      "physical_description": "A complete visual description of appearance, build, posture, age cues, and distinctive features.",
+      "age": "...",
+      "sex": "...",
+      "build": "...",
+      "height": "...",
+      "hair": "...",
+      "eyes": "...",
+      "skin": "...",
+      "distinguishing_marks": "...",
+      "physical_description": "Residual visual vibe: posture, presence, likeness refs not covered by atoms.",
       "clothing_armor": "...",
       "weapons": "...",
-      "character_quirks": "...",
+      "distinctive_props": "Visible carried items, signature props, on-panel companions.",
+      "character_quirks": "Personality, methods, and non-visual abilities only.",
       "aliases": ["..."]
     }}
   ],
@@ -25,10 +34,19 @@ Return JSON with this shape:
       "description": "A concise canonical summary of role, personality, and narrative importance.",
       "class": "...",
       "race": "...",
-      "physical_description": "A complete visual description of appearance, build, posture, age cues, and distinctive features.",
+      "age": "...",
+      "sex": "...",
+      "build": "...",
+      "height": "...",
+      "hair": "...",
+      "eyes": "...",
+      "skin": "...",
+      "distinguishing_marks": "...",
+      "physical_description": "Residual visual vibe: posture, presence, likeness refs not covered by atoms.",
       "clothing_armor": "...",
       "weapons": "...",
-      "character_quirks": "...",
+      "distinctive_props": "Visible carried items, signature props, on-panel companions.",
+      "character_quirks": "Personality, methods, and non-visual abilities only.",
       "aliases": ["..."]
     }}
   ],
@@ -42,6 +60,8 @@ Return JSON with this shape:
 }}
 
 Guidance:
-- Prefer specialized fields (physical_description, clothing_armor, weapons, character_quirks) over repeating the same details in description.
-- Keep description short and canonical; use the specialized fields for the richer visual and equipment detail the bible needs.
+- Only populate portrait fields (age, sex, build, height, hair, eyes, skin, distinguishing_marks, physical_description, clothing_armor, weapons, distinctive_props) when supported by source text or the existing bible. Leave unknown fields null or omit them. Never invent appearance details.
+- Prefer specialized fields over repeating the same details in description.
+- Keep description short and canonical; use specialized fields for visual and equipment detail.
+- Put visible props/companions in distinctive_props; put personality and non-visual abilities in character_quirks.
 - For locations and beats return deduplicated lists only (merge similar locations; drop duplicate or near-identical beats). Renumber final beats from 1. Bible name/facts take priority.

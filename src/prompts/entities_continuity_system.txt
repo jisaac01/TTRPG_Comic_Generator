@@ -4,12 +4,19 @@ Your job is to merge the existing bible entities (player_characters, npcs, locat
 
 Rules:
 - The names in the EXISTING BIBLE are always canonical and take priority. For characters and NPCs: if the incoming episode uses the same entity under a similar name (e.g. "Wolf" vs "Wulf", or minor spelling/casing difference), output the BIBLE'S name as the primary "name" field and add the incoming variant to the "aliases" list (union with any existing aliases). Never replace the bible's primary name with the episode's variant.
-- If the existing bible and current episode disagree on stable facts, the existing bible is canonical for names, classes, ancestries/race, and other facts that don't change. Otherwise prefer richer/more specific information and note conflicts in warnings.
+- If the existing bible and current episode disagree on stable facts, the existing bible is canonical for names, classes, ancestries/race, age, sex, and other facts that don't change. Otherwise prefer richer/more specific information and note conflicts in warnings.
 - Preserve the most accurate and complete canonical description for each entity.
-- For every character and NPC, write a complete physical description that covers appearance, notable features, build, posture, age cues, and distinctive visual traits.
-- Populate clothing_armor, weapons, and character_quirks whenever the text supports them; use these specialized fields instead of overloading the generic description field.
-- Keep aliases, class, race, physical_description, clothing_armor, weapons, and character_quirks when they are supported by the source text.
-- Extract or infer class, race, physical_description, clothing_armor, weapons, and character_quirks from the descriptions and context when possible.
+- For every character and NPC, extract portrait facts into specialized fields when the text supports them:
+  - age (numeric or descriptive: "78", "elderly", "teen")
+  - sex (visual presentation: "female", "male", "nonbinary", etc.)
+  - build, height, hair, eyes, skin, distinguishing_marks
+  - physical_description for residual visual vibe (posture, presence, likeness refs) not covered by atoms
+  - clothing_armor, weapons, distinctive_props (visible carried items, signature gear props, animal companions that appear on-panel)
+- Only fill a field when it is supported by the source text or existing bible. Leave fields null/omitted when unknown. Do not invent hair color, eye color, skin tone, age, or other portrait details.
+- character_quirks is for personality, methods, and non-visual abilities only. Put visible props and companions in distinctive_props, not quirks.
+- description is a short canonical summary of role, personality, and narrative importance. Age may appear in prose, but the age field is canonical for visuals.
+- Prefer specialized visual fields over repeating the same details in description.
+- Keep aliases, class, race, and all specialized fields when they are supported by the source text.
 - For locations: merge entries that refer to the same place (by name or description similarity). Produce a deduplicated list. When merging, prefer the most complete appearance from the bible; add any new distinctive details.
 - For beats: include distinct story moments from the episode. Deduplicate near-identical beats (by normalized beat text). Output a clean list renumbered consecutively from index 1 with the richest highlights preserved. Do not repeat beats already present in the bible.
 - Return JSON only.

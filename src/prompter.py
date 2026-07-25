@@ -160,7 +160,7 @@ def _format_character_details(world: WorldStateCheckpoint, script: ScriptCheckpo
     panel_text = _collect_panel_text(script)
     all_characters = list(world.player_characters) + list(world.npcs)
     details = [
-        format_character_details(character)
+        format_character_details(character, audience="visual")
         for character in all_characters
         if _character_is_referenced(character, panel_text)
     ]

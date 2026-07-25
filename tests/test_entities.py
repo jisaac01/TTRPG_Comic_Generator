@@ -174,9 +174,18 @@ def test_build_player_characters_exposes_optional_continuity_fields_with_default
         "description": "A druid",
         "class_name": None,
         "race": None,
+        "age": None,
+        "sex": None,
+        "build": None,
+        "height": None,
+        "hair": None,
+        "eyes": None,
+        "skin": None,
+        "distinguishing_marks": None,
         "physical_description": None,
         "clothing_armor": None,
         "weapons": None,
+        "distinctive_props": None,
         "character_quirks": None,
         "aliases": [],
     }
@@ -189,9 +198,18 @@ def test_character_accepts_alias_field_names_for_continuity_metadata():
             "description": "A sharp-eyed sailor.",
             "class": "Ranger",
             "race": "Human",
+            "age": "middle-aged",
+            "sex": "male",
+            "build": "weather-beaten",
+            "height": "tall",
+            "hair": "salt-stiff beard",
+            "eyes": "sharp gray eyes",
+            "skin": "sun-leathered",
+            "distinguishing_marks": "scarred jaw",
             "physical_description": "Tall and weather-beaten, with a scarred jaw and salt-stiff beard.",
             "clothing_armor": "Oilskin coat over scale-mail cuirass.",
             "weapons": "Cutlass and hand crossbow.",
+            "distinctive_props": "brass spyglass",
             "character_quirks": "Always taps his cutlass on the deck before speaking.",
             "aliases": ["Wolf"],
         }
@@ -199,9 +217,18 @@ def test_character_accepts_alias_field_names_for_continuity_metadata():
 
     assert char.class_name == "Ranger"
     assert char.race == "Human"
+    assert char.age == "middle-aged"
+    assert char.sex == "male"
+    assert char.build == "weather-beaten"
+    assert char.height == "tall"
+    assert char.hair == "salt-stiff beard"
+    assert char.eyes == "sharp gray eyes"
+    assert char.skin == "sun-leathered"
+    assert char.distinguishing_marks == "scarred jaw"
     assert char.physical_description == "Tall and weather-beaten, with a scarred jaw and salt-stiff beard."
     assert char.clothing_armor == "Oilskin coat over scale-mail cuirass."
     assert char.weapons == "Cutlass and hand crossbow."
+    assert char.distinctive_props == "brass spyglass"
     assert char.character_quirks == "Always taps his cutlass on the deck before speaking."
     assert char.aliases == ["Wolf"]
 
@@ -1082,7 +1109,7 @@ def test_format_character_details_puts_race_and_class_beside_name():
         clothing_armor="Mossy robes.",
     )
 
-    text = entities.format_character_details(character)
+    text = entities.format_character_details(character, audience="visual")
 
     assert text.startswith("Del (Race: Half-Elf; Class: Druid):")
     assert "Physical: Tall and moss-slick." in text
@@ -1090,24 +1117,27 @@ def test_format_character_details_puts_race_and_class_beside_name():
     assert "Physical:" in text.splitlines()[1]
 
 
-def test_format_character_details_uses_line_breaks_and_labeled_fields():
+def test_format_character_details_visual_uses_line_breaks_and_labeled_fields():
     character = Character(
         name="Del",
-        description="fallback",
+        description="A mossy marsh druid.",
         physical_description="Tall.",
         clothing_armor="Robes.",
         weapons="Staff.",
-        character_quirks="Sniffs the air.",
+        distinctive_props="leather satchel",
+        character_quirks="Sniffs the air before speaking.",
     )
 
-    text = entities.format_character_details(character)
+    text = entities.format_character_details(character, audience="visual")
     lines = text.splitlines()
 
     assert lines[0] == "Del:"
     assert lines[1] == "Physical: Tall."
     assert lines[2] == "Clothing/Armor: Robes."
     assert lines[3] == "Weapons: Staff."
-    assert lines[4] == "Quirks: Sniffs the air."
+    assert lines[4] == "Props: leather satchel"
+    assert "Quirks:" not in text
+    assert "mossy marsh druid" not in text
 
 
 def test_format_character_details_skips_none_and_unknown_attributes():
@@ -1116,19 +1146,25 @@ def test_format_character_details_skips_none_and_unknown_attributes():
         description="A druid in mossy robes",
         **{"class": "Unknown"},
         race="None.",
+        age="unknown",
+        sex="None",
+        hair="  n/a  ",
         physical_description="None",
         clothing_armor="  unknown  ",
         weapons="Staff.",
+        distinctive_props="None.",
         character_quirks="None.",
     )
 
-    text = entities.format_character_details(character)
+    text = entities.format_character_details(character, audience="visual")
 
     assert "Race:" not in text
     assert "Class:" not in text
+    assert "age" not in text
     assert "Physical:" not in text
     assert "Clothing/Armor:" not in text
     assert "Quirks:" not in text
+    assert "Props:" not in text
     assert "Weapons: Staff." in text
     assert text.startswith("Del:")
 
@@ -1136,9 +1172,12 @@ def test_format_character_details_skips_none_and_unknown_attributes():
 def test_format_character_details_falls_back_to_description():
     character = Character(name="Del", description="A druid in mossy robes")
 
-    text = entities.format_character_details(character)
-
-    assert text == "Del:\nA druid in mossy robes"
+    assert entities.format_character_details(character, audience="visual") == (
+        "Del:\nA druid in mossy robes"
+    )
+    assert entities.format_character_details(character, audience="narrative") == (
+        "Del:\nA druid in mossy robes"
+    )
 
 
 def test_format_character_details_bullet_mode_indents_body():
@@ -1150,10 +1189,101 @@ def test_format_character_details_bullet_mode_indents_body():
         weapons="Bow.",
     )
 
-    text = entities.format_character_details(character, bullet=True)
+    text = entities.format_character_details(
+        character, bullet=True, audience="visual"
+    )
     lines = text.splitlines()
 
     assert lines[0] == "- Del (Race: Elf):"
     assert lines[1] == "  Physical: Tall."
     assert lines[2] == "  Weapons: Bow."
+
+
+def test_format_character_details_visual_includes_age_sex_and_portrait_atoms():
+    character = Character(
+        name="Maisie Fae",
+        description=(
+            "A 78-year-old street seer and spirit medium who uses intuition "
+            "and opportunism to manipulate her environment. She operates a forgery workshop."
+        ),
+        **{"class": "Seer"},
+        race="Human",
+        age="78",
+        sex="female",
+        hair="iron-gray",
+        eyes="intense, eerie gaze",
+        physical_description=(
+            "Ragged appearance; she carries herself like someone who has "
+            "outlived worse than sewers and rat kings."
+        ),
+        clothing_armor="Worn, layered street clothes.",
+        weapons="A keen hatchet and a newly acquired magical bow.",
+        distinctive_props="crystal ball; dog Krusty",
+        character_quirks=(
+            "Uses eerie intuition to make bold, often manipulative promises. "
+            "Smears moldy herbs on steel to combat the undead."
+        ),
+    )
+
+    text = entities.format_character_details(character, audience="visual")
+
+    assert text.startswith(
+        "Maisie Fae (Race: Human; Class: Seer; age 78; female):"
+    )
+    assert "Physical: Ragged appearance" in text
+    assert "Hair: iron-gray" in text
+    assert "Eyes: intense, eerie gaze" in text
+    assert "Clothing/Armor: Worn, layered street clothes." in text
+    assert "Weapons: A keen hatchet and a newly acquired magical bow." in text
+    assert "Props: crystal ball; dog Krusty" in text
+    assert "Quirks:" not in text
+    assert "manipulative promises" not in text
+    assert "forgery workshop" not in text
+
+
+def test_format_character_details_narrative_includes_description_and_quirks():
+    character = Character(
+        name="Maisie Fae",
+        description="A 78-year-old street seer who operates a forgery workshop.",
+        **{"class": "Seer"},
+        race="Human",
+        age="78",
+        sex="female",
+        physical_description="Ragged appearance with an intense, eerie gaze.",
+        clothing_armor="Worn, layered street clothes.",
+        distinctive_props="crystal ball; dog Krusty",
+        character_quirks="Makes bold, manipulative promises.",
+    )
+
+    text = entities.format_character_details(character, audience="narrative")
+
+    assert text.startswith(
+        "Maisie Fae (Race: Human; Class: Seer; age 78; female):"
+    )
+    assert "A 78-year-old street seer who operates a forgery workshop." in text
+    assert "Physical: Ragged appearance with an intense, eerie gaze." in text
+    assert "Props: crystal ball; dog Krusty" in text
+    assert "Quirks: Makes bold, manipulative promises." in text
+
+
+def test_format_character_details_omits_absent_portrait_atoms():
+    character = Character(
+        name="Del",
+        description="A druid.",
+        race="Human",
+        age="30",
+        physical_description="Moss-slick.",
+        weapons="Axe.",
+    )
+
+    text = entities.format_character_details(character, audience="visual")
+
+    assert "age 30" in text
+    assert "Hair:" not in text
+    assert "Eyes:" not in text
+    assert "Skin:" not in text
+    assert "Build:" not in text
+    assert "Height:" not in text
+    assert "Marks:" not in text
+    assert "Props:" not in text
 
