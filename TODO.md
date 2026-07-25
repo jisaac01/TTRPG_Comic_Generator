@@ -1,20 +1,22 @@
 ## Pipeline & Core
 
+- [x] figure out why the entities bible is created in the beater step and not in the entities step
+- [x] Add a style selector (Run + Output; bundled + campaign `art_direction/`)
+- [x] Add some descriptors like age, hair style, height, skin color, to physical description prompt
+- [x] Fix bug where characters is blank
+- [x] Add a new pipeline mode: refresh just the current stage (e.g. entities)
 - [ ] Add a second pass for continuity and fun
 - [ ] remove validation (e.g. carried items)
 - [ ] camera angle, panel lighting
-- [ ] figure out why the entities bible is created in the beater step and not in the entities step
 - [ ] Does re-run start from the selected version, or just the last? 
-- [x] Add a style selector (Run + Output; bundled + campaign `art_direction/`)
 - [ ] Style template editing UX beyond Prompts-tab multi-style list
 - [ ] Add entities_bible to prompts page for editing
 - [ ] Allow editing version files
 - [ ] Add "professional" pipeline tooling, whatever that means, for the resume
 - [ ] Move character descriptions into the style step (so they are styled)
-- [x] Add some descriptors like age, hair style, height, skin color, to physical description prompt
 - [ ] *** Convert the prompt to the markdown style and try it ***
 - [ ] Add a json/markdown mode to output everything in those formats
-- [x] Fix bug where characters is blank
+- [ ] Add a warning when prompt templates are older than the defaults, out of date
 
 ---
 

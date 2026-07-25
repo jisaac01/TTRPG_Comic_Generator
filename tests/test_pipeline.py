@@ -1046,6 +1046,98 @@ async def test_rerun_from_prompt_only_reruns_prompt(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_stop_after_entities_reruns_entities_only(tmp_path):
+    """rerun_from=entities + stop_after=entities: refresh entities, do not continue."""
+    _make_episode(tmp_path, "dreadmarsh", "https://example.test/story", "Dreadmarsh Crossing")
+
+    events: list[object] = []
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=2,
+        rerun_from="entities",
+        stop_after="entities",
+        event_callback=events.append,
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock) as mock_scrape,
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT) as mock_entities,
+        patch("pipeline.create_story_bible") as mock_architect,
+        patch("pipeline.write_script") as mock_script,
+        patch("pipeline.integrate_style") as mock_integrate,
+        patch("pipeline.prepare_page_prompt_template") as mock_prompts,
+    ):
+        result = await pipeline.run()
+
+    mock_scrape.assert_not_awaited()
+    mock_entities.assert_called_once()
+    mock_architect.assert_not_called()
+    mock_script.assert_not_called()
+    mock_integrate.assert_not_called()
+    mock_prompts.assert_not_called()
+    assert result["version"] == "v002"
+    assert result["entities"] is not None
+    assert result["story_bible"] is None
+    assert result["script"] is None
+    assert result["errors"] == []
+
+    version_dir = _version_dir_from_result(result)
+    assert (version_dir / "02_entities.json").exists()
+    assert not (version_dir / "02_5_story_bible.json").exists()
+    assert not list(version_dir.glob("03_script_page_*.json"))
+
+    from pipeline_events import RunCompleted
+
+    completed = [e for e in events if isinstance(e, RunCompleted)]
+    assert len(completed) == 1
+    assert completed[0].status == "ok"
+    assert completed[0].failed_phases == []
+    assert "entities" in completed[0].checkpoints
+    assert "story_bible" not in completed[0].checkpoints
+
+
+@pytest.mark.asyncio
+async def test_stop_after_style_reruns_style_not_prompt(tmp_path):
+    """rerun_from=style + stop_after=style: style runs, prompt does not."""
+    _make_episode(tmp_path, "dreadmarsh", "https://example.test/story", "Dreadmarsh Crossing")
+
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=2,
+        rerun_from="style",
+        stop_after="style",
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock) as mock_scrape,
+        patch("pipeline.build_entities_from_raw") as mock_entities,
+        patch("pipeline.create_story_bible") as mock_architect,
+        patch("pipeline.write_script") as mock_script,
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT) as mock_integrate,
+        patch("pipeline.prepare_page_prompt_template") as mock_prompts,
+    ):
+        result = await pipeline.run()
+
+    mock_scrape.assert_not_awaited()
+    mock_entities.assert_not_called()
+    mock_architect.assert_not_called()
+    mock_script.assert_not_called()
+    mock_integrate.assert_called_once()
+    mock_prompts.assert_not_called()
+    assert result["version"] == "v002"
+    assert result["styled_script"] is not None
+    assert result["page_prompt"] is None
+
+    version_dir = _version_dir_from_result(result)
+    # Prompts are invalidated by rerun_from=style and must not be regenerated.
+    assert not list(version_dir.glob("04_page_*_prompt.txt"))
+
+
+@pytest.mark.asyncio
 async def test_skip_style_bypasses_integrator_and_prompts_from_script(tmp_path):
     pipeline = ComicPipeline(
         url="https://example.test/story",

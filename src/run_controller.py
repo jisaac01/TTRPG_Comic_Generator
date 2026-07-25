@@ -104,6 +104,7 @@ class RunController:
             style_integrator_user_prompt=config.style_integrator_user_prompt,
             page_prompt_template=config.page_prompt_template,
             rerun_from=config.rerun_from,
+            stop_after=config.stop_after,
             recap_version=config.recap_version,
             skip_style=config.skip_style,
             generation_mode=config.generation_mode,
@@ -230,13 +231,22 @@ class RunController:
             if pattern and any(version_dir.glob(pattern)):
                 checkpoints.append(key)
 
-        failed = [
-            key
-            for key in ("entities", "story_bible", "script", "styled_script", "page_prompt")
-            if key not in checkpoints
-        ]
-        if run_info.failed_phases:
-            failed = list(run_info.failed_phases)
+        # Prefer pipeline-reported failures when RunCompleted was emitted (including
+        # empty lists from intentional early stops via stop_after).
+        run_completed = next(
+            (event for event in run_info.events if isinstance(event, RunCompleted)),
+            None,
+        )
+        if run_completed is not None:
+            failed = list(run_completed.failed_phases)
+        else:
+            failed = [
+                key
+                for key in ("entities", "story_bible", "script", "styled_script", "page_prompt")
+                if key not in checkpoints
+            ]
+            if run_info.failed_phases:
+                failed = list(run_info.failed_phases)
 
         run_config = run_config_snapshot(run_info.config)
         if output is not None and isinstance(output.get("run_config"), dict):

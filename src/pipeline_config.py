@@ -60,6 +60,8 @@ class RunConfig:
 
     # Rerun control
     rerun_from: RerunFrom | None = None
+    # When set, run stages through this phase (inclusive) then stop.
+    stop_after: RerunFrom | None = None
     recap_version: RecapVersion = "standard"
     skip_style: bool = False
 
@@ -167,6 +169,7 @@ RUN_CONFIG_KEYS = (
     "skip_style",
     "generate_images",
     "rerun_from",
+    "stop_after",
 )
 
 
@@ -182,6 +185,7 @@ def run_config_snapshot(config: RunConfig) -> dict:
         "skip_style": config.skip_style,
         "generate_images": config.generate_images,
         "rerun_from": config.rerun_from,
+        "stop_after": config.stop_after,
     }
 
 
@@ -189,6 +193,13 @@ def _stage_index(stage: RerunFrom | None) -> int:
     if stage is None:
         return len(STAGE_ORDER)
     return STAGE_ORDER.index(stage)
+
+
+def should_run_stage(stage: RerunFrom, stop_after: RerunFrom | None) -> bool:
+    """Return whether *stage* should execute given an optional stop_after bound."""
+    if stop_after is None:
+        return True
+    return _stage_index(stage) <= _stage_index(stop_after)
 
 
 def earliest_stage_for_config_diff(

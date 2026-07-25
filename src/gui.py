@@ -986,6 +986,11 @@ def build_output_page(
         options=[_ft.dropdown.Option(stage, label) for stage, label in _STAGE_LABELS],
         width=190,
     )
+    rerun_only_stage_checkbox = _ft.Checkbox(
+        label="Rerun only this stage",
+        value=False,
+        tooltip="When on, re-runs the selected stage and stops; does not continue to later stages.",
+    )
     quick_rerun_button = _ft.OutlinedButton("Rerun")
     quick_rerun_gif = _ft.Image(src=LOADING_GIF_URL, width=20, height=20, visible=False)
     quick_rerun_text = _ft.Text("Running...", size=12, visible=False)
@@ -1234,10 +1239,12 @@ def build_output_page(
         settings = _read_settings_from_controls()
         episode = _episodes_by_slug.get(episode_slug)
         url = episode.url if episode and episode.url else ""
+        stop_after = cast(Any, stage) if bool(rerun_only_stage_checkbox.value) else None
         return RunConfig(
             url=url,
             campaign=campaign,
             rerun_from=cast(Any, stage),
+            stop_after=stop_after,
             recap_version=cast(RecapVersion, settings["recap_version"]),
             skip_style=False,
             generate_images=generate_images,
@@ -1691,7 +1698,7 @@ def build_output_page(
                 ],
                 spacing=6,
             ),
-            _ft.Row([quick_rerun_stage_dropdown], spacing=10),
+            _ft.Row([quick_rerun_stage_dropdown, rerun_only_stage_checkbox], spacing=10),
             _ft.Text("Episode settings", weight=_ft.FontWeight.W_600),
             _ft.Row([
                 panel_count_field,
@@ -1767,6 +1774,7 @@ def build_output_page(
         "version_path_text": version_path_text,
         "output_status_text": output_status_text,
         "quick_rerun_stage_dropdown": quick_rerun_stage_dropdown,
+        "rerun_only_stage_checkbox": rerun_only_stage_checkbox,
         "quick_rerun_button": quick_rerun_button,
         "generate_images_button": generate_images_button,
         "generate_selected_image_button": generate_selected_image_button,

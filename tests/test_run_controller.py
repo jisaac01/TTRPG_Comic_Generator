@@ -300,6 +300,93 @@ async def test_run_controller_forwards_image_generation_config(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_run_controller_forwards_stop_after_config(tmp_path):
+    captured: dict[str, object] = {}
+
+    class _RecordingPipeline:
+        def __init__(self, **kwargs: object) -> None:
+            captured.update(kwargs)
+
+        async def run(self) -> dict[str, object]:
+            return {"version": "v001", "version_dir": "/tmp/v001", "errors": []}
+
+    controller = RunController(pipeline_factory=_RecordingPipeline)
+    config = RunConfig(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        rerun_from="entities",
+        stop_after="entities",
+    )
+
+    await controller.launch_run(config, lambda _event: None)
+
+    assert captured["stop_after"] == "entities"
+    assert captured["rerun_from"] == "entities"
+
+
+@pytest.mark.asyncio
+async def test_run_controller_persists_empty_failed_phases_from_run_completed(tmp_path):
+    """Intentional early stop reports no failed phases even when later checkpoints are missing."""
+
+    class _StopAfterEntitiesPipeline:
+        def __init__(self, *, campaigns_root: Path, campaign: str, event_callback, **_: object) -> None:
+            self._campaigns_root = campaigns_root
+            self._campaign = campaign
+            self._event_callback = event_callback
+
+        async def run(self) -> dict[str, object]:
+            episode_dir = self._campaigns_root / self._campaign / "stop-episode"
+            version_dir = episode_dir / "v001"
+            version_dir.mkdir(parents=True, exist_ok=True)
+            (version_dir / "02_entities.json").write_text("{}", encoding="utf-8")
+            self._event_callback(
+                VersionCreated(
+                    version="v001",
+                    version_dir=str(version_dir),
+                    episode_slug="stop-episode",
+                )
+            )
+            self._event_callback(
+                RunCompleted(
+                    status="ok",
+                    version="v001",
+                    version_dir=str(version_dir),
+                    checkpoints=["entities"],
+                    failed_phases=[],
+                    error_messages=[],
+                )
+            )
+            return {
+                "version": "v001",
+                "version_dir": str(version_dir),
+                "errors": [],
+                "run_config": {
+                    "rerun_from": "entities",
+                    "stop_after": "entities",
+                },
+            }
+
+    controller = RunController(pipeline_factory=_StopAfterEntitiesPipeline)
+    config = RunConfig(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        rerun_from="entities",
+        stop_after="entities",
+    )
+
+    result = await controller.launch_run(config, lambda _event: None)
+
+    status_path = Path(result.version_dir) / "run_status.json"  # type: ignore[arg-type]
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    assert status["status"] == "ok"
+    assert status["failed"] == []
+    assert status["checkpoints"] == ["entities"]
+    assert status["run_config"]["stop_after"] == "entities"
+
+
+@pytest.mark.asyncio
 async def test_run_controller_integration_repository_service_discovers_created_version(tmp_path):
     controller = RunController(pipeline_factory=_WritesVersionPipeline)
     repository = RepositoryService(tmp_path)

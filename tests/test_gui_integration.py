@@ -1014,6 +1014,40 @@ def test_output_page_build_rerun_config_uses_live_controls(tmp_path):
     assert config.total_pages == 4
     assert config.recap_version == "long"
     assert config.aspect_ratio == "4:3"
+    assert config.stop_after is None
+
+
+def test_output_page_rerun_only_stage_toggle_defaults_off_and_sets_stop_after(tmp_path):
+    import flet as ft
+
+    campaigns_root = _make_output_versions(tmp_path)
+    episode_dir = campaigns_root / "test_camp" / "episode-1"
+    (episode_dir / "episode_meta.json").write_text(
+        json.dumps(
+            {
+                "slug": "episode-1",
+                "url": "https://example.com/story",
+                "title": "Episode 1",
+                "created_at": "2026-05-18T00:00:00Z",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    page = _FakePage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+
+    assert state["rerun_only_stage_checkbox"].value is False
+
+    config_off = state["build_rerun_config"]("test_camp", "episode-1", "entities")
+    assert config_off.rerun_from == "entities"
+    assert config_off.stop_after is None
+
+    state["rerun_only_stage_checkbox"].value = True
+    config_on = state["build_rerun_config"]("test_camp", "episode-1", "entities")
+    assert config_on.rerun_from == "entities"
+    assert config_on.stop_after == "entities"
 
 
 def test_output_page_shows_version_settings_from_run_status(tmp_path):

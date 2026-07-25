@@ -143,3 +143,31 @@ def test_run_config_snapshot_includes_art_style() -> None:
         )
     )
     assert snap["art_style"] == "bundled:brutalist"
+
+
+def test_run_config_defaults_stop_after_none() -> None:
+    config = RunConfig(url="https://example.test/story", campaign="dreadmarsh")
+    assert config.stop_after is None
+
+
+def test_run_config_round_trip_preserves_stop_after() -> None:
+    config = RunConfig(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        rerun_from="entities",
+        stop_after="entities",
+    )
+    restored = RunConfig.from_dict(config.to_dict())
+    assert restored.stop_after == "entities"
+    assert restored.rerun_from == "entities"
+
+
+def test_run_config_snapshot_includes_stop_after() -> None:
+    snap = run_config_snapshot(
+        RunConfig(
+            url="https://example.test/story",
+            campaign="dreadmarsh",
+            stop_after="beater",
+        )
+    )
+    assert snap["stop_after"] == "beater"
