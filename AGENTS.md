@@ -51,7 +51,7 @@ src/
 
   scraper.py           # Phase 1: ScrybeQuill scrape → 01_raw_text.json
   entities.py          # Phase 2: entity extraction + LLM continuity merge
-  master_beater.py     # Phase 3: story bible → 02_5_story_bible.json
+  master_beater.py     # Phase 3: story bible → 02_5_story_bible.txt
   scriptwriter.py      # Phase 4: per-page or per-panel scripts
   style_integrator.py  # Phase 4.5: art-direction rewrite of setting/visual_action
   prompter.py          # Phase 5: image prompts from script + art direction
@@ -66,8 +66,15 @@ src/
   prompts/             # Default prompt templates (copied into campaigns on first run)
 
 tests/                 # Behavior specification; mirrors src/ modules
-campaigns/             # Runtime campaign data (gitignored in real use)
 ```
+
+**Campaign data location (important):** runtime campaigns live in the **user app-data directory**, not under the git repo. Resolved by `app_paths.default_campaigns_root()`:
+
+- macOS: `~/Library/Application Support/TTRPG_Comic_Generator/campaigns`
+- Windows: `%LOCALAPPDATA%/TTRPG_Comic_Generator/campaigns`
+- Linux: `${XDG_DATA_HOME:-~/.local/share}/TTRPG_Comic_Generator/campaigns`
+
+Override with `COMIC_GENERATOR_CAMPAIGNS_ROOT`. A repo-level `campaigns/` folder is **legacy/archive only** — do not treat it as the live data store. Scripts, GUI, and pipeline default to app-data.
 
 ## Pipeline flow
 
@@ -84,7 +91,7 @@ Only phases invalidated by `--rerun-from` or changed run settings are recomputed
 |-------|--------|-------------|
 | 1 Scrape | `scraper.py` | `01_raw_text.json` |
 | 2 Entities | `entities.py` | `02_entities.json`, campaign `entities_bible.json` (LLM merge), `02_5_episode_entities.json` (episode cast enriched from bible) |
-| 3 Beater | `master_beater.py` | `02_5_story_bible.json`, `02_6_story_bible_page_*.json` |
+| 3 Beater | `master_beater.py` | `02_5_story_bible.txt`, `02_6_story_bible_page_*.txt` |
 | 4 Script | `scriptwriter.py` | `03_script_page_*.json` (panel mode also writes per-panel checkpoints) |
 | 4.5 Style | `style_integrator.py` | `03_5_styled_script_page_*.json` |
 | 5 Prompt | `prompter.py` | `04_page_*_prompt.txt` or `04_page_*_panel_*_prompt.txt` |

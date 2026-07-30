@@ -33,7 +33,7 @@ class RunConfig:
     url: str
     campaign: str
 
-    # Root directory for campaign data (default: campaigns/)
+    # Root directory for campaign data (default: app_paths.default_campaigns_root())
     campaigns_root: Path = field(default_factory=lambda: CAMPAIGNS_ROOT)
 
     # Output structure

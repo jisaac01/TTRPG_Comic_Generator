@@ -171,7 +171,7 @@ class RepositoryService:
             version_dir=version_dir,
             raw_text=self._path_if_exists(version_dir / "01_raw_text.json"),
             entities=self._path_if_exists(version_dir / "02_entities.json"),
-            story_bible=self._path_if_exists(version_dir / "02_5_story_bible.json"),
+            story_bible=self._path_if_exists(version_dir / "02_5_story_bible.txt"),
             script=self._path_if_exists(version_dir / "03_script.json"),
             styled_script=self._path_if_exists(version_dir / "03_5_styled_script.json"),
             page_prompt=self._path_if_exists(version_dir / "04_page_1_prompt.txt"),

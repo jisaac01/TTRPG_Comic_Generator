@@ -209,7 +209,7 @@ class RunController:
 
         checkpoint_paths = {
             "entities": [version_dir / "02_entities.json"],
-            "story_bible": [version_dir / "02_5_story_bible.json"],
+            "story_bible": [version_dir / "02_5_story_bible.txt"],
             "script": [version_dir / "03_script.json"],
             "styled_script": [version_dir / "03_5_styled_script.json"],
             "page_prompt": [version_dir / "04_page_1_prompt.txt"],

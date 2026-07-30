@@ -69,7 +69,7 @@ def _write_input_checkpoints(tmp_path: Path) -> tuple[Path, Path]:
 
 def test_create_story_bible_writes_checkpoint_with_text_content(tmp_path):
     raw_path, entities_path = _write_input_checkpoints(tmp_path)
-    output_path = tmp_path / "02_5_story_bible.json"
+    output_path = tmp_path / "02_5_story_bible.txt"
 
     def fake_generator(raw_content, world, model, scene_count):
         assert "torch" in raw_content
@@ -95,6 +95,11 @@ Del lights a torch to guide the group through the narrow marsh path. The firelig
     )
 
     assert output_path.exists()
+    on_disk = output_path.read_text(encoding="utf-8")
+    assert on_disk.startswith("Scene 1:")
+    assert "Scene 2:" in on_disk
+    assert '"story_bible"' not in on_disk  # plain text, not JSON wrapper
+    assert "Stay close to me." in on_disk  # dialogue quotes unescaped
     assert checkpoint.scene_count == 2
     assert "Scene 1:" in checkpoint.story_bible
     assert "Scene 2:" in checkpoint.story_bible
@@ -102,9 +107,22 @@ Del lights a torch to guide the group through the narrow marsh path. The firelig
     assert checkpoint.title == "Swamp Trouble"
 
 
+def test_load_story_bible_derives_scene_count_from_headers(tmp_path):
+    path = tmp_path / "02_5_story_bible.txt"
+    path.write_text(
+        "Scene 1:\nOpening.\n\nScene 2:\nMiddle.\n\nScene 3:\nEnding.\n",
+        encoding="utf-8",
+    )
+
+    loaded = master_beater.load_story_bible(path)
+
+    assert loaded.scene_count == 3
+    assert "Scene 2:" in loaded.story_bible
+
+
 def test_create_story_bible_includes_reference_quotes(tmp_path):
     raw_path, entities_path = _write_input_checkpoints(tmp_path)
-    output_path = tmp_path / "02_5_story_bible.json"
+    output_path = tmp_path / "02_5_story_bible.txt"
 
     received_world = None
 
@@ -185,7 +203,7 @@ def test_create_story_bible_normalizes_aliases_as_whole_words(tmp_path):
     master_beater.create_story_bible(
         raw_checkpoint_path=raw_path,
         entities_checkpoint_path=entities_path,
-        output_path=tmp_path / "02_5_story_bible.json",
+        output_path=tmp_path / "02_5_story_bible.txt",
         system_prompt_text="TEST_SYSTEM_PROMPT",
         user_prompt_text="TEST_USER_PROMPT",
         model=DEFAULT_MODEL,
@@ -206,7 +224,7 @@ def test_create_story_bible_rejects_invalid_scene_count(tmp_path):
         master_beater.create_story_bible(
             raw_checkpoint_path=raw_path,
             entities_checkpoint_path=entities_path,
-            output_path=tmp_path / "02_5_story_bible.json",
+            output_path=tmp_path / "02_5_story_bible.txt",
             system_prompt_text="TEST_SYSTEM_PROMPT",
             user_prompt_text="TEST_USER_PROMPT",
             scene_count=0,

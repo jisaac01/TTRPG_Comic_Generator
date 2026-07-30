@@ -253,11 +253,11 @@ def _write_version_checkpoints(version_dir: Path) -> None:
     (version_dir / "02_entities.json").write_text(
         _WORLD_CHECKPOINT.model_dump_json(), encoding="utf-8"
     )
-    (version_dir / "02_5_story_bible.json").write_text(
-        _STORY_BIBLE_CHECKPOINT.model_dump_json(), encoding="utf-8"
+    (version_dir / "02_5_story_bible.txt").write_text(
+        _STORY_BIBLE_CHECKPOINT.story_bible + "\n", encoding="utf-8"
     )
-    (version_dir / "02_6_story_bible_page_001.json").write_text(
-        _STORY_BIBLE_CHECKPOINT.model_dump_json(), encoding="utf-8"
+    (version_dir / "02_6_story_bible_page_001.txt").write_text(
+        _STORY_BIBLE_CHECKPOINT.story_bible + "\n", encoding="utf-8"
     )
     (version_dir / "03_script_page_001.json").write_text(
         _SCRIPT_CHECKPOINT.model_dump_json(), encoding="utf-8"
@@ -420,7 +420,7 @@ def test_create_version_dir_clones_previous_version(tmp_path):
     assert name == "v002"
     assert (version_dir / "01_raw_text.json").exists()
     assert (version_dir / "02_entities.json").exists()
-    assert (version_dir / "02_5_story_bible.json").exists()
+    assert (version_dir / "02_5_story_bible.txt").exists()
     assert (version_dir / "03_script_page_001.json").exists()
     assert (version_dir / "03_5_styled_script_page_001.json").exists()
     assert (version_dir / "04_page_1_prompt.txt").exists()
@@ -436,7 +436,7 @@ def test_create_version_dir_rerun_from_prompt_deletes_only_prompt(tmp_path):
 
     assert (version_dir / "01_raw_text.json").exists()
     assert (version_dir / "02_entities.json").exists()
-    assert (version_dir / "02_5_story_bible.json").exists()
+    assert (version_dir / "02_5_story_bible.txt").exists()
     assert (version_dir / "03_script_page_001.json").exists()
     assert (version_dir / "03_5_styled_script_page_001.json").exists()
     assert not (version_dir / "04_page_1_prompt.txt").exists()
@@ -452,7 +452,7 @@ def test_create_version_dir_rerun_from_beater_deletes_beater_onwards(tmp_path):
 
     assert (version_dir / "01_raw_text.json").exists()
     assert (version_dir / "02_entities.json").exists()
-    assert not (version_dir / "02_5_story_bible.json").exists()
+    assert not (version_dir / "02_5_story_bible.txt").exists()
     assert not (version_dir / "03_script_page_001.json").exists()
     assert not (version_dir / "03_5_styled_script_page_001.json").exists()
     assert not (version_dir / "04_page_1_prompt.txt").exists()
@@ -485,13 +485,9 @@ def test_create_version_dir_clones_from_working_not_latest_version(tmp_path):
 
     _write_version_checkpoints(v001)
     _write_version_checkpoints(v002)
-    (v002 / "02_5_story_bible.json").write_text(
-        json.dumps({"source": "latest-version"}), encoding="utf-8"
-    )
+    (v002 / "02_5_story_bible.txt").write_text("source: latest-version\n", encoding="utf-8")
     _write_version_checkpoints(working)
-    (working / "02_5_story_bible.json").write_text(
-        json.dumps({"source": "working-edit"}), encoding="utf-8"
-    )
+    (working / "02_5_story_bible.txt").write_text("source: working-edit\n", encoding="utf-8")
     _write_run_config(working)
 
     version_dir, name, _ = _create_version_dir(
@@ -501,8 +497,8 @@ def test_create_version_dir_clones_from_working_not_latest_version(tmp_path):
     )
 
     assert name == "v003"
-    bible = json.loads((version_dir / "02_5_story_bible.json").read_text(encoding="utf-8"))
-    assert bible["source"] == "working-edit"
+    bible = (version_dir / "02_5_story_bible.txt").read_text(encoding="utf-8")
+    assert "working-edit" in bible
     assert not (version_dir / "03_script_page_001.json").exists()
 
 
@@ -517,7 +513,7 @@ def test_ensure_working_dir_seeds_from_latest_when_missing(tmp_path):
 
     assert working == _working_dir(episode_dir)
     assert (working / "01_raw_text.json").exists()
-    assert (working / "02_5_story_bible.json").exists()
+    assert (working / "02_5_story_bible.txt").exists()
     assert (working / "run_status.json").exists()
 
 
@@ -540,7 +536,7 @@ def test_create_version_dir_seeds_working_then_clones(tmp_path):
     assert (working / "01_raw_text.json").exists()
     assert name == "v002"
     assert (version_dir / "01_raw_text.json").exists()
-    assert (version_dir / "02_5_story_bible.json").exists()
+    assert (version_dir / "02_5_story_bible.txt").exists()
 
 
 @pytest.mark.asyncio
@@ -572,7 +568,7 @@ async def test_first_run_writes_checkpoints_to_working_and_version(tmp_path):
     for name in (
         "01_raw_text.json",
         "02_entities.json",
-        "02_5_story_bible.json",
+        "02_5_story_bible.txt",
         "03_script_page_001.json",
         "03_5_styled_script_page_001.json",
         "04_page_1_prompt.txt",
@@ -587,9 +583,13 @@ async def test_manual_working_edit_is_cloned_into_next_version(tmp_path):
         tmp_path, "dreadmarsh", "https://example.test/story", "Dreadmarsh Crossing"
     )
     working = _ensure_working_dir(episode_dir)
-    edited = json.loads((working / "02_5_story_bible.json").read_text(encoding="utf-8"))
-    edited["title"] = "Edited Story Bible"
-    (working / "02_5_story_bible.json").write_text(json.dumps(edited), encoding="utf-8")
+    edited_bible = (working / "02_5_story_bible.txt").read_text(encoding="utf-8")
+    edited_bible = edited_bible.replace(
+        "Del the Druid raises her torch",
+        "EDITED: Del the Druid raises her torch",
+        1,
+    )
+    (working / "02_5_story_bible.txt").write_text(edited_bible, encoding="utf-8")
 
     pipeline = ComicPipeline(
         url="https://example.test/story",
@@ -615,13 +615,12 @@ async def test_manual_working_edit_is_cloned_into_next_version(tmp_path):
     mock_script.assert_called_once()
 
     version_dir = _version_dir_from_result(result)
-    bible = json.loads((version_dir / "02_5_story_bible.json").read_text(encoding="utf-8"))
-    assert bible["title"] == "Edited Story Bible"
+    bible = (version_dir / "02_5_story_bible.txt").read_text(encoding="utf-8")
+    assert "EDITED: Del the Druid raises her torch" in bible
     # Prior version history is untouched.
-    original = json.loads(
-        (episode_dir / "v001" / "02_5_story_bible.json").read_text(encoding="utf-8")
-    )
-    assert original["title"] == "Dreadmarsh Crossing"
+    original = (episode_dir / "v001" / "02_5_story_bible.txt").read_text(encoding="utf-8")
+    assert "EDITED:" not in original
+    assert "Del the Druid raises her torch" in original
 
 
 @pytest.mark.asyncio
@@ -630,7 +629,7 @@ async def test_rerun_overwrites_working_only_for_recomputed_stages(tmp_path):
         tmp_path, "dreadmarsh", "https://example.test/story", "Dreadmarsh Crossing"
     )
     working = _ensure_working_dir(episode_dir)
-    original_bible = (working / "02_5_story_bible.json").read_text(encoding="utf-8")
+    original_bible = (working / "02_5_story_bible.txt").read_text(encoding="utf-8")
     (working / "04_page_1_prompt.txt").write_text("OLD PROMPT", encoding="utf-8")
 
     pipeline = ComicPipeline(
@@ -652,7 +651,7 @@ async def test_rerun_overwrites_working_only_for_recomputed_stages(tmp_path):
         result = await pipeline.run()
 
     version_dir = _version_dir_from_result(result)
-    assert (working / "02_5_story_bible.json").read_text(encoding="utf-8") == original_bible
+    assert (working / "02_5_story_bible.txt").read_text(encoding="utf-8") == original_bible
     assert (version_dir / "04_page_1_prompt.txt").read_text(encoding="utf-8") == "NEW PROMPT"
     assert (working / "04_page_1_prompt.txt").read_text(encoding="utf-8") == "NEW PROMPT"
 
@@ -1272,7 +1271,7 @@ async def test_stop_after_entities_reruns_entities_only(tmp_path):
 
     version_dir = _version_dir_from_result(result)
     assert (version_dir / "02_entities.json").exists()
-    assert not (version_dir / "02_5_story_bible.json").exists()
+    assert not (version_dir / "02_5_story_bible.txt").exists()
     assert not list(version_dir.glob("03_script_page_*.json"))
 
     from pipeline_events import RunCompleted
@@ -1698,7 +1697,7 @@ async def test_script_model_and_panel_count_forwarded(tmp_path):
 
     _, kwargs = mock_script.call_args
     assert kwargs.get("model") == "llama3.1:8b"
-    assert kwargs.get("story_bible_checkpoint_path").name == "02_6_story_bible_page_001.json"
+    assert kwargs.get("story_bible_checkpoint_path").name == "02_6_story_bible_page_001.txt"
 
 
 @pytest.mark.asyncio

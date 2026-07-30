@@ -70,14 +70,18 @@ With the commands above, Chromium is bundled into the app, so end users do not n
 
 ## Runtime paths
 
-Runtime behavior for packaged builds:
+**Campaign data always lives in the user app-data directory** (dev GUI, CLI, and packaged builds). It is **not** stored under the git repo. A leftover `campaigns/` directory in the repo is legacy archive only.
 
-- Campaign data is stored in the user data directory, not beside the executable.
-  - Windows: `%LOCALAPPDATA%/TTRPG_Comic_Generator/campaigns`
-  - macOS: `~/Library/Application Support/TTRPG_Comic_Generator/campaigns`
-  - Linux: `${XDG_DATA_HOME:-~/.local/share}/TTRPG_Comic_Generator/campaigns`
-- Settings are stored in the same app data root as `settings.json`.
-- Default prompt templates are loaded from the packaged `prompts/` directory and copied into campaign folders on first run.
+Default campaigns root (`app_paths.default_campaigns_root()`):
+
+- Windows: `%LOCALAPPDATA%/TTRPG_Comic_Generator/campaigns`
+- macOS: `~/Library/Application Support/TTRPG_Comic_Generator/campaigns`
+- Linux: `${XDG_DATA_HOME:-~/.local/share}/TTRPG_Comic_Generator/campaigns`
+
+Also under the app data root:
+
+- Settings: `settings.json`
+- Default prompt templates are loaded from packaged/dev `src/prompts/` and copied into each campaign folder on first run
 
 Optional overrides:
 
@@ -117,7 +121,7 @@ The GUI provides:
 
 ## Campaign setup
 
-Each campaign has its own folder under `campaigns/`. On the first pipeline run, the campaign folder is bootstrapped automatically with reusable text-prompt defaults for:
+Each campaign has its own folder under the **user campaigns root** (see [Runtime paths](#runtime-paths)). On the first pipeline run, the campaign folder is bootstrapped automatically with reusable text-prompt defaults for:
 
 - `master_beater_system.txt` / `master_beater_user.txt`
 - `scriptwriter_system.txt` / `scriptwriter_user.txt`
@@ -125,21 +129,31 @@ Each campaign has its own folder under `campaigns/`. On the first pipeline run, 
 - `entities_continuity_system.txt` / `entities_continuity_user.txt`
 - `page_prompt.txt`
 
-Art styles live in a named library under `src/prompts/art_direction/` (e.g. `brutalist.json`, `acid-drenched-doom-metal.json`). The Run and Output tabs let you pick a style per run. Campaign-local overrides go in `campaigns/<campaign>/art_direction/<name>.json` and appear in the selector as `name (campaign)`.
+Art styles live in a named library under `src/prompts/art_direction/` (e.g. `brutalist.json`, `acid-drenched-doom-metal.json`). The Run and Output tabs let you pick a style per run. Campaign-local overrides go in `<campaigns-root>/<campaign>/art_direction/<name>.json` and appear in the selector as `name (campaign)`.
 
-If you want to pre-seed a campaign-local art style:
+If you want to pre-seed a campaign-local art style (macOS example path):
 
 ```bash
-mkdir -p campaigns/dreadmarsh/art_direction
-cp src/prompts/art_direction/brutalist.json campaigns/dreadmarsh/art_direction/brutalist.json
+CAMPAIGNS="$HOME/Library/Application Support/TTRPG_Comic_Generator/campaigns"
+mkdir -p "$CAMPAIGNS/dreadmarsh/art_direction"
+cp src/prompts/art_direction/brutalist.json "$CAMPAIGNS/dreadmarsh/art_direction/brutalist.json"
 # edit the campaign copy, or add another file under art_direction/
 ```
 
-To migrate existing campaign folders that still use the old single-file name:
+To migrate existing campaign folders that still use the old single-file name (defaults to **user** campaigns root):
 
 ```bash
 python scripts/migrate_campaign_art_styles.py          # dry-run
 python scripts/migrate_campaign_art_styles.py --write  # apply
+# scoped: --campaigns-root "/path/to/one/campaign/or/tree"
+```
+
+To convert legacy JSON story bibles to parallel `.txt` files (defaults to user campaigns root; original JSON kept):
+
+```bash
+python scripts/migrate_story_bibles_to_txt.py                 # dry-run all
+python scripts/migrate_story_bibles_to_txt.py PATH/TO/v023    # one folder tree
+python scripts/migrate_story_bibles_to_txt.py PATH --write    # apply
 ```
 
 To harvest distinct styles from campaign/version data into the bundled library:
@@ -164,7 +178,7 @@ For generation mode, aspect ratio, and automated image generation, use the GUI (
 ### Examples
 
 ```bash
-# First run — creates working/ and campaigns/dreadmarsh/dreadmarsh-crossing/v001/
+# First run — creates working/ and <campaigns-root>/dreadmarsh/dreadmarsh-crossing/v001/
 python src/pipeline.py dreadmarsh https://scrybequill.com/share/...
 
 # Re-run same episode — creates v002/ with checkpoints cloned from working/ (no phases run if unchanged)
@@ -200,14 +214,14 @@ python src/pipeline.py dreadmarsh https://scrybequill.com/share/... \
 # Fix source text — creates v004/, clones from working/, re-runs everything from scrape
 python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --rerun-from scrape
 
-# Different campaign, same URL — completely isolated under campaigns/belowdown/
+# Different campaign, same URL — completely isolated under <campaigns-root>/belowdown/
 python src/pipeline.py belowdown https://scrybequill.com/share/...
 ```
 
 ### Optional flags
 
 ```
---campaigns-root PATH        default: campaigns/
+--campaigns-root PATH        default: user app-data campaigns/ (see Runtime paths)
 --beater-model NAME          default: DEFAULT_MODEL (src/model_defaults.py)
 --script-model NAME          default: DEFAULT_MODEL (src/model_defaults.py)
 --style-model NAME           default: DEFAULT_MODEL (src/model_defaults.py)
@@ -282,13 +296,15 @@ You can also generate images outside a full pipeline run from the Output tab: se
 
 ## Directory layout
 
+Campaign tree below lives under the **user campaigns root** (not the git repo). Paths like `campaigns/<campaign>/...` in CLI help mean *relative to that root*.
+
 ```
-src/prompts/art_direction/          # bundled art style library
+src/prompts/art_direction/          # bundled art style library (in repo)
   brutalist.json
   acid-drenched-doom-metal.json
   ...
 
-campaigns/
+<user-app-data>/TTRPG_Comic_Generator/campaigns/   # live data (see Runtime paths)
   index.json                        # global lookup: campaign+URL → episode folder
   dreadmarsh/
     art_direction/                  # optional campaign-local art styles
@@ -311,8 +327,8 @@ campaigns/
         02_entities.json
         02_5_entities_bible.json            # version-local full campaign entities bible
         02_5_episode_entities.json          # this episode's cast, enriched from the bible
-        02_5_story_bible.json
-        02_6_story_bible_page_001.json          # per-page story bible slices
+        02_5_story_bible.txt
+        02_6_story_bible_page_001.txt          # per-page story bible slices
         03_script_page_001.json               # per-page script checkpoints
         03_5_styled_script_page_001.json        # per-page styled script checkpoints
         04_page_1_prompt.txt                    # page mode: one prompt per page
@@ -347,66 +363,72 @@ campaigns/
 
 ## Running individual phases
 
-The individual phase scripts accept explicit paths and are useful for debugging or one-off re-runs outside the pipeline.
+The individual phase scripts accept explicit paths and are useful for debugging or one-off re-runs outside the pipeline. Paths below use `$CAMPAIGNS` = the [user campaigns root](#runtime-paths) (not a path inside the git repo).
+
+```bash
+# macOS default; override with COMIC_GENERATOR_CAMPAIGNS_ROOT if needed
+CAMPAIGNS="$HOME/Library/Application Support/TTRPG_Comic_Generator/campaigns"
+EP="$CAMPAIGNS/dreadmarsh/<episode>/v001"
+```
 
 **Phase 1 — Scrape**
 ```bash
-python src/scraper.py <URL> --checkpoint campaigns/dreadmarsh/<episode>/v001/01_raw_text.json --recap-version standard
+python src/scraper.py <URL> --checkpoint "$EP/01_raw_text.json" --recap-version standard
 ```
 
 **Phase 2 — Entities**
 ```bash
-python -c "from pathlib import Path; from entities import build_entities_from_raw; build_entities_from_raw(Path('campaigns/dreadmarsh/<episode>/v001/01_raw_text.json'), Path('campaigns/dreadmarsh/<episode>/v001/02_entities.json'))"
+python -c "from pathlib import Path; from entities import build_entities_from_raw; build_entities_from_raw(Path('$EP/01_raw_text.json'), Path('$EP/02_entities.json'))"
 ```
 
 **Phase 3 — Master Beater**
 ```bash
 python src/master_beater.py \
-  --raw-input campaigns/dreadmarsh/<episode>/v001/01_raw_text.json \
-  --entities-input campaigns/dreadmarsh/<episode>/v001/02_entities.json \
-  --output campaigns/dreadmarsh/<episode>/v001/02_5_story_bible.json \
+  --raw-input "$EP/01_raw_text.json" \
+  --entities-input "$EP/02_entities.json" \
+  --output "$EP/02_5_story_bible.txt" \
   --scene-count 6
 ```
 
 **Phase 4 — Script**
 ```bash
 python src/scriptwriter.py \
-  --raw-input campaigns/dreadmarsh/<episode>/v001/01_raw_text.json \
-  --entities-input campaigns/dreadmarsh/<episode>/v001/02_entities.json \
-  --story-bible-input campaigns/dreadmarsh/<episode>/v001/02_6_story_bible_page_001.json \
-  --output campaigns/dreadmarsh/<episode>/v001/03_script_page_001.json
+  --raw-input "$EP/01_raw_text.json" \
+  --entities-input "$EP/02_entities.json" \
+  --story-bible-input "$EP/02_6_story_bible_page_001.txt" \
+  --output "$EP/03_script_page_001.json"
 ```
 
 **Phase 4.5 — Style Integration**
 ```bash
 python src/style_integrator.py \
-  --script-input campaigns/dreadmarsh/<episode>/v001/03_script_page_001.json \
+  --script-input "$EP/03_script_page_001.json" \
   --art-style-template src/prompts/art_direction/brutalist.json \
-  --output campaigns/dreadmarsh/<episode>/v001/03_5_styled_script_page_001.json
+  --output "$EP/03_5_styled_script_page_001.json"
 ```
 
 **Phase 5 — Prompt**
 ```bash
 # Page mode (after style integration):
 python src/prompter.py \
-  --script-input campaigns/dreadmarsh/<episode>/v001/03_5_styled_script_page_001.json \
-  --entities-input campaigns/dreadmarsh/<episode>/v001/02_entities.json \
+  --script-input "$EP/03_5_styled_script_page_001.json" \
+  --entities-input "$EP/02_entities.json" \
   --art-style-template src/prompts/art_direction/brutalist.json \
-  --output campaigns/dreadmarsh/<episode>/v001/04_page_1_prompt.txt
+  --output "$EP/04_page_1_prompt.txt"
 
 # Panel mode — use a single-panel script checkpoint and a panel prompt filename:
 python src/prompter.py \
-  --script-input campaigns/dreadmarsh/<episode>/v001/03_5_styled_script_page_001.json \
-  --entities-input campaigns/dreadmarsh/<episode>/v001/02_entities.json \
+  --script-input "$EP/03_5_styled_script_page_001.json" \
+  --entities-input "$EP/02_entities.json" \
   --art-style-template src/prompts/art_direction/brutalist.json \
-  --output campaigns/dreadmarsh/<episode>/v001/04_page_1_panel_1_prompt.txt
+  --output "$EP/04_page_1_panel_1_prompt.txt"
 
 # Skip-style flow (pipeline --skip-style):
 python src/prompter.py \
-  --script-input campaigns/dreadmarsh/<episode>/v001/03_script_page_001.json \
-  --entities-input campaigns/dreadmarsh/<episode>/v001/02_entities.json \
+  --script-input "$EP/03_script_page_001.json" \
+  --entities-input "$EP/02_entities.json" \
   --art-style-template src/prompts/art_direction/brutalist.json \
-  --output campaigns/dreadmarsh/<episode>/v001/04_page_1_prompt.txt
+  --output "$EP/04_page_1_prompt.txt"
 ```
 
 **Phase 6 — Image generation** (requires `GEMINI_API_KEY`)
@@ -415,8 +437,10 @@ python src/prompter.py \
 python -c "
 from pathlib import Path
 from image_generator import ImageGenerator
-prompt = Path('campaigns/dreadmarsh/<episode>/v001/04_page_1_prompt.txt')
-out = Path('campaigns/dreadmarsh/<episode>/v001/05_page_1.png')
+import os
+ep = Path(os.environ['EP'])  # export EP=... first, or hardcode the app-data path
+prompt = ep / '04_page_1_prompt.txt'
+out = ep / '05_page_1.png'
 gen = ImageGenerator(model='gemini-2.5-flash-image')
 gen.save_image(gen.generate_image(prompt.read_text()), out)
 "
@@ -426,9 +450,10 @@ gen.save_image(gen.generate_image(prompt.read_text()), out)
 
 ```bash
 python -c "
+import os
 from pathlib import Path
 from image_stitcher import stitch_panel_images
-version = Path('campaigns/dreadmarsh/<episode>/v001')
+version = Path(os.environ['EP'])  # export EP=... to app-data episode version
 panels = sorted(version.glob('05_page_1_panel_*.png'))
 stitch_panel_images(panels, version / '06_page_1.png', aspect_ratio='3:2')
 "
@@ -448,9 +473,9 @@ pytest
 | `02_entities.json` | Characters, locations, and story beats extracted for this episode |
 | `02_5_entities_bible.json` | Version-local copy of the merged campaign entities bible (full cast) |
 | `02_5_episode_entities.json` | Episode cast only: names from `02_entities.json`, records from the bible |
-| `02_5_story_bible.json` | Full story bible with scene breakdown |
-| `02_6_story_bible_page_NNN.json` | Per-page story bible slice used by the scriptwriter |
-| `02_6_story_bible_page_NNN_panel_NNN.json` | Per-panel story bible slice (panel mode only) |
+| `02_5_story_bible.txt` | Full story bible scene breakdown (plain text, `Scene N:` headers) |
+| `02_6_story_bible_page_NNN.txt` | Per-page story bible slice used by the scriptwriter |
+| `02_6_story_bible_page_NNN_panel_NNN.txt` | Per-panel story bible slice (panel mode only) |
 | `03_script_page_NNN.json` | Panelized comic script for one page with continuity fields |
 | `03_script_page_NNN_panel_NNN.json` | Single-panel script checkpoint (panel mode only) |
 | `03_5_styled_script_page_NNN.json` | Script checkpoint with art-direction-infused panel descriptions |
@@ -461,5 +486,5 @@ pytest
 | `06_page_N.png` | Stitched composite page image (panel mode) |
 | `run_status.json` | Run outcome, errors, and persisted run settings |
 | `episode_meta.json` | Episode URL, display slug, creation timestamp |
-| `campaigns/index.json` | Global campaign+URL → episode folder lookup |
+| `<campaigns-root>/index.json` | Global campaign+URL → episode folder lookup |
 | `entities_bible.json` | Campaign-level merged entity continuity across episodes |

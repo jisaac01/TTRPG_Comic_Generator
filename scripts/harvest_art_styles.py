@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 sys.path.insert(0, str(SRC))
 
+from app_paths import default_campaigns_root  # noqa: E402
 from art_styles import ART_DIRECTION_DIRNAME, DEFAULT_ART_STYLE_STEM  # noqa: E402
 
 
@@ -105,7 +106,7 @@ def main() -> int:
         action="append",
         type=Path,
         default=None,
-        help="Campaigns root to scan (repeatable). Defaults to repo campaigns/ and app data if present.",
+        help="Campaigns root to scan (repeatable). Defaults to user app-data campaigns root.",
     )
     parser.add_argument(
         "--target",
@@ -127,10 +128,7 @@ def main() -> int:
 
     roots: list[Path] = list(args.campaigns_root or [])
     if not roots:
-        roots = [ROOT / "campaigns"]
-        app_data = Path.home() / "Library" / "Application Support" / "TTRPG_Comic_Generator" / "campaigns"
-        if app_data.exists():
-            roots.append(app_data)
+        roots = [default_campaigns_root()]
 
     target: Path = args.target
     existing = load_existing_styles(target)

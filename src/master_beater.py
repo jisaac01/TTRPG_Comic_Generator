@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import re
 from datetime import datetime, timezone
@@ -20,19 +19,81 @@ from prompt_templates import (
 )
 from scraper import RawTextCheckpoint
 
+SCENE_HEADER_RE = re.compile(r"(?m)^Scene\s+(\d+):")
+
 
 class StoryBibleCheckpoint(BaseModel):
-    url: str
+    """In-memory story bible. On disk this is plain text (`02_5_story_bible.txt`)."""
+
+    url: str = ""
     title: str | None = None
     author: str | None = None
-    model: str
+    model: str = ""
     scene_count: int = Field(ge=1)
     story_bible: str = Field(min_length=1, description="Text-only narrative scene breakdown")
     generation_errors: list[str] = Field(default_factory=list)
-    created_at: str
+    created_at: str = ""
 
 
 StoryBibleGenerator = Callable[[str, WorldStateCheckpoint, str, int], str]
+
+
+def count_story_bible_scenes(text: str) -> int:
+    """Return the number of Scene N: headers in story bible text.
+
+    Does not require numbering to start at 1 — page/panel slices keep original
+    scene numbers from the full bible. Use ``validate_full_story_bible_scenes``
+    when writing a complete bible.
+    """
+    matches = list(SCENE_HEADER_RE.finditer(text))
+    if not matches:
+        raise ValueError("Story bible must contain at least one 'Scene N:' header.")
+    return len(matches)
+
+
+def validate_full_story_bible_scenes(text: str) -> int:
+    """Require Scene 1..N sequential headers with non-empty bodies. Return count."""
+    matches = list(SCENE_HEADER_RE.finditer(text))
+    if not matches:
+        raise ValueError("Story bible must contain at least one 'Scene N:' header.")
+
+    expected_number = 1
+    for idx, match in enumerate(matches):
+        scene_number = int(match.group(1))
+        if scene_number != expected_number:
+            raise ValueError(
+                "Story bible scenes must be sequential starting at 1: "
+                f"expected Scene {expected_number}, found Scene {scene_number}."
+            )
+        end = matches[idx + 1].start() if idx + 1 < len(matches) else len(text)
+        scene_text = text[match.start():end].strip()
+        header_line, _, body = scene_text.partition("\n")
+        if not body.strip():
+            raise ValueError(f"Story bible scene body is empty for {header_line.strip()}.")
+        expected_number += 1
+    return len(matches)
+
+
+def write_story_bible(path: Path, story_bible_text: str) -> None:
+    """Write story bible prose to a plain-text checkpoint file."""
+    text = story_bible_text.strip()
+    if not text:
+        raise ValueError("Story bible text is empty")
+    count_story_bible_scenes(text)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text + "\n", encoding="utf-8")
+
+
+def load_story_bible(path: Path) -> StoryBibleCheckpoint:
+    """Load a plain-text story bible and derive scene_count from Scene N: headers."""
+    text = path.read_text(encoding="utf-8").strip()
+    if not text:
+        raise ValueError(f"Story bible is empty: {path}")
+    scene_count = count_story_bible_scenes(text)
+    return StoryBibleCheckpoint(
+        scene_count=scene_count,
+        story_bible=text,
+    )
 
 
 def _format_entities_for_prompt(world: WorldStateCheckpoint) -> str:
@@ -223,23 +284,25 @@ def create_story_bible(
         generation_errors.append("Generated story bible is empty.")
         raise RuntimeError("Generated story bible text is empty")
 
+    story_bible_text = story_bible_text.strip()
+    try:
+        derived_scene_count = validate_full_story_bible_scenes(story_bible_text)
+    except ValueError as exc:
+        generation_errors.append(str(exc))
+        raise RuntimeError(str(exc)) from exc
+
     checkpoint = StoryBibleCheckpoint(
         url=raw.url,
         title=raw.title,
         author=raw.author,
         model=model,
-        scene_count=scene_count,
+        scene_count=derived_scene_count,
         story_bible=story_bible_text,
         generation_errors=generation_errors,
         created_at=datetime.now(timezone.utc).isoformat(),
     )
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    # Write metadata to JSON; the actual story_bible text is also accessible as story_bible field
-    output_path.write_text(
-        json.dumps(checkpoint.model_dump(), indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    write_story_bible(output_path, story_bible_text)
     return checkpoint
 
 
@@ -260,7 +323,7 @@ def _run_cli() -> None:
     parser.add_argument(
         "--output",
         required=True,
-        help="Output story bible checkpoint path (e.g. campaigns/<campaign>/<episode>/v001/02_5_story_bible.json)",
+        help="Output story bible checkpoint path (e.g. campaigns/<campaign>/<episode>/v001/02_5_story_bible.txt)",
     )
     parser.add_argument(
         "--model",

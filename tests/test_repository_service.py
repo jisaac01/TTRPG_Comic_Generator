@@ -13,7 +13,7 @@ def _write_version(version_dir: Path, status: str = "ok") -> None:
     version_dir.mkdir(parents=True, exist_ok=True)
     (version_dir / "01_raw_text.json").write_text("{}", encoding="utf-8")
     (version_dir / "02_entities.json").write_text("{}", encoding="utf-8")
-    (version_dir / "02_5_story_bible.json").write_text("{}", encoding="utf-8")
+    (version_dir / "02_5_story_bible.txt").write_text("Scene 1:\nTest scene.\n", encoding="utf-8")
     (version_dir / "03_script.json").write_text("{}", encoding="utf-8")
     (version_dir / "03_5_styled_script.json").write_text("{}", encoding="utf-8")
     (version_dir / "04_page_1_prompt.txt").write_text("prompt", encoding="utf-8")

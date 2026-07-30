@@ -83,7 +83,12 @@ from scriptwriter import (
     write_story_bible_pages,
     write_story_bible_panels,
 )
-from master_beater import StoryBibleCheckpoint, create_story_bible
+from master_beater import (
+    StoryBibleCheckpoint,
+    create_story_bible,
+    load_story_bible,
+    write_story_bible,
+)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -94,8 +99,8 @@ EPISODE_META_FILENAME = "episode_meta.json"
 RUN_STATUS_FILENAME = "run_status.json"
 WORKING_DIR_NAME = "working"
 PROMPTS_SUBDIR_NAME = "prompts"
-STORY_BIBLE_PAGE_GLOB = "02_6_story_bible_page_*.json"
-STORY_BIBLE_PANEL_GLOB = "02_6_story_bible_page_*_panel_*.json"
+STORY_BIBLE_PAGE_GLOB = "02_6_story_bible_page_*.txt"
+STORY_BIBLE_PANEL_GLOB = "02_6_story_bible_page_*_panel_*.txt"
 SCRIPT_PAGE_GLOB = "03_script_page_*.json"
 SCRIPT_PANEL_GLOB = "03_script_page_*_panel_*.json"
 STYLED_SCRIPT_PAGE_GLOB = "03_5_styled_script_page_*.json"
@@ -105,11 +110,11 @@ PAGE_PROMPT_GLOB = "04_page_*_prompt.txt"
 
 
 def _story_bible_page_path(version_dir: Path, page_number: int) -> Path:
-    return version_dir / f"02_6_story_bible_page_{page_number:03d}.json"
+    return version_dir / f"02_6_story_bible_page_{page_number:03d}.txt"
 
 
 def _story_bible_panel_path(version_dir: Path, page_number: int, panel_index: int) -> Path:
-    return version_dir / f"02_6_story_bible_page_{page_number:03d}_panel_{panel_index:03d}.json"
+    return version_dir / f"02_6_story_bible_page_{page_number:03d}_panel_{panel_index:03d}.txt"
 
 
 def _script_page_path(version_dir: Path, page_number: int) -> Path:
@@ -376,11 +381,11 @@ _PRESERVE_PATTERNS_BY_STAGE: dict[RerunFrom | None, list[str]] = {
     "scrape": [],
     "entities": ["01_raw_text.json"],
     "beater": ["01_raw_text.json", "02_entities.json"],
-    "script": ["01_raw_text.json", "02_entities.json", "02_5_story_bible.json"],
+    "script": ["01_raw_text.json", "02_entities.json", "02_5_story_bible.txt"],
     "style": [
         "01_raw_text.json",
         "02_entities.json",
-        "02_5_story_bible.json",
+        "02_5_story_bible.txt",
         STORY_BIBLE_PAGE_GLOB,
         STORY_BIBLE_PANEL_GLOB,
         SCRIPT_PAGE_GLOB,
@@ -389,7 +394,7 @@ _PRESERVE_PATTERNS_BY_STAGE: dict[RerunFrom | None, list[str]] = {
     "prompt": [
         "01_raw_text.json",
         "02_entities.json",
-        "02_5_story_bible.json",
+        "02_5_story_bible.txt",
         STORY_BIBLE_PAGE_GLOB,
         STORY_BIBLE_PANEL_GLOB,
         SCRIPT_PAGE_GLOB,
@@ -399,7 +404,7 @@ _PRESERVE_PATTERNS_BY_STAGE: dict[RerunFrom | None, list[str]] = {
     None: [
         "01_raw_text.json",
         "02_entities.json",
-        "02_5_story_bible.json",
+        "02_5_story_bible.txt",
         STORY_BIBLE_PAGE_GLOB,
         STORY_BIBLE_PANEL_GLOB,
         SCRIPT_PAGE_GLOB,
@@ -525,9 +530,7 @@ def _generate_script_pages_panel_mode(
     script_model: str,
     prompt_template_paths: dict[str, Path],
 ) -> list[ScriptCheckpoint]:
-    story_bible = StoryBibleCheckpoint.model_validate_json(
-        story_bible_path.read_text(encoding="utf-8")
-    )
+    story_bible = load_story_bible(story_bible_path)
     units = build_story_bible_panel_units(story_bible, total_pages)
     panel_story_paths = {
         (unit.page_number, unit.panel_index): _story_bible_panel_path(
@@ -981,7 +984,7 @@ class ComicPipeline:
                     )
                     # Recap body feeds the story bible, not keyed entities.
                     # Keep 02_entities.json; invalidate beater outputs and below.
-                    _dual_unlink(version_dir / "02_5_story_bible.json", version_dir, working_dir)
+                    _dual_unlink(version_dir / "02_5_story_bible.txt", version_dir, working_dir)
                     _dual_delete_matching(version_dir, working_dir, STORY_BIBLE_PAGE_GLOB)
                     _dual_delete_matching(version_dir, working_dir, STORY_BIBLE_PANEL_GLOB)
                     _dual_delete_matching(version_dir, working_dir, SCRIPT_PAGE_GLOB)
@@ -1017,7 +1020,7 @@ class ComicPipeline:
             self.art_style = self._resolve_selected_art_style_id()
         self._ensure_campaign_prompt_templates()
         entities_path = version_dir / "02_entities.json"
-        story_bible_path = version_dir / "02_5_story_bible.json"
+        story_bible_path = version_dir / "02_5_story_bible.txt"
         prompts_path = version_dir / "04_page_1_prompt.txt"
         if self.generation_mode == "panel":
             prompts_path = _panel_prompt_path(version_dir, 1, 1)
@@ -1104,9 +1107,7 @@ class ComicPipeline:
                         reason="checkpoint exists",
                     )
                 )
-                story_bible = StoryBibleCheckpoint.model_validate_json(
-                    story_bible_path.read_text(encoding="utf-8")
-                )
+                story_bible = load_story_bible(story_bible_path)
             else:
                 scene_count = self.total_pages * self.panel_count
                 self._emit(
@@ -1141,10 +1142,7 @@ class ComicPipeline:
                         user_prompt_text=beater_user_prompt,
                     )
                     if not story_bible_path.exists():
-                        story_bible_path.write_text(
-                            story_bible.model_dump_json(indent=2),
-                            encoding="utf-8",
-                        )
+                        write_story_bible(story_bible_path, story_bible.story_bible)
                     self._emit(PhaseCompleted(phase="beater", message="...done"))
                 except Exception as exc:
                     errors.append(f"story_bible: {exc}")
@@ -1734,7 +1732,7 @@ async def _run_cli() -> None:
     parser.add_argument(
         "--campaigns-root",
         default=str(CAMPAIGNS_ROOT),
-        help="Root directory for all campaign data (default: campaigns/)",
+        help=f"Root directory for all campaign data (default: {CAMPAIGNS_ROOT})",
     )
     parser.add_argument(
         "--model",

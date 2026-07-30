@@ -66,7 +66,7 @@ Primary workflow surface for launching and monitoring runs.
 │  │                                                           │   │
 │  │  ✓ 01_raw_text.json          ✓ 03_script.json           │   │
 │  │  ✓ 02_entities.json          ✓ 03_5_styled_script.json  │   │
-│  │  ✓ 02_5_story_bible.json     ✓ 04_page_1_prompt.txt     │   │
+│  │  ✓ 02_5_story_bible.txt      ✓ 04_page_1_prompt.txt     │   │
 │  │                                                           │   │
 │  └─────────────────────────────────────────────────────────┘   │
 │                                                                   │
@@ -219,7 +219,7 @@ Browse and preview versioned outputs.
 │  ┌─── Files ───────────────────────────────────────────────┐   │
 │  │  ✓ 01_raw_text.json             (scraped content)      │   │
 │  │  ✓ 02_entities.json             (characters, places)   │   │
-│  │  ✓ 02_5_story_bible.json        (scene breakdown)      │   │
+│  │  ✓ 02_5_story_bible.txt         (scene breakdown)      │   │
 │  │  ✓ 03_script.json               (panels + dialogue)    │   │
 │  │  ✓ 03_5_styled_script.json      (art-integrated)      │   │
 │  │  ✓ 04_page_1_prompt.txt         (image generation)    │   │

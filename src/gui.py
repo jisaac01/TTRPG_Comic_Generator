@@ -1297,7 +1297,7 @@ def build_output_page(
         preferred = [
             "01_raw_text.json",
             "02_entities.json",
-            "02_5_story_bible.json",
+            "02_5_story_bible.txt",
             "03_script.json",
             "03_5_styled_script.json",
             "04_page_1_prompt.txt",

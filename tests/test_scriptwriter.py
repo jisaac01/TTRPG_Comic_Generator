@@ -80,29 +80,21 @@ def _write_input_checkpoints(tmp_path: Path) -> tuple[Path, Path, Path]:
 
     raw_path = tmp_path / "01_raw_text.json"
     entities_path = tmp_path / "02_entities.json"
-    story_bible_path = tmp_path / "02_5_story_bible.json"
+    story_bible_path = tmp_path / "02_5_story_bible.txt"
     
     raw_path.write_text(json.dumps(raw_input), encoding="utf-8")
     entities_path.write_text(json.dumps(entities_input), encoding="utf-8")
     
-    story_bible_checkpoint = master_beater.StoryBibleCheckpoint(
-        url="https://example.test/story",
-        title="Swamp Trouble",
-        author="GM",
-        model=DEFAULT_MODEL,
-        scene_count=3,
-        story_bible="""Scene 1:
+    story_bible_text = """Scene 1:
 The party enters the marsh at dusk. Del grabs a torch and leads the group into the murky waters. The reeds tower overhead, their silhouettes ghostly in the fading light. Del warns urgently, "Stay close to me." Nobody holds the torch yet except Del.
 
 Scene 2:
 The group pushes deeper into the marsh. The narrow path winds between walls of reeds that seem to press closer with each step. Del holds the torch aloft, casting dancing shadows. Urgency fills the air as they move forward, Del keeping the torch lit against the growing darkness.
 
 Scene 3:
-They pause at a collapsed ruin gate to reassess. The ancient structure looms before them, half-buried in the marsh. Del calls out, "We hold here." as the party takes shelter behind the crumbling stones. Del still holds the torch, the flame casting eerie shadows on the ruins.""",
-        generation_errors=[],
-        created_at="2026-05-04T00:00:00+00:00",
-    )
-    story_bible_path.write_text(story_bible_checkpoint.model_dump_json(), encoding="utf-8")
+They pause at a collapsed ruin gate to reassess. The ancient structure looms before them, half-buried in the marsh. Del calls out, "We hold here." as the party takes shelter behind the crumbling stones. Del still holds the torch, the flame casting eerie shadows on the ruins.
+"""
+    master_beater.write_story_bible(story_bible_path, story_bible_text)
     return raw_path, entities_path, story_bible_path
 
 
@@ -408,9 +400,7 @@ def test_format_entities_for_prompt_excludes_reference_quotes():
 def test_format_story_bible_for_prompt_includes_entities(tmp_path):
     _, _, architecture_path = _write_input_checkpoints(tmp_path)
 
-    architecture = master_beater.StoryBibleCheckpoint.model_validate_json(
-        architecture_path.read_text(encoding="utf-8")
-    )
+    architecture = master_beater.load_story_bible(architecture_path)
 
     prompt_blob = scriptwriter._format_story_bible_for_prompt(architecture)
 

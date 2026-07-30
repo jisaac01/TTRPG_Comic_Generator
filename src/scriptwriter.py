@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,7 +19,12 @@ from prompt_templates import (
     render_prompt_template,
 )
 from scraper import RawTextCheckpoint
-from master_beater import StoryBibleCheckpoint
+from master_beater import (
+    SCENE_HEADER_RE,
+    StoryBibleCheckpoint,
+    load_story_bible,
+    write_story_bible,
+)
 
 
 class WorldStateInput(BaseModel):
@@ -91,8 +95,6 @@ class ScriptCheckpoint(BaseModel):
 
 
 ScriptGenerator = Callable[[WorldStateInput, StoryBibleCheckpoint, str], ScriptPayload]
-
-SCENE_HEADER_RE = re.compile(r"(?m)^Scene\s+(\d+):")
 
 
 def _build_instructor_client(model: str):
@@ -210,16 +212,10 @@ def write_story_bible_pages(
             f"Expected {total_pages} story bible output paths, received {len(output_paths)}."
         )
 
-    story_bible = StoryBibleCheckpoint.model_validate_json(
-        story_bible_checkpoint_path.read_text(encoding="utf-8")
-    )
+    story_bible = load_story_bible(story_bible_checkpoint_path)
     checkpoints = build_story_bible_page_checkpoints(story_bible, total_pages)
     for output_path, checkpoint in zip(output_paths, checkpoints):
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(
-            json.dumps(checkpoint.model_dump(), indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
+        write_story_bible(output_path, checkpoint.story_bible)
     return checkpoints
 
 
@@ -267,9 +263,7 @@ def write_story_bible_panels(
     total_pages: int,
 ) -> list[StoryBiblePanelUnit]:
     """Split a story bible into per-panel checkpoint files."""
-    story_bible = StoryBibleCheckpoint.model_validate_json(
-        story_bible_checkpoint_path.read_text(encoding="utf-8")
-    )
+    story_bible = load_story_bible(story_bible_checkpoint_path)
     units = build_story_bible_panel_units(story_bible, total_pages)
     expected_keys = {(unit.page_number, unit.panel_index) for unit in units}
     if set(output_paths) != expected_keys:
@@ -279,11 +273,9 @@ def write_story_bible_panels(
         )
 
     for unit in units:
-        output_path = output_paths[(unit.page_number, unit.panel_index)]
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(
-            json.dumps(unit.checkpoint.model_dump(), indent=2, ensure_ascii=False),
-            encoding="utf-8",
+        write_story_bible(
+            output_paths[(unit.page_number, unit.panel_index)],
+            unit.checkpoint.story_bible,
         )
     return units
 
@@ -564,7 +556,7 @@ def write_script(
     raw_checkpoint_path: Path = Path("campaigns/<campaign>/<episode>/v001/01_raw_text.json"),
     entities_checkpoint_path: Path = Path("campaigns/<campaign>/<episode>/v001/02_entities.json"),
     story_bible_checkpoint_path: Path = Path(
-        "campaigns/<campaign>/<episode>/v001/02_5_story_bible.json"
+        "campaigns/<campaign>/<episode>/v001/02_5_story_bible.txt"
     ),
     output_path: Path = Path("campaigns/<campaign>/<episode>/v001/03_script.json"),
     *,
@@ -577,9 +569,7 @@ def write_script(
     
     raw = RawTextCheckpoint.model_validate_json(raw_checkpoint_path.read_text(encoding="utf-8"))
     world = WorldStateInput.model_validate_json(entities_checkpoint_path.read_text(encoding="utf-8"))
-    story_bible = StoryBibleCheckpoint.model_validate_json(
-        story_bible_checkpoint_path.read_text(encoding="utf-8")
-    )
+    story_bible = load_story_bible(story_bible_checkpoint_path)
     generation_errors: list[str] = []
 
     if generator is None:
@@ -701,7 +691,7 @@ def _run_cli() -> None:
         required=True,
         help=(
             "Input story bible checkpoint path "
-            "(e.g. campaigns/<campaign>/<episode>/v001/02_5_story_bible.json)"
+            "(e.g. campaigns/<campaign>/<episode>/v001/02_5_story_bible.txt)"
         ),
     )
     parser.add_argument(
@@ -717,9 +707,7 @@ def _run_cli() -> None:
     args = parser.parse_args()
 
     world = WorldStateInput.model_validate_json(Path(args.entities_input).read_text(encoding="utf-8"))
-    story_bible = StoryBibleCheckpoint.model_validate_json(
-        Path(args.story_bible_input).read_text(encoding="utf-8")
-    )
+    story_bible = load_story_bible(Path(args.story_bible_input))
     title = world.title or "Untitled story"
     entities_context = _format_entities_for_prompt(world)
     system_prompt_text = render_prompt_template(

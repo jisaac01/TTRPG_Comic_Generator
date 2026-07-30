@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 sys.path.insert(0, str(SRC))
 
+from app_paths import default_campaigns_root  # noqa: E402
 from art_styles import (  # noqa: E402
     ART_DIRECTION_DIRNAME,
     ART_DIRECTION_TEMPLATE_FILENAME,
@@ -62,7 +63,10 @@ def main() -> int:
         type=Path,
         action="append",
         default=None,
-        help="Campaigns root (repeatable). Defaults to repo campaigns/ and app data if present.",
+        help=(
+            "Campaigns root (repeatable). "
+            f"Defaults to user app-data campaigns: {default_campaigns_root()}"
+        ),
     )
     parser.add_argument(
         "--write",
@@ -73,16 +77,7 @@ def main() -> int:
 
     roots: list[Path] = list(args.campaigns_root or [])
     if not roots:
-        roots = [ROOT / "campaigns"]
-        app_data = (
-            Path.home()
-            / "Library"
-            / "Application Support"
-            / "TTRPG_Comic_Generator"
-            / "campaigns"
-        )
-        if app_data.exists():
-            roots.append(app_data)
+        roots = [default_campaigns_root()]
 
     bundled = bundled_hash_to_stem()
     print(f"Bundled styles known: {len(bundled)}")
