@@ -19,6 +19,7 @@ from gui import (
     build_prompt_page,
     close_settings_dialog,
     open_settings_dialog,
+    _format_preview,
     _validate_art_template,
 )
 from pipeline_events import PhasePartialFailure, PhaseStarted, RunCompleted
@@ -822,6 +823,26 @@ def test_set_clipboard_uses_flet_clipboard_service_when_page_has_no_setter():
     assert _FakeClipboard.last_value == "via service"
     # Sanity: real flet still exposes Clipboard.
     assert hasattr(ft, "Clipboard")
+
+
+def test_format_preview_preserves_unicode_in_json(tmp_path):
+    """JSON previews should show real punctuation, not \\uXXXX escapes."""
+    path = tmp_path / "02_5_story_bible.json"
+    path.write_text(
+        json.dumps(
+            {"summary": "looms—a Syndicate’s plan"},
+            indent=2,
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    preview = _format_preview(path)
+
+    assert "—" in preview
+    assert "’" in preview
+    assert r"\u2014" not in preview
+    assert r"\u2019" not in preview
 
 
 def test_prompt_page_art_styles_sorted_with_campaign_interleaved(tmp_path, monkeypatch):

@@ -920,7 +920,7 @@ def _format_preview(path: Path) -> str:
         parsed = json.loads(text)
     except json.JSONDecodeError:
         return text
-    return json.dumps(parsed, indent=2, ensure_ascii=True)
+    return json.dumps(parsed, indent=2, ensure_ascii=False)
 
 
 async def _set_clipboard(page: Any, text: str, _ft: Any) -> None:
