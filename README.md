@@ -164,10 +164,10 @@ For generation mode, aspect ratio, and automated image generation, use the GUI (
 ### Examples
 
 ```bash
-# First run — creates campaigns/dreadmarsh/dreadmarsh-crossing/v001/
+# First run — creates working/ and campaigns/dreadmarsh/dreadmarsh-crossing/v001/
 python src/pipeline.py dreadmarsh https://scrybequill.com/share/...
 
-# Re-run same episode — creates v002/ with all checkpoints cloned from v001 (no phases run)
+# Re-run same episode — creates v002/ with checkpoints cloned from working/ (no phases run if unchanged)
 python src/pipeline.py dreadmarsh https://scrybequill.com/share/...
 
 # Select a different recap variant from cached scrape data
@@ -176,7 +176,7 @@ python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --recap-vers
 # Update story bible and everything downstream
 python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --rerun-from beater
 
-# Update art style integration only — creates v003/, clones v002/, re-runs Phase 4.5 and Phase 5
+# Update art style integration only — creates v003/, clones from working/, re-runs Phase 4.5 and Phase 5
 python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --rerun-from style
 
 # Rebuild only the final page prompt from the styled script
@@ -197,7 +197,7 @@ python src/pipeline.py dreadmarsh https://scrybequill.com/share/... \
   --style-integrator-user-prompt custom_prompts/dreadmarsh_style_user.txt \
   --page-prompt-template custom_prompts/dreadmarsh_page_prompt.txt
 
-# Fix source text — creates v004/, clones v003/, re-runs everything from scrape
+# Fix source text — creates v004/, clones from working/, re-runs everything from scrape
 python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --rerun-from scrape
 
 # Different campaign, same URL — completely isolated under campaigns/belowdown/
@@ -305,6 +305,7 @@ campaigns/
     entities_bible.json             # campaign-level merged entity continuity
     dreadmarsh-crossing/            # episode folder (slug from story title, identity from URL)
       episode_meta.json             # url, title, created_at
+      working/                      # mutable workspace; clone source for the next run
       v001/
         01_raw_text.json
         02_entities.json
@@ -322,7 +323,7 @@ campaigns/
         run_status.json                         # run outcome, settings (incl. art_style), errors
         art_direction_template.json             # snapshot of the style used for this version
         prompts/                                # interpolated prompts sent to models
-      v002/                         # second run; prior phases cloned, new phase re-run
+      v002/                         # second run; checkpoints cloned from working/, then re-run stages
         ...
   belowdown/
     art_direction/
@@ -334,11 +335,15 @@ campaigns/
 
 - Within a version, the pipeline skips any phase whose checkpoint already exists.
 - A new version is created on every run (auto-incremented: v001, v002, ...).
-- The previous version's files are cloned as a baseline so only phases invalidated by `--rerun-from` (or changed run settings like generation mode or panel count) are re-computed.
+- Each episode also has a mutable **`working/`** directory. Reruns clone checkpoints from `working/`, not from the latest historical version.
+- After a run completes, the new version's artifacts (and `run_status.json`) are mirrored into `working/` so the workspace matches what the next run will start from.
+- If `working/` is missing (older campaigns), the next run seeds it from the latest `vNNN` automatically.
+- Edit intermediate artifacts (story bible, scripts, etc.) in `working/` for the next pass; leave `vNNN` folders as immutable history.
+- Only phases invalidated by `--rerun-from` (or changed run settings like generation mode or panel count) are re-computed.
 - The effective art direction and prompt template files are copied into every version folder for reproducibility.
 - Episode identity is canonical by URL — if the story title changes on the source site, the same episode folder is reused.
 - When `--skip-style` is set, Phase 4.5 is skipped and Phase 5 consumes `03_script_page_*.json` directly.
-- Run settings (`panel_count`, `total_pages`, `aspect_ratio`, `generation_mode`, `generate_images`, etc.) are persisted per version in `run_status.json`.
+- Run settings (`panel_count`, `total_pages`, `aspect_ratio`, `generation_mode`, `generate_images`, etc.) are persisted per version in `run_status.json` and mirrored to `working/run_status.json`.
 
 ## Running individual phases
 

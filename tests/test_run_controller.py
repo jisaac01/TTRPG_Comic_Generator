@@ -385,6 +385,11 @@ async def test_run_controller_persists_empty_failed_phases_from_run_completed(tm
     assert status["checkpoints"] == ["entities"]
     assert status["run_config"]["stop_after"] == "entities"
 
+    working_status_path = Path(result.version_dir).parent / "working" / "run_status.json"  # type: ignore[arg-type]
+    assert working_status_path.exists()
+    working_status = json.loads(working_status_path.read_text(encoding="utf-8"))
+    assert working_status["run_config"]["stop_after"] == "entities"
+
 
 @pytest.mark.asyncio
 async def test_run_controller_integration_repository_service_discovers_created_version(tmp_path):

@@ -71,7 +71,14 @@ campaigns/             # Runtime campaign data (gitignored in real use)
 
 ## Pipeline flow
 
-Each run creates a new version folder (`v001`, `v002`, …) under `campaigns/<campaign>/<episode>/`. Prior version checkpoints are cloned; only phases invalidated by `--rerun-from` or changed run settings are recomputed.
+Each episode has a mutable **`working/`** directory (next-run source of truth) plus immutable version folders (`v001`, `v002`, …). On each run the pipeline:
+
+1. Ensures `working/` exists (seeding from the latest version if missing — migration path).
+2. Creates the next version and **selectively clones checkpoints from `working/`** (not from the latest `vNNN`).
+3. Runs invalidated phases into the new version directory.
+4. Syncs the version's artifacts back into `working/` so the workspace reflects the latest run.
+
+Only phases invalidated by `--rerun-from` or changed run settings are recomputed. Manual edits for the next run belong in `working/` (e.g. story bible); historical `vNNN` folders stay untouched.
 
 | Phase | Module | Key outputs |
 |-------|--------|-------------|
@@ -89,7 +96,7 @@ Each run creates a new version folder (`v001`, `v002`, …) under `campaigns/<ca
 - `page` — one prompt and one image per page (default)
 - `panel` — one prompt/image per panel, then stitch into `06_page_*.png`
 
-**Run settings** persisted per version in `run_status.json`: `panel_count`, `total_pages`, `aspect_ratio`, `generation_mode`, `generate_images`, `recap_version`, `skip_style`, `rerun_from`.
+**Run settings** persisted in `run_status.json` under each version and mirrored to `working/`: `panel_count`, `total_pages`, `aspect_ratio`, `generation_mode`, `generate_images`, `recap_version`, `skip_style`, `rerun_from`. Config invalidation for the next run reads `working/run_status.json`.
 
 Scene count for the master beater = `panel_count × total_pages`.
 
@@ -97,6 +104,7 @@ Scene count for the master beater = `panel_count × total_pages`.
 
 - **LLM-backed entity continuity** is the source of truth (`entities._merge_entities_with_llm`). Do not replace it with deterministic-only merge logic.
 - **Version immutability**: never overwrite an existing version folder; always create the next version.
+- **Working directory**: `working/` is the mutable clone source for the next run. Do not treat historical `vNNN` as the edit surface for iteration.
 - **Checkpoint skip logic**: within a version, skip a phase if its output files already exist (unless invalidated by rerun).
 - **Prompt artifacts**: interpolated prompts are saved under `<version>/prompts/` for reproducibility.
 - **Image generation** always uses Gemini via `ImageGenerator` and `build_openai_client`, regardless of which backend handles text stages.

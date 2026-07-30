@@ -8,7 +8,7 @@
 - [ ] Add a second pass for continuity and fun
 - [ ] remove validation (e.g. carried items)
 - [ ] camera angle, panel lighting
-- [ ] Does re-run start from the selected version, or just the last? 
+- [ ] Allow rerun from specific version
 - [ ] Style template editing UX beyond Prompts-tab multi-style list
 - [ ] Add entities_bible to prompts page for editing
 - [ ] Allow editing version files
@@ -17,6 +17,8 @@
 - [ ] *** Convert the prompt to the markdown style and try it ***
 - [ ] Add a json/markdown mode to output everything in those formats
 - [ ] Add a warning when prompt templates are older than the defaults, out of date
+- [ ] Add "find and replace" function for fixing cascading errors through all version files
+- [x] Add a "working copy" that is the version we'll be passing into the next pass
 
 ---
 

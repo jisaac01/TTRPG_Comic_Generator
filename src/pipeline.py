@@ -92,6 +92,7 @@ from master_beater import StoryBibleCheckpoint, create_story_bible
 INDEX_FILENAME = "index.json"
 EPISODE_META_FILENAME = "episode_meta.json"
 RUN_STATUS_FILENAME = "run_status.json"
+WORKING_DIR_NAME = "working"
 PROMPTS_SUBDIR_NAME = "prompts"
 STORY_BIBLE_PAGE_GLOB = "02_6_story_bible_page_*.json"
 STORY_BIBLE_PANEL_GLOB = "02_6_story_bible_page_*_panel_*.json"
@@ -137,6 +138,113 @@ def _copy_checkpoint_patterns(prev_dir: Path, version_dir: Path, patterns: list[
         src = prev_dir / pattern
         if src.exists():
             shutil.copy2(src, version_dir / src.name)
+
+
+def _working_dir(episode_dir: Path) -> Path:
+    return episode_dir / WORKING_DIR_NAME
+
+
+def _list_version_dirs(episode_dir: Path) -> list[Path]:
+    if not episode_dir.exists():
+        return []
+    return sorted(
+        (
+            path
+            for path in episode_dir.iterdir()
+            if path.is_dir() and re.fullmatch(r"v\d{3}", path.name)
+        ),
+        key=lambda path: int(path.name[1:]),
+    )
+
+
+def _latest_version_dir(episode_dir: Path) -> Path | None:
+    versions = _list_version_dirs(episode_dir)
+    return versions[-1] if versions else None
+
+
+def _copy_tree_contents(src: Path, dest: Path) -> None:
+    """Copy all files and subdirectories from src into dest (overwrite dest children)."""
+    dest.mkdir(parents=True, exist_ok=True)
+    for item in src.iterdir():
+        target = dest / item.name
+        if item.is_dir():
+            if target.exists():
+                shutil.rmtree(target)
+            shutil.copytree(item, target)
+        else:
+            shutil.copy2(item, target)
+
+
+def _ensure_working_dir(episode_dir: Path) -> Path:
+    """
+    Ensure episode/working exists.
+
+    If working is missing or empty and a historical version exists, seed working
+    from the latest version (migration path for pre-working campaigns).
+    """
+    working = _working_dir(episode_dir)
+    working.mkdir(parents=True, exist_ok=True)
+    if not any(working.iterdir()):
+        latest = _latest_version_dir(episode_dir)
+        if latest is not None:
+            _copy_tree_contents(latest, working)
+    return working
+
+
+def _mirror_path_to_working(
+    version_path: Path,
+    version_dir: Path,
+    working_dir: Path,
+) -> None:
+    """Copy a version-dir path into working at the same relative location."""
+    if not version_path.exists():
+        return
+    try:
+        relative = version_path.relative_to(version_dir)
+    except ValueError:
+        return
+    dest = working_dir / relative
+    if version_path.is_dir():
+        if dest.exists():
+            shutil.rmtree(dest)
+        shutil.copytree(version_path, dest)
+        return
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(version_path, dest)
+
+
+def _sync_version_to_working(version_dir: Path, working_dir: Path) -> None:
+    """Overwrite working files with every file currently present in the version dir."""
+    working_dir.mkdir(parents=True, exist_ok=True)
+    for path in version_dir.rglob("*"):
+        if path.is_file():
+            _mirror_path_to_working(path, version_dir, working_dir)
+
+
+def _dual_unlink(version_path: Path, version_dir: Path, working_dir: Path) -> None:
+    version_path.unlink(missing_ok=True)
+    try:
+        relative = version_path.relative_to(version_dir)
+    except ValueError:
+        return
+    (working_dir / relative).unlink(missing_ok=True)
+
+
+def _dual_delete_matching(version_dir: Path, working_dir: Path, pattern: str) -> None:
+    for path in list(version_dir.glob(pattern)):
+        _dual_unlink(path, version_dir, working_dir)
+
+
+def _dual_rmtree(version_path: Path, version_dir: Path, working_dir: Path) -> None:
+    if version_path.exists():
+        shutil.rmtree(version_path, ignore_errors=True)
+    try:
+        relative = version_path.relative_to(version_dir)
+    except ValueError:
+        return
+    working_target = working_dir / relative
+    if working_target.exists():
+        shutil.rmtree(working_target, ignore_errors=True)
 
 
 def _load_script_pages(paths: list[Path]) -> list[ScriptCheckpoint]:
@@ -367,23 +475,20 @@ def _create_version_dir(
     """
     Create the next version directory.
 
-    If a previous version exists, copy only checkpoints preserved by the effective
-    rerun stage (requested rerun combined with config-driven invalidation).
+    Ensures episode/working exists (seeding from the latest version when needed),
+    then copies only checkpoints preserved by the effective rerun stage from
+    working into the new version directory.
 
     Returns (version_dir, version_name, effective_rerun_from).
     """
+    working = _ensure_working_dir(episode_dir)
     version_name = _next_version_name(episode_dir)
     version_dir = episode_dir / version_name
     version_dir.mkdir(parents=True, exist_ok=True)
 
     effective_rerun = rerun_from
-    existing = sorted(
-        p for p in episode_dir.iterdir() if p.is_dir() and re.fullmatch(r"v\d{3}", p.name)
-        and p.name != version_name
-    )
-    if existing:
-        prev_dir = existing[-1]
-        prev_config = _read_run_config(prev_dir)
+    if any(working.iterdir()):
+        prev_config = _read_run_config(working)
         effective_rerun = effective_rerun_from(
             rerun_from,
             prev_config,
@@ -393,15 +498,18 @@ def _create_version_dir(
             effective_rerun,
             _PRESERVE_PATTERNS_BY_STAGE[None],
         )
-        _copy_checkpoint_patterns(prev_dir, version_dir, files_to_copy)
+        _copy_checkpoint_patterns(working, version_dir, files_to_copy)
 
         if should_copy_prompt_artifacts(effective_rerun, prev_config, new_config or {}):
-            for prev_prompt_file in prev_dir.glob(PAGE_PROMPT_GLOB):
+            for prev_prompt_file in working.glob(PAGE_PROMPT_GLOB):
                 shutil.copy2(prev_prompt_file, version_dir / prev_prompt_file.name)
 
-            prev_prompts_dir = prev_dir / PROMPTS_SUBDIR_NAME
+            prev_prompts_dir = working / PROMPTS_SUBDIR_NAME
             if prev_prompts_dir.exists():
-                shutil.copytree(prev_prompts_dir, version_dir / PROMPTS_SUBDIR_NAME)
+                dest_prompts = version_dir / PROMPTS_SUBDIR_NAME
+                if dest_prompts.exists():
+                    shutil.rmtree(dest_prompts)
+                shutil.copytree(prev_prompts_dir, dest_prompts)
 
     return version_dir, version_name, effective_rerun
 
@@ -536,6 +644,7 @@ class ComicPipeline:
         self.image_generation_model = image_generation_model
         self.event_callback = event_callback or (lambda _: None)
         self._version_dir: Path | None = None
+        self._working_dir: Path | None = None
         self._effective_rerun_from: RerunFrom | None = rerun_from
 
     def run_config_dict(self) -> dict:
@@ -779,7 +888,8 @@ class ComicPipeline:
         return version_template_path
 
     async def run(self) -> dict[str, object]:
-        self._version_dir: Path | None = None
+        self._version_dir = None
+        self._working_dir = None
         # Phase 1: scrape first so we have the title for episode resolution.
         # We need a temporary path to store the raw checkpoint before the episode
         # directory is resolved (title comes from the scrape).
@@ -810,6 +920,7 @@ class ComicPipeline:
             episode_dir = _resolve_episode_dir(
                 self.campaigns_root, self.campaign, self.url, raw.title
             )
+            working_dir = _ensure_working_dir(episode_dir)
             version_dir, version_name, effective_rerun = _create_version_dir(
                 episode_dir,
                 self.rerun_from,
@@ -817,6 +928,7 @@ class ComicPipeline:
             )
             self._effective_rerun_from = effective_rerun
             self._version_dir = version_dir
+            self._working_dir = working_dir
             self._emit(
                 VersionCreated(
                     version=version_name,
@@ -832,6 +944,7 @@ class ComicPipeline:
 
         else:
             episode_dir = _episode_dir(self.campaigns_root, self.campaign, existing_episode)
+            working_dir = _ensure_working_dir(episode_dir)
             version_dir, version_name, effective_rerun = _create_version_dir(
                 episode_dir,
                 self.rerun_from,
@@ -839,6 +952,7 @@ class ComicPipeline:
             )
             self._effective_rerun_from = effective_rerun
             self._version_dir = version_dir
+            self._working_dir = working_dir
             self._emit(
                 VersionCreated(
                     version=version_name,
@@ -867,15 +981,14 @@ class ComicPipeline:
                     )
                     # Recap body feeds the story bible, not keyed entities.
                     # Keep 02_entities.json; invalidate beater outputs and below.
-                    (version_dir / "02_5_story_bible.json").unlink(missing_ok=True)
-                    _delete_matching(version_dir, STORY_BIBLE_PAGE_GLOB)
-                    _delete_matching(version_dir, STORY_BIBLE_PANEL_GLOB)
-                    _delete_matching(version_dir, SCRIPT_PAGE_GLOB)
-                    _delete_matching(version_dir, SCRIPT_PANEL_GLOB)
-                    _delete_matching(version_dir, STYLED_SCRIPT_PAGE_GLOB)
-                    for prompt_file in version_dir.glob("04_page_*.txt"):
-                        prompt_file.unlink(missing_ok=True)
-                    shutil.rmtree(version_dir / PROMPTS_SUBDIR_NAME, ignore_errors=True)
+                    _dual_unlink(version_dir / "02_5_story_bible.json", version_dir, working_dir)
+                    _dual_delete_matching(version_dir, working_dir, STORY_BIBLE_PAGE_GLOB)
+                    _dual_delete_matching(version_dir, working_dir, STORY_BIBLE_PANEL_GLOB)
+                    _dual_delete_matching(version_dir, working_dir, SCRIPT_PAGE_GLOB)
+                    _dual_delete_matching(version_dir, working_dir, SCRIPT_PANEL_GLOB)
+                    _dual_delete_matching(version_dir, working_dir, STYLED_SCRIPT_PAGE_GLOB)
+                    _dual_delete_matching(version_dir, working_dir, "04_page_*.txt")
+                    _dual_rmtree(version_dir / PROMPTS_SUBDIR_NAME, version_dir, working_dir)
                 else:
                     self._emit(
                         PhaseSkipped(
@@ -1493,6 +1606,12 @@ class ComicPipeline:
             )
         )
 
+        # Working is the mutable next-run source of truth: mirror this version's
+        # artifacts so edits and recomputed checkpoints land in working.
+        if self._working_dir is None:
+            self._working_dir = _ensure_working_dir(version_dir.parent)
+        _sync_version_to_working(version_dir, self._working_dir)
+
         return {
             "raw_text": raw.model_dump(),
             "entities": entities.model_dump() if entities is not None else None,
@@ -1508,6 +1627,7 @@ class ComicPipeline:
             "error_details": error_details,
             "version": version_name,
             "version_dir": str(version_dir),
+            "working_dir": str(self._working_dir),
             "run_config": self.run_config_dict(),
         }
 
@@ -1824,6 +1944,11 @@ async def _run_cli() -> None:
         print(status_json)
         if pipeline._version_dir is not None:
             (pipeline._version_dir / "run_status.json").write_text(status_json, encoding="utf-8")
+            if pipeline._working_dir is not None:
+                pipeline._working_dir.mkdir(parents=True, exist_ok=True)
+                (pipeline._working_dir / "run_status.json").write_text(
+                    status_json, encoding="utf-8"
+                )
         raise
 
     checkpoint_keys = (
@@ -1848,6 +1973,11 @@ async def _run_cli() -> None:
     print(status_json)
     run_status_path = Path(cast(str, result["version_dir"])) / "run_status.json"
     run_status_path.write_text(status_json, encoding="utf-8")
+    working_dir = Path(cast(str, result.get("working_dir") or ""))
+    if not working_dir:
+        working_dir = Path(cast(str, result["version_dir"])).parent / WORKING_DIR_NAME
+    working_dir.mkdir(parents=True, exist_ok=True)
+    (working_dir / "run_status.json").write_text(status_json, encoding="utf-8")
 
 
 if __name__ == "__main__":

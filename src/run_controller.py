@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Literal, Protocol
 
-from pipeline import ComicPipeline
+from pipeline import WORKING_DIR_NAME, ComicPipeline
 from pipeline_config import RunConfig, run_config_snapshot
 from pipeline_events import PipelineEventUnion, RunCompleted, VersionCreated
 
@@ -270,8 +270,15 @@ class RunController:
                 str(err) for err in output.get("error_details", status_blob["errors"])
             ]
 
+        status_json = json.dumps(status_blob, indent=2)
         run_status_path = version_dir / "run_status.json"
-        run_status_path.write_text(json.dumps(status_blob, indent=2), encoding="utf-8")
+        run_status_path.write_text(status_json, encoding="utf-8")
+
+        # Keep working/run_status.json in sync so the next run can read run_config
+        # from the mutable workspace rather than the latest historical version.
+        working_dir = version_dir.parent / WORKING_DIR_NAME
+        working_dir.mkdir(parents=True, exist_ok=True)
+        (working_dir / "run_status.json").write_text(status_json, encoding="utf-8")
 
     def _on_run_finished(self, task: asyncio.Task[RunResult]) -> None:
         try:

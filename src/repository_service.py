@@ -24,6 +24,7 @@ from prompt_templates import (
 )
 EPISODE_META_FILENAME = "episode_meta.json"
 RUN_STATUS_FILENAME = "run_status.json"
+WORKING_DIR_NAME = "working"
 VERSION_PATTERN = re.compile(r"v\d{3}")
 
 
@@ -124,7 +125,16 @@ class RepositoryService:
         versions = self.list_versions(campaign, episode_slug)
         return versions[-1].version if versions else None
 
+    def working_dir(self, campaign: str, episode_slug: str) -> Path | None:
+        """Return the episode working directory if it exists."""
+        path = self.campaigns_root / campaign / episode_slug / WORKING_DIR_NAME
+        return path if path.is_dir() else None
+
+    def has_working(self, campaign: str, episode_slug: str) -> bool:
+        return self.working_dir(campaign, episode_slug) is not None
+
     def list_versions(self, campaign: str, episode_slug: str) -> list[VersionInfo]:
+        """List immutable historical versions (vNNN only; excludes working/)."""
         episode_dir = self.campaigns_root / campaign / episode_slug
         if not episode_dir.exists():
             return []
@@ -154,6 +164,7 @@ class RepositoryService:
         return versions
 
     def get_version_files(self, campaign: str, episode_slug: str, version: str) -> VersionFiles:
+        # version may be a historical vNNN or the special WORKING_DIR_NAME label.
         version_dir = self.campaigns_root / campaign / episode_slug / version
         prompts_dir = version_dir / "prompts"
         return VersionFiles(

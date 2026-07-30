@@ -109,3 +109,17 @@ def test_repository_service_discovers_campaigns_episodes_versions_and_prompts(tm
     run_status = service.run_status("dreadmarsh", "dreadmarsh-crossing", "v002")
     assert run_status is not None
     assert run_status["status"] == "partial"
+
+    # working/ is not a historical version, but is discoverable separately.
+    assert service.has_working("dreadmarsh", "dreadmarsh-crossing") is False
+    working = episode_dir / "working"
+    working.mkdir()
+    (working / "01_raw_text.json").write_text("{}", encoding="utf-8")
+    assert service.has_working("dreadmarsh", "dreadmarsh-crossing") is True
+    assert service.working_dir("dreadmarsh", "dreadmarsh-crossing") == working
+    assert [v.version for v in service.list_versions("dreadmarsh", "dreadmarsh-crossing")] == [
+        "v001",
+        "v002",
+    ]
+    working_files = service.get_version_files("dreadmarsh", "dreadmarsh-crossing", "working")
+    assert working_files.raw_text == working / "01_raw_text.json"

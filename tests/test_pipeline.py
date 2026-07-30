@@ -39,11 +39,14 @@ def _patch_entities_continuity_merge(monkeypatch):
     monkeypatch.setattr(entities, "_merge_entities_with_llm", fake_merge)
 from style_integrator import StyleIntegrationPartialFailure
 from pipeline import (
+    WORKING_DIR_NAME,
     ComicPipeline,
     _create_version_dir,
+    _ensure_working_dir,
     _lookup_episode,
     _next_version_name,
     _slugify,
+    _working_dir,
 )
 from prompt_saver import prepare_scriptwriter_prompts
 
@@ -468,6 +471,190 @@ def test_create_version_dir_rerun_from_scrape_deletes_all(tmp_path):
     assert not (version_dir / "03_script_page_001.json").exists()
     assert not (version_dir / "03_5_styled_script_page_001.json").exists()
     assert not (version_dir / "04_page_1_prompt.txt").exists()
+
+
+def test_create_version_dir_clones_from_working_not_latest_version(tmp_path):
+    """Clone source is working/, even when a newer historical version diverged."""
+    episode_dir = tmp_path / "ep"
+    v001 = episode_dir / "v001"
+    v002 = episode_dir / "v002"
+    working = episode_dir / WORKING_DIR_NAME
+    v001.mkdir(parents=True)
+    v002.mkdir(parents=True)
+    working.mkdir(parents=True)
+
+    _write_version_checkpoints(v001)
+    _write_version_checkpoints(v002)
+    (v002 / "02_5_story_bible.json").write_text(
+        json.dumps({"source": "latest-version"}), encoding="utf-8"
+    )
+    _write_version_checkpoints(working)
+    (working / "02_5_story_bible.json").write_text(
+        json.dumps({"source": "working-edit"}), encoding="utf-8"
+    )
+    _write_run_config(working)
+
+    version_dir, name, _ = _create_version_dir(
+        episode_dir,
+        rerun_from="script",
+        new_config=_default_run_config(),
+    )
+
+    assert name == "v003"
+    bible = json.loads((version_dir / "02_5_story_bible.json").read_text(encoding="utf-8"))
+    assert bible["source"] == "working-edit"
+    assert not (version_dir / "03_script_page_001.json").exists()
+
+
+def test_ensure_working_dir_seeds_from_latest_when_missing(tmp_path):
+    episode_dir = tmp_path / "ep"
+    v001 = episode_dir / "v001"
+    v001.mkdir(parents=True)
+    _write_version_checkpoints(v001)
+    _write_run_config(v001)
+
+    working = _ensure_working_dir(episode_dir)
+
+    assert working == _working_dir(episode_dir)
+    assert (working / "01_raw_text.json").exists()
+    assert (working / "02_5_story_bible.json").exists()
+    assert (working / "run_status.json").exists()
+
+
+def test_create_version_dir_seeds_working_then_clones(tmp_path):
+    """Migration path: only vNNN exists; create seeds working then clones from it."""
+    episode_dir = tmp_path / "ep"
+    v001 = episode_dir / "v001"
+    v001.mkdir(parents=True)
+    _write_version_checkpoints(v001)
+    _write_run_config(v001)
+
+    version_dir, name, _ = _create_version_dir(
+        episode_dir,
+        rerun_from=None,
+        new_config=_default_run_config(),
+    )
+
+    working = _working_dir(episode_dir)
+    assert working.exists()
+    assert (working / "01_raw_text.json").exists()
+    assert name == "v002"
+    assert (version_dir / "01_raw_text.json").exists()
+    assert (version_dir / "02_5_story_bible.json").exists()
+
+
+@pytest.mark.asyncio
+async def test_first_run_writes_checkpoints_to_working_and_version(tmp_path):
+    def _fake_integrate_style(*, output_path: Path, **_kwargs):
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(_STYLED_SCRIPT_CHECKPOINT.model_dump_json(), encoding="utf-8")
+        return _STYLED_SCRIPT_CHECKPOINT
+
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=2,
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
+        patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
+        patch("pipeline.integrate_style", side_effect=_fake_integrate_style),
+        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT),
+    ):
+        result = await pipeline.run()
+
+    version_dir = _version_dir_from_result(result)
+    working = version_dir.parent / WORKING_DIR_NAME
+    for name in (
+        "01_raw_text.json",
+        "02_entities.json",
+        "02_5_story_bible.json",
+        "03_script_page_001.json",
+        "03_5_styled_script_page_001.json",
+        "04_page_1_prompt.txt",
+    ):
+        assert (version_dir / name).exists(), name
+        assert (working / name).exists(), name
+
+
+@pytest.mark.asyncio
+async def test_manual_working_edit_is_cloned_into_next_version(tmp_path):
+    episode_dir = _make_episode(
+        tmp_path, "dreadmarsh", "https://example.test/story", "Dreadmarsh Crossing"
+    )
+    working = _ensure_working_dir(episode_dir)
+    edited = json.loads((working / "02_5_story_bible.json").read_text(encoding="utf-8"))
+    edited["title"] = "Edited Story Bible"
+    (working / "02_5_story_bible.json").write_text(json.dumps(edited), encoding="utf-8")
+
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=2,
+        rerun_from="script",
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock) as mock_scrape,
+        patch("pipeline.build_entities_from_raw") as mock_entities,
+        patch("pipeline.create_story_bible") as mock_beater,
+        patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT) as mock_script,
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
+        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT),
+    ):
+        result = await pipeline.run()
+
+    mock_scrape.assert_not_awaited()
+    mock_entities.assert_not_called()
+    mock_beater.assert_not_called()
+    mock_script.assert_called_once()
+
+    version_dir = _version_dir_from_result(result)
+    bible = json.loads((version_dir / "02_5_story_bible.json").read_text(encoding="utf-8"))
+    assert bible["title"] == "Edited Story Bible"
+    # Prior version history is untouched.
+    original = json.loads(
+        (episode_dir / "v001" / "02_5_story_bible.json").read_text(encoding="utf-8")
+    )
+    assert original["title"] == "Dreadmarsh Crossing"
+
+
+@pytest.mark.asyncio
+async def test_rerun_overwrites_working_only_for_recomputed_stages(tmp_path):
+    episode_dir = _make_episode(
+        tmp_path, "dreadmarsh", "https://example.test/story", "Dreadmarsh Crossing"
+    )
+    working = _ensure_working_dir(episode_dir)
+    original_bible = (working / "02_5_story_bible.json").read_text(encoding="utf-8")
+    (working / "04_page_1_prompt.txt").write_text("OLD PROMPT", encoding="utf-8")
+
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=2,
+        rerun_from="prompt",
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock),
+        patch("pipeline.build_entities_from_raw"),
+        patch("pipeline.create_story_bible"),
+        patch("pipeline.write_script"),
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
+        patch("pipeline.prepare_page_prompt_template", return_value="NEW PROMPT"),
+    ):
+        result = await pipeline.run()
+
+    version_dir = _version_dir_from_result(result)
+    assert (working / "02_5_story_bible.json").read_text(encoding="utf-8") == original_bible
+    assert (version_dir / "04_page_1_prompt.txt").read_text(encoding="utf-8") == "NEW PROMPT"
+    assert (working / "04_page_1_prompt.txt").read_text(encoding="utf-8") == "NEW PROMPT"
 
 
 # ---------------------------------------------------------------------------

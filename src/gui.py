@@ -42,7 +42,7 @@ from pipeline_events import (
 from image_generator import ImageGenerator
 from image_stitcher import stitch_panel_images
 from prompt_templates import DEFAULT_PROMPTS_DIR
-from repository_service import CampaignPrompts, RepositoryService
+from repository_service import WORKING_DIR_NAME, CampaignPrompts, RepositoryService
 from run_controller import RunController
 from scraper import configure_playwright_runtime, normalize_recap_version, playwright_browser_executable
 from settings_service import SettingsService
@@ -1104,8 +1104,17 @@ def build_output_page(
         campaign = campaign_dropdown.value or ""
         episode_slug = episode_dropdown.value or ""
         versions = services.repository.list_versions(campaign, episode_slug)
-        version_dropdown.options = [_ft.dropdown.Option(v.version) for v in versions]
-        version_dropdown.value = versions[-1].version if versions else None
+        options: list[Any] = []
+        if services.repository.has_working(campaign, episode_slug):
+            options.append(
+                _ft.dropdown.Option(WORKING_DIR_NAME, f"{WORKING_DIR_NAME} (editable)")
+            )
+        options.extend(_ft.dropdown.Option(v.version) for v in versions)
+        version_dropdown.options = options
+        # Default to the latest historical version (what the last run produced).
+        version_dropdown.value = versions[-1].version if versions else (
+            WORKING_DIR_NAME if options else None
+        )
 
     def _legacy_episode_run_config(campaign: str, episode_slug: str) -> dict[str, Any]:
         episode_dir = services.repository.campaigns_root / campaign / episode_slug
