@@ -135,6 +135,27 @@ def _preserve_case(source: str, target: str) -> str:
     return target
 
 
+def _alias_replacement_pattern(alias_text: str, canonical_name: str) -> re.Pattern[str]:
+    """Build a whole-word alias pattern that will not re-expand a prefix match.
+
+    If the alias is a case-insensitive prefix of the canonical name (e.g. alias
+    ``Lucky`` for canonical ``Lucky Clover``), refuse to match when the rest of
+    the canonical name is already present so ``Lucky Clover`` is not rewritten
+    to ``Lucky Clover Clover``.
+    """
+    if canonical_name.casefold().startswith(alias_text.casefold()):
+        rest = canonical_name[len(alias_text) :]
+        if rest:
+            return re.compile(
+                rf"(?<!\w)({re.escape(alias_text)})(?!{re.escape(rest)})(?!\w)",
+                re.IGNORECASE,
+            )
+    return re.compile(
+        rf"(?<!\w)({re.escape(alias_text)})(?!\w)",
+        re.IGNORECASE,
+    )
+
+
 def _normalize_aliases_in_text(text: str, world: WorldStateCheckpoint) -> str:
     """Replace whole-word alias mentions with canonical character names.
 
@@ -157,10 +178,7 @@ def _normalize_aliases_in_text(text: str, world: WorldStateCheckpoint) -> str:
 
     normalized = text
     for alias_text, canonical_name in replacements:
-        pattern = re.compile(
-            rf"(?<!\w)({re.escape(alias_text)})(?!\w)",
-            re.IGNORECASE,
-        )
+        pattern = _alias_replacement_pattern(alias_text, canonical_name)
         normalized = pattern.sub(
             lambda match, canon=canonical_name: _preserve_case(match.group(1), canon),
             normalized,
@@ -284,7 +302,9 @@ def create_story_bible(
         generation_errors.append("Generated story bible is empty.")
         raise RuntimeError("Generated story bible text is empty")
 
-    story_bible_text = story_bible_text.strip()
+    # Normalize aliases in model output so STT spellings reintroduced from
+    # entity descriptions, beats, or quotes do not leak into checkpoints.
+    story_bible_text = _normalize_aliases_in_text(story_bible_text.strip(), world)
     try:
         derived_scene_count = validate_full_story_bible_scenes(story_bible_text)
     except ValueError as exc:
@@ -354,9 +374,13 @@ def _run_cli() -> None:
         "panel_count": args.scene_count,
         "scene_count": args.scene_count,
         "total_pages": 1,
-        "entities_context": _format_entities_for_prompt(world),
-        "story_text": raw.content,
-        "reference_quotes": _format_quotes_for_prompt(quotes_list),
+        "entities_context": _normalize_aliases_in_text(
+            _format_entities_for_prompt(world), world
+        ),
+        "story_text": _normalize_aliases_in_text(raw.content, world),
+        "reference_quotes": _normalize_aliases_in_text(
+            _format_quotes_for_prompt(quotes_list), world
+        ),
     }
     system_prompt_text = render_prompt_template(
         MASTER_BEATER_SYSTEM_PROMPT_FILENAME,

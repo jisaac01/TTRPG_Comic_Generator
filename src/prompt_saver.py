@@ -81,7 +81,11 @@ def prepare_beater_prompts(
     
     Returns tuple of (system_prompt, user_prompt) ready to send to model.
     """
-    from master_beater import _format_entities_for_prompt, _format_quotes_for_prompt
+    from master_beater import (
+        _format_entities_for_prompt,
+        _format_quotes_for_prompt,
+        _normalize_aliases_in_text,
+    )
 
     prompts_dir = _ensure_prompts_dir(version_dir)
     
@@ -89,13 +93,20 @@ def prepare_beater_prompts(
     _save_prompt_template(prompts_dir, system_prompt_path, MASTER_BEATER_SYSTEM_PROMPT_FILENAME)
     _save_prompt_template(prompts_dir, user_prompt_path, MASTER_BEATER_USER_PROMPT_FILENAME)
 
+    # Normalize STT/spelling aliases to canonical names in every free-text
+    # slot the model sees (story, entity prose, quote attributions). These
+    # rendered strings are also what the pipeline sends to the LLM.
     template_vars = {
         "title": world.title or "Untitled story",
         "panel_count": scene_count,
         "scene_count": scene_count,
-        "entities_context": _format_entities_for_prompt(world),
-        "reference_quotes": _format_quotes_for_prompt(raw_quotes),
-        "story_text": content,
+        "entities_context": _normalize_aliases_in_text(
+            _format_entities_for_prompt(world), world
+        ),
+        "reference_quotes": _normalize_aliases_in_text(
+            _format_quotes_for_prompt(raw_quotes), world
+        ),
+        "story_text": _normalize_aliases_in_text(content, world),
     }
 
     # Render prompts
@@ -135,6 +146,7 @@ def prepare_scriptwriter_prompts(
     
     Returns tuple of (system_prompt, user_prompt) ready to send to model.
     """
+    from master_beater import _normalize_aliases_in_text
     from scriptwriter import _format_entities_for_prompt, _format_story_bible_for_prompt
 
     prompts_dir = _ensure_prompts_dir(version_dir)
@@ -144,7 +156,13 @@ def prepare_scriptwriter_prompts(
     _save_prompt_template(prompts_dir, user_prompt_path, SCRIPTWRITER_USER_PROMPT_FILENAME)
 
     title = world.title or "Untitled story"
-    entities_context = _format_entities_for_prompt(world)
+    # Canonicalize aliases so entity prose / bible text cannot reintroduce STT names.
+    entities_context = _normalize_aliases_in_text(
+        _format_entities_for_prompt(world), world
+    )
+    story_architecture = _normalize_aliases_in_text(
+        _format_story_bible_for_prompt(story_bible), world
+    )
     first_page_panel_1_narration_directive = (
         "For page 1 only: Include a CAPTION narration entry in "
         "narrative_overlays_and_text_direction for panel index 1 to quickly bring readers up to speed. "
@@ -163,7 +181,7 @@ def prepare_scriptwriter_prompts(
         title=title,
         panel_count=story_bible.scene_count,
         entities_context=entities_context,
-        story_architecture=_format_story_bible_for_prompt(story_bible),
+        story_architecture=story_architecture,
         first_page_panel_1_narration_directive=first_page_panel_1_narration_directive,
     )
 
