@@ -382,6 +382,7 @@ def _default_run_config() -> dict:
         "recap_version": "standard",
         "aspect_ratio": "3:2",
         "generation_mode": "page",
+        "vignette": False,
         "skip_style": False,
         "generate_images": False,
         "rerun_from": None,
@@ -1729,6 +1730,81 @@ async def test_beater_prompt_uses_total_scene_count(tmp_path):
     )
     assert "Target scene count: 6" in rendered_prompt
     assert "Break the story into exactly 6 scenes." in rendered_prompt
+
+
+@pytest.mark.asyncio
+async def test_vignette_uses_vignette_beater_templates_and_page_prompts(tmp_path):
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=2,
+        total_pages=1,
+        vignette=True,
+        generation_mode="page",
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT) as mock_architect,
+        patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
+        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT) as mock_prompts,
+    ):
+        result = await pipeline.run()
+
+    _, architect_kwargs = mock_architect.call_args
+    assert architect_kwargs.get("scene_count") == 2
+    assert result.get("run_config", {}).get("vignette") is True
+
+    version_dir = _version_dir_from_result(result)
+    rendered_system = (version_dir / "prompts" / "master_beater_system_FINAL.txt").read_text(
+        encoding="utf-8"
+    )
+    rendered_user = (version_dir / "prompts" / "master_beater_user_FINAL.txt").read_text(
+        encoding="utf-8"
+    )
+    assert "single tight moment" in rendered_system.casefold() or "one tight" in rendered_system.casefold()
+    assert "vignette" in rendered_system.casefold() or "one continuous moment" in rendered_system.casefold()
+    assert "Target scene count: 2" in rendered_user
+
+    assert (version_dir / "04_page_1_prompt.txt").exists()
+    assert not list(version_dir.glob("04_page_*_panel_*_prompt.txt"))
+    assert mock_prompts.call_count == 1
+    _, prompt_kwargs = mock_prompts.call_args
+    assert prompt_kwargs.get("generation_mode") == "page"
+
+
+@pytest.mark.asyncio
+async def test_vignette_with_panel_mode_writes_one_prompt_per_panel(tmp_path):
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=2,
+        total_pages=1,
+        vignette=True,
+        generation_mode="panel",
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
+        patch(
+            "pipeline.write_script",
+            side_effect=[_single_panel_script_checkpoint(1), _single_panel_script_checkpoint(2)],
+        ),
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
+        patch("pipeline.prepare_page_prompt_template", side_effect=["PANEL 1", "PANEL 2"]) as mock_prompts,
+    ):
+        result = await pipeline.run()
+
+    version_dir = _version_dir_from_result(result)
+    assert (version_dir / "04_page_1_panel_1_prompt.txt").exists()
+    assert (version_dir / "04_page_1_panel_2_prompt.txt").exists()
+    assert mock_prompts.call_count == 2
 
 
 @pytest.mark.asyncio

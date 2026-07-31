@@ -41,6 +41,12 @@ def test_run_config_defaults_to_page_generation_mode() -> None:
     assert config.generation_mode == "page"
 
 
+def test_run_config_defaults_vignette_off() -> None:
+    config = RunConfig(url="https://example.test/story", campaign="dreadmarsh")
+
+    assert config.vignette is False
+
+
 def test_run_config_round_trip_preserves_generation_mode() -> None:
     config = RunConfig(
         url="https://example.test/story",
@@ -53,6 +59,29 @@ def test_run_config_round_trip_preserves_generation_mode() -> None:
     assert restored.generation_mode == "panel"
 
 
+def test_run_config_round_trip_preserves_vignette() -> None:
+    config = RunConfig(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        vignette=True,
+    )
+
+    restored = RunConfig.from_dict(config.to_dict())
+
+    assert restored.vignette is True
+
+
+def test_run_config_snapshot_includes_vignette() -> None:
+    snap = run_config_snapshot(
+        RunConfig(
+            url="https://example.test/story",
+            campaign="dreadmarsh",
+            vignette=True,
+        )
+    )
+    assert snap["vignette"] is True
+
+
 def test_effective_rerun_from_bumps_when_generation_mode_changes() -> None:
     prev = run_config_snapshot(
         RunConfig(url="https://example.test/story", campaign="dreadmarsh")
@@ -61,6 +90,41 @@ def test_effective_rerun_from_bumps_when_generation_mode_changes() -> None:
     new["generation_mode"] = "panel"
 
     assert effective_rerun_from("prompt", prev, new) == "script"
+
+
+def test_effective_rerun_from_bumps_to_beater_when_vignette_changes() -> None:
+    prev = run_config_snapshot(
+        RunConfig(url="https://example.test/story", campaign="dreadmarsh")
+    )
+    new = dict(prev)
+    new["vignette"] = True
+
+    assert effective_rerun_from("prompt", prev, new) == "beater"
+    assert effective_rerun_from("script", prev, new) == "beater"
+    assert effective_rerun_from("beater", prev, new) == "beater"
+    assert effective_rerun_from("entities", prev, new) == "entities"
+
+
+def test_effective_rerun_from_treats_missing_vignette_as_false() -> None:
+    """Older run_status snapshots omit vignette; that equals the default off state."""
+    from pipeline_config import earliest_stage_for_config_diff
+
+    prev = run_config_snapshot(
+        RunConfig(url="https://example.test/story", campaign="dreadmarsh")
+    )
+    prev.pop("vignette", None)
+    new = run_config_snapshot(
+        RunConfig(url="https://example.test/story", campaign="dreadmarsh", vignette=False)
+    )
+
+    assert earliest_stage_for_config_diff(prev, new) is None
+    assert effective_rerun_from(None, prev, new) is None
+
+
+def test_setting_field_enabled_allows_vignette_at_beater_not_script() -> None:
+    assert setting_field_enabled("vignette", "beater") is True
+    assert setting_field_enabled("vignette", "entities") is True
+    assert setting_field_enabled("vignette", "script") is False
 
 
 def test_effective_rerun_from_bumps_when_panel_count_changes() -> None:

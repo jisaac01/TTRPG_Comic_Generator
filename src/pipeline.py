@@ -65,6 +65,8 @@ from prompt_templates import (
     PROMPT_TEMPLATE_FILENAMES,
     MASTER_BEATER_SYSTEM_PROMPT_FILENAME,
     MASTER_BEATER_USER_PROMPT_FILENAME,
+    MASTER_BEATER_VIGNETTE_SYSTEM_PROMPT_FILENAME,
+    MASTER_BEATER_VIGNETTE_USER_PROMPT_FILENAME,
     SCRIPTWRITER_SYSTEM_PROMPT_FILENAME,
     SCRIPTWRITER_USER_PROMPT_FILENAME,
     STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME,
@@ -603,6 +605,7 @@ class ComicPipeline:
         total_pages: int = 1,
         aspect_ratio: str = "3:2",
         generation_mode: Literal["page", "panel"] = "page",
+        vignette: bool = False,
         art_style_template: Path | None = None,
         art_style: str | None = None,
         master_beater_system_prompt: Path | None = None,
@@ -630,6 +633,7 @@ class ComicPipeline:
         self.total_pages = total_pages
         self.aspect_ratio = aspect_ratio
         self.generation_mode = generation_mode
+        self.vignette = vignette
         self.art_style_template = art_style_template
         self.art_style = art_style
         self.master_beater_system_prompt = master_beater_system_prompt
@@ -657,6 +661,7 @@ class ComicPipeline:
             "recap_version": self.recap_version,
             "aspect_ratio": self.aspect_ratio,
             "generation_mode": self.generation_mode,
+            "vignette": self.vignette,
             "art_style": self.art_style,
             "skip_style": self.skip_style,
             "generate_images": self.generate_images,
@@ -833,11 +838,27 @@ class ComicPipeline:
             shutil.copy2(DEFAULT_PROMPTS_DIR / filename, campaign_prompt)
 
     def _resolve_prompt_templates(self) -> dict[str, Path]:
+        if self.vignette:
+            default_beater_system = MASTER_BEATER_VIGNETTE_SYSTEM_PROMPT_FILENAME
+            default_beater_user = MASTER_BEATER_VIGNETTE_USER_PROMPT_FILENAME
+        else:
+            default_beater_system = MASTER_BEATER_SYSTEM_PROMPT_FILENAME
+            default_beater_user = MASTER_BEATER_USER_PROMPT_FILENAME
         return {
+            # Dict keys for active beater stay the standard names so
+            # prepare_beater_prompts still writes master_beater_*_FINAL.txt;
+            # source path may be the vignette template when vignette is on.
             MASTER_BEATER_SYSTEM_PROMPT_FILENAME: self.master_beater_system_prompt
-            or self._campaign_prompt_path(MASTER_BEATER_SYSTEM_PROMPT_FILENAME),
+            or self._campaign_prompt_path(default_beater_system),
             MASTER_BEATER_USER_PROMPT_FILENAME: self.master_beater_user_prompt
-            or self._campaign_prompt_path(MASTER_BEATER_USER_PROMPT_FILENAME),
+            or self._campaign_prompt_path(default_beater_user),
+            # Always capture vignette templates into campaign/version prompts.
+            MASTER_BEATER_VIGNETTE_SYSTEM_PROMPT_FILENAME: self._campaign_prompt_path(
+                MASTER_BEATER_VIGNETTE_SYSTEM_PROMPT_FILENAME
+            ),
+            MASTER_BEATER_VIGNETTE_USER_PROMPT_FILENAME: self._campaign_prompt_path(
+                MASTER_BEATER_VIGNETTE_USER_PROMPT_FILENAME
+            ),
             SCRIPTWRITER_SYSTEM_PROMPT_FILENAME: self.scriptwriter_system_prompt
             or self._campaign_prompt_path(SCRIPTWRITER_SYSTEM_PROMPT_FILENAME),
             SCRIPTWRITER_USER_PROMPT_FILENAME: self.scriptwriter_user_prompt
@@ -1872,6 +1893,14 @@ async def _run_cli() -> None:
             "from 03_script.json."
         ),
     )
+    parser.add_argument(
+        "--vignette",
+        action="store_true",
+        help=(
+            "Focus the story bible on one tight dramatic moment (micro-beats) instead of "
+            "covering the full recap. Orthogonal to page vs panel generation mode."
+        ),
+    )
 
     args = parser.parse_args()
     rerun_from_arg = args.rerun_from
@@ -1926,6 +1955,7 @@ async def _run_cli() -> None:
         rerun_from=rerun_from_arg,
         recap_version=args.recap_version,
         skip_style=args.skip_style,
+        vignette=args.vignette,
         event_callback=_print_event_callback,
     )
     try:

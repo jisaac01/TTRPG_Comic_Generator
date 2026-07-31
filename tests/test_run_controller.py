@@ -274,6 +274,30 @@ async def test_run_controller_forwards_generation_mode_config(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_run_controller_forwards_vignette_config(tmp_path):
+    captured: dict[str, object] = {}
+
+    class _RecordingPipeline:
+        def __init__(self, **kwargs: object) -> None:
+            captured.update(kwargs)
+
+        async def run(self) -> dict[str, object]:
+            return {"version": "v001", "version_dir": "/tmp/v001", "errors": []}
+
+    controller = RunController(pipeline_factory=_RecordingPipeline)
+    config = RunConfig(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        vignette=True,
+    )
+
+    await controller.launch_run(config, lambda _event: None)
+
+    assert captured["vignette"] is True
+
+
+@pytest.mark.asyncio
 async def test_run_controller_forwards_image_generation_config(tmp_path):
     captured: dict[str, object] = {}
 

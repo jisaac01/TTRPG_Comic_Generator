@@ -184,6 +184,15 @@ def test_run_page_exposes_generation_mode_selector() -> None:
     assert state["generation_mode_dropdown"].value == "page"
 
 
+def test_run_page_exposes_vignette_checkbox() -> None:
+    page = _FakePage()
+    event_log = ft.ListView()
+    _container, state = build_run_page(_services(), page, event_log, ft)
+
+    assert "vignette_checkbox" in state
+    assert state["vignette_checkbox"].value is False
+
+
 def test_run_page_exposes_art_style_selector() -> None:
     page = _FakePage()
     event_log = ft.ListView()
@@ -215,6 +224,7 @@ def test_run_page_build_config_maps_form_fields() -> None:
     state["total_pages_field"].value = "2"
     state["aspect_ratio_dropdown"].value = "3:2"
     state["generation_mode_dropdown"].value = "panel"
+    state["vignette_checkbox"].value = True
     state["art_style_dropdown"].value = "bundled:brutalist"
 
     config = state["build_config"]()
@@ -227,6 +237,7 @@ def test_run_page_build_config_maps_form_fields() -> None:
     assert config.total_pages == 2
     assert config.aspect_ratio == "3:2"
     assert config.generation_mode == "panel"
+    assert config.vignette is True
     assert config.art_style == "bundled:brutalist"
     assert config.generate_images is True
     assert config.image_generation_model == "gemini-3.1-flash-image"

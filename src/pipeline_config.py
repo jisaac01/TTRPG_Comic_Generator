@@ -45,6 +45,9 @@ class RunConfig:
     total_pages: int = 1
     aspect_ratio: AspectRatio = "3:2"
     generation_mode: GenerationMode = "page"
+    # When True, master beater focuses on one tight moment (micro-beats), not the full recap.
+    # Orthogonal to generation_mode (page vs panel image layout).
+    vignette: bool = False
 
     # Optional template/prompt overrides (explicit paths)
     art_style_template: Path | None = None
@@ -110,6 +113,8 @@ class RunConfig:
             errors.append("aspect_ratio must be one of 1:1, 4:3, 3:2")
         if self.generation_mode not in {"page", "panel"}:
             errors.append("generation_mode must be either 'page' or 'panel'")
+        if not isinstance(self.vignette, bool):
+            errors.append("vignette must be a boolean")
         if self.art_style_template is not None and not self.art_style_template.exists():
             errors.append(f"art_style_template path does not exist: {self.art_style_template}")
         path_fields = [
@@ -136,11 +141,17 @@ STAGE_ORDER: list[RerunFrom] = [
     "prompt",
 ]
 
+# Defaults used when comparing older run_status snapshots that omit newer keys.
+SETTING_COMPARE_DEFAULTS: dict[str, object] = {
+    "vignette": False,
+}
+
 SETTING_MIN_STAGE: dict[str, RerunFrom] = {
     # Recap body text feeds the story bible, not keyed entity extraction.
     "recap_version": "beater",
     "panel_count": "beater",
     "total_pages": "beater",
+    "vignette": "beater",
     "generation_mode": "script",
     "art_style": "style",
     "aspect_ratio": "prompt",
@@ -150,13 +161,14 @@ SETTING_FIELD_MIN_STAGE: dict[str, RerunFrom] = {
     "recap": "beater",
     "panels": "beater",
     "pages": "beater",
+    "vignette": "beater",
     "generation_mode": "script",
     "art_style": "style",
     "aspect_ratio": "prompt",
 }
 
 PROMPT_AFFECTING_KEYS = frozenset(
-    {"aspect_ratio", "generation_mode", "panel_count", "total_pages", "art_style"}
+    {"aspect_ratio", "generation_mode", "panel_count", "total_pages", "art_style", "vignette"}
 )
 
 RUN_CONFIG_KEYS = (
@@ -165,6 +177,7 @@ RUN_CONFIG_KEYS = (
     "recap_version",
     "aspect_ratio",
     "generation_mode",
+    "vignette",
     "art_style",
     "skip_style",
     "generate_images",
@@ -181,6 +194,7 @@ def run_config_snapshot(config: RunConfig) -> dict:
         "recap_version": config.recap_version,
         "aspect_ratio": config.aspect_ratio,
         "generation_mode": config.generation_mode,
+        "vignette": config.vignette,
         "art_style": config.art_style,
         "skip_style": config.skip_style,
         "generate_images": config.generate_images,
@@ -202,6 +216,13 @@ def should_run_stage(stage: RerunFrom, stop_after: RerunFrom | None) -> bool:
     return _stage_index(stage) <= _stage_index(stop_after)
 
 
+def _config_value(config: dict, key: str) -> object:
+    """Read a run-config value, applying defaults for keys older snapshots omit."""
+    if key in config:
+        return config[key]
+    return SETTING_COMPARE_DEFAULTS.get(key)
+
+
 def earliest_stage_for_config_diff(
     prev_config: dict | None,
     new_config: dict,
@@ -212,7 +233,7 @@ def earliest_stage_for_config_diff(
 
     earliest_idx = len(STAGE_ORDER)
     for key, min_stage in SETTING_MIN_STAGE.items():
-        if prev_config.get(key) != new_config.get(key):
+        if _config_value(prev_config, key) != _config_value(new_config, key):
             earliest_idx = min(earliest_idx, _stage_index(min_stage))
 
     if earliest_idx >= len(STAGE_ORDER):
@@ -246,7 +267,7 @@ def should_copy_prompt_artifacts(
     if not prev_config:
         return False
     for key in PROMPT_AFFECTING_KEYS:
-        if prev_config.get(key) != new_config.get(key):
+        if _config_value(prev_config, key) != _config_value(new_config, key):
             return False
     return True
 

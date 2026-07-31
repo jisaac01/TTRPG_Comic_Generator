@@ -1028,6 +1028,7 @@ def test_output_page_build_rerun_config_uses_live_controls(tmp_path):
     state["total_pages_field"].value = "4"
     state["recap_dropdown"].value = "long"
     state["aspect_ratio_dropdown"].value = "4:3"
+    state["vignette_checkbox"].value = True
 
     config = state["build_rerun_config"]("test_camp", "episode-1", "beater")
 
@@ -1035,6 +1036,7 @@ def test_output_page_build_rerun_config_uses_live_controls(tmp_path):
     assert config.total_pages == 4
     assert config.recap_version == "long"
     assert config.aspect_ratio == "4:3"
+    assert config.vignette is True
     assert config.stop_after is None
 
 
@@ -1086,6 +1088,7 @@ def test_output_page_shows_version_settings_from_run_status(tmp_path):
                     "recap_version": "short",
                     "aspect_ratio": "3:2",
                     "generation_mode": "panel",
+                    "vignette": True,
                 },
             }
         ),
@@ -1101,7 +1104,9 @@ def test_output_page_shows_version_settings_from_run_status(tmp_path):
     assert "Recap: short" in state["settings_text"].value
     assert "Aspect ratio: 3:2" in state["settings_text"].value
     assert "Generation: Panel by Panel" in state["settings_text"].value
+    assert "Vignette: on" in state["settings_text"].value
     assert state["generation_mode_dropdown"].value == "panel"
+    assert state["vignette_checkbox"].value is True
 
 
 def test_output_page_run_status_shows_errors_and_warnings(tmp_path):

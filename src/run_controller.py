@@ -108,6 +108,7 @@ class RunController:
             recap_version=config.recap_version,
             skip_style=config.skip_style,
             generation_mode=config.generation_mode,
+            vignette=config.vignette,
             generate_images=config.generate_images,
             image_generation_model=config.image_generation_model,
             event_callback=emit,

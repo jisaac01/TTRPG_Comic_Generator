@@ -173,6 +173,7 @@ def build_run_page(
     )
     skip_style_checkbox = _ft.Checkbox(label="Skip style", value=False)
     generate_images_checkbox = _ft.Checkbox(label="Generate images", value=False)
+    vignette_checkbox = _ft.Checkbox(label="Vignette (one scene)", value=False)
     panel_count_field = _ft.TextField(label="Panels", value="6", width=80)
     total_pages_field = _ft.TextField(label="Pages", value="1", width=80)
     generation_mode_dropdown = _ft.Dropdown(
@@ -301,6 +302,7 @@ def build_run_page(
             total_pages=int(total_pages_field.value or 1),
             aspect_ratio=aspect_ratio_dropdown.value or "3:2",
             generation_mode=generation_mode_dropdown.value or "page",
+            vignette=bool(vignette_checkbox.value),
             art_style=art_style_dropdown.value or None,
         )
 
@@ -422,6 +424,7 @@ def build_run_page(
                     panel_count_field,
                     total_pages_field,
                     generation_mode_dropdown,
+                    vignette_checkbox,
                     aspect_ratio_dropdown,
                     art_style_dropdown,
                 ],
@@ -446,6 +449,7 @@ def build_run_page(
         "recap_dropdown": recap_dropdown,
         "skip_style_checkbox": skip_style_checkbox,
         "generate_images_checkbox": generate_images_checkbox,
+        "vignette_checkbox": vignette_checkbox,
         "panel_count_field": panel_count_field,
         "total_pages_field": total_pages_field,
         "generation_mode_dropdown": generation_mode_dropdown,
@@ -1055,6 +1059,7 @@ def build_output_page(
         ],
         width=180,
     )
+    vignette_checkbox = _ft.Checkbox(label="Vignette (one scene)", value=False)
     art_style_dropdown = _ft.Dropdown(
         label="Art style",
         options=[],
@@ -1069,6 +1074,7 @@ def build_output_page(
         "recap_version": "standard",
         "aspect_ratio": "3:2",
         "generation_mode": "page",
+        "vignette": False,
         "art_style": None,
     }
     _committed_settings: dict[str, Any] = {}
@@ -1169,6 +1175,7 @@ def build_output_page(
         recap_dropdown.value = str(config.get("recap_version", "standard"))
         aspect_ratio_settings_dropdown.value = str(config.get("aspect_ratio", "3:2"))
         generation_mode_dropdown.value = str(config.get("generation_mode", "page"))
+        vignette_checkbox.value = bool(config.get("vignette", False))
         preferred_style = config.get("art_style")
         _refresh_art_style_options(
             preferred=str(preferred_style) if preferred_style else None
@@ -1187,6 +1194,7 @@ def build_output_page(
             "recap_version": normalize_recap_version(recap_dropdown.value or "standard"),
             "aspect_ratio": aspect_ratio,
             "generation_mode": generation_mode,
+            "vignette": bool(vignette_checkbox.value),
             "art_style": art_style_dropdown.value or None,
         }
 
@@ -1195,6 +1203,7 @@ def build_output_page(
         recap_dropdown.disabled = not setting_field_enabled("recap", stage)
         panel_count_field.disabled = not setting_field_enabled("panels", stage)
         total_pages_field.disabled = not setting_field_enabled("pages", stage)
+        vignette_checkbox.disabled = not setting_field_enabled("vignette", stage)
         generation_mode_dropdown.disabled = not setting_field_enabled("generation_mode", stage)
         art_style_dropdown.disabled = not setting_field_enabled("art_style", stage)
         aspect_ratio_settings_dropdown.disabled = not setting_field_enabled("aspect_ratio", stage)
@@ -1214,11 +1223,12 @@ def build_output_page(
         mode_label = (
             "Panel by Panel" if config.get("generation_mode") == "panel" else "Page by Page"
         )
+        vignette_label = "on" if config.get("vignette") else "off"
         style_label = config.get("art_style") or "default"
         settings_text.value = (
             f"Panels: {config['panel_count']}  |  Pages: {config['total_pages']}  |  "
             f"Recap: {config['recap_version']}  |  Aspect ratio: {config['aspect_ratio']}  |  "
-            f"Generation: {mode_label}  |  Art style: {style_label}"
+            f"Generation: {mode_label}  |  Vignette: {vignette_label}  |  Art style: {style_label}"
         )
 
     def _validate_rerun_settings() -> str | None:
@@ -1262,6 +1272,7 @@ def build_output_page(
             total_pages=int(settings["total_pages"]),
             aspect_ratio=cast(AspectRatio, settings["aspect_ratio"]),
             generation_mode=cast(Any, settings["generation_mode"]),
+            vignette=bool(settings.get("vignette", False)),
             art_style=settings.get("art_style"),
         )
 
@@ -1715,6 +1726,7 @@ def build_output_page(
                 recap_dropdown,
                 aspect_ratio_settings_dropdown,
                 generation_mode_dropdown,
+                vignette_checkbox,
                 art_style_dropdown,
             ], spacing=10),
             _ft.Row([quick_rerun_button, quick_rerun_gif, quick_rerun_text], spacing=10),
@@ -1793,6 +1805,7 @@ def build_output_page(
         "recap_dropdown": recap_dropdown,
         "aspect_ratio_dropdown": aspect_ratio_settings_dropdown,
         "generation_mode_dropdown": generation_mode_dropdown,
+        "vignette_checkbox": vignette_checkbox,
         "art_style_dropdown": art_style_dropdown,
         "refresh_art_styles": _refresh_art_style_options,
         "refresh_campaigns": _refresh_campaign_options,
