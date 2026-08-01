@@ -253,6 +253,12 @@ def _write_version_checkpoints(version_dir: Path) -> None:
     (version_dir / "02_entities.json").write_text(
         _WORLD_CHECKPOINT.model_dump_json(), encoding="utf-8"
     )
+    (version_dir / "02_5_entities_bible.json").write_text(
+        _WORLD_CHECKPOINT.model_dump_json(), encoding="utf-8"
+    )
+    (version_dir / "02_5_episode_entities.json").write_text(
+        _WORLD_CHECKPOINT.model_dump_json(), encoding="utf-8"
+    )
     (version_dir / "02_5_story_bible.txt").write_text(
         _STORY_BIBLE_CHECKPOINT.story_bible + "\n", encoding="utf-8"
     )
@@ -437,6 +443,8 @@ def test_create_version_dir_rerun_from_prompt_deletes_only_prompt(tmp_path):
 
     assert (version_dir / "01_raw_text.json").exists()
     assert (version_dir / "02_entities.json").exists()
+    assert (version_dir / "02_5_episode_entities.json").exists()
+    assert (version_dir / "02_5_entities_bible.json").exists()
     assert (version_dir / "02_5_story_bible.txt").exists()
     assert (version_dir / "03_script_page_001.json").exists()
     assert (version_dir / "03_5_styled_script_page_001.json").exists()
@@ -453,10 +461,27 @@ def test_create_version_dir_rerun_from_beater_deletes_beater_onwards(tmp_path):
 
     assert (version_dir / "01_raw_text.json").exists()
     assert (version_dir / "02_entities.json").exists()
+    assert (version_dir / "02_5_episode_entities.json").exists()
+    assert (version_dir / "02_5_entities_bible.json").exists()
     assert not (version_dir / "02_5_story_bible.txt").exists()
     assert not (version_dir / "03_script_page_001.json").exists()
     assert not (version_dir / "03_5_styled_script_page_001.json").exists()
     assert not (version_dir / "04_page_1_prompt.txt").exists()
+
+
+def test_create_version_dir_rerun_from_entities_preserves_only_raw(tmp_path):
+    episode_dir = tmp_path / "ep"
+    v001 = episode_dir / "v001"
+    v001.mkdir(parents=True)
+    _write_version_checkpoints(v001)
+
+    version_dir, _, _ = _create_version_dir(episode_dir, rerun_from="entities")
+
+    assert (version_dir / "01_raw_text.json").exists()
+    assert not (version_dir / "02_entities.json").exists()
+    assert not (version_dir / "02_5_episode_entities.json").exists()
+    assert not (version_dir / "02_5_entities_bible.json").exists()
+    assert not (version_dir / "02_5_story_bible.txt").exists()
 
 
 def test_create_version_dir_rerun_from_scrape_deletes_all(tmp_path):
@@ -469,6 +494,7 @@ def test_create_version_dir_rerun_from_scrape_deletes_all(tmp_path):
 
     assert not (version_dir / "01_raw_text.json").exists()
     assert not (version_dir / "02_entities.json").exists()
+    assert not (version_dir / "02_5_episode_entities.json").exists()
     assert not (version_dir / "03_script_page_001.json").exists()
     assert not (version_dir / "03_5_styled_script_page_001.json").exists()
     assert not (version_dir / "04_page_1_prompt.txt").exists()
@@ -655,6 +681,58 @@ async def test_rerun_overwrites_working_only_for_recomputed_stages(tmp_path):
     assert (working / "02_5_story_bible.txt").read_text(encoding="utf-8") == original_bible
     assert (version_dir / "04_page_1_prompt.txt").read_text(encoding="utf-8") == "NEW PROMPT"
     assert (working / "04_page_1_prompt.txt").read_text(encoding="utf-8") == "NEW PROMPT"
+
+
+@pytest.mark.asyncio
+async def test_manual_episode_entities_edit_survives_prompt_rerun(tmp_path):
+    """Edits to working/02_5_episode_entities.json must not be clobbered on prompt-only rerun."""
+    episode_dir = _make_episode(
+        tmp_path, "dreadmarsh", "https://example.test/story", "Dreadmarsh Crossing"
+    )
+    working = _ensure_working_dir(episode_dir)
+    edited = _WORLD_CHECKPOINT.model_copy(deep=True)
+    edited.player_characters[0].description = "EDITED: Del in glowing mossy robes"
+    edited_json = edited.model_dump_json(indent=2)
+    (working / "02_5_episode_entities.json").write_text(edited_json, encoding="utf-8")
+
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=2,
+        rerun_from="prompt",
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock),
+        patch("pipeline.build_entities_from_raw") as mock_entities,
+        patch("pipeline.write_entities_bible") as mock_bible,
+        patch("pipeline.write_episode_entities") as mock_episode_entities,
+        patch("pipeline.create_story_bible"),
+        patch("pipeline.write_script"),
+        patch("pipeline.integrate_style"),
+        patch("pipeline.prepare_page_prompt_template", return_value="NEW PROMPT") as mock_prompt,
+    ):
+        result = await pipeline.run()
+
+    mock_entities.assert_not_called()
+    mock_bible.assert_not_called()
+    mock_episode_entities.assert_not_called()
+    mock_prompt.assert_called_once()
+    _, prompt_kwargs = mock_prompt.call_args
+    assert prompt_kwargs["world"].player_characters[0].description == (
+        "EDITED: Del in glowing mossy robes"
+    )
+
+    version_dir = _version_dir_from_result(result)
+    for path in (
+        version_dir / "02_5_episode_entities.json",
+        working / "02_5_episode_entities.json",
+    ):
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        assert payload["player_characters"][0]["description"] == (
+            "EDITED: Del in glowing mossy robes"
+        )
 
 
 # ---------------------------------------------------------------------------

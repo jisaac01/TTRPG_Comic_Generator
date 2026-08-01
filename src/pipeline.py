@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Callable, Literal, cast
 
 from entities import (
+    ENTITIES_BIBLE_VERSION_FILENAME,
     EPISODE_ENTITIES_FILENAME,
     WorldStateCheckpoint,
     build_entities_from_raw,
@@ -379,14 +380,26 @@ def _read_run_config(version_dir: Path) -> dict | None:
     return run_config if isinstance(run_config, dict) else None
 
 
+# Checkpoints produced by the entities stage (after 02_entities.json).
+_ENTITIES_STAGE_OUTPUTS = [
+    ENTITIES_BIBLE_VERSION_FILENAME,
+    EPISODE_ENTITIES_FILENAME,
+]
+
 _PRESERVE_PATTERNS_BY_STAGE: dict[RerunFrom | None, list[str]] = {
     "scrape": [],
     "entities": ["01_raw_text.json"],
-    "beater": ["01_raw_text.json", "02_entities.json"],
-    "script": ["01_raw_text.json", "02_entities.json", "02_5_story_bible.txt"],
+    "beater": ["01_raw_text.json", "02_entities.json", *_ENTITIES_STAGE_OUTPUTS],
+    "script": [
+        "01_raw_text.json",
+        "02_entities.json",
+        *_ENTITIES_STAGE_OUTPUTS,
+        "02_5_story_bible.txt",
+    ],
     "style": [
         "01_raw_text.json",
         "02_entities.json",
+        *_ENTITIES_STAGE_OUTPUTS,
         "02_5_story_bible.txt",
         STORY_BIBLE_PAGE_GLOB,
         STORY_BIBLE_PANEL_GLOB,
@@ -396,6 +409,7 @@ _PRESERVE_PATTERNS_BY_STAGE: dict[RerunFrom | None, list[str]] = {
     "prompt": [
         "01_raw_text.json",
         "02_entities.json",
+        *_ENTITIES_STAGE_OUTPUTS,
         "02_5_story_bible.txt",
         STORY_BIBLE_PAGE_GLOB,
         STORY_BIBLE_PANEL_GLOB,
@@ -406,6 +420,7 @@ _PRESERVE_PATTERNS_BY_STAGE: dict[RerunFrom | None, list[str]] = {
     None: [
         "01_raw_text.json",
         "02_entities.json",
+        *_ENTITIES_STAGE_OUTPUTS,
         "02_5_story_bible.txt",
         STORY_BIBLE_PAGE_GLOB,
         STORY_BIBLE_PANEL_GLOB,
@@ -1070,6 +1085,7 @@ class ComicPipeline:
         episode_entities: WorldStateCheckpoint | None = None
 
         if self._should_run_stage("entities"):
+            entities_rebuilt = False
             if entities_path.exists():
                 self._emit(
                     PhaseSkipped(
@@ -1093,30 +1109,38 @@ class ComicPipeline:
                         entities.model_dump_json(indent=2),
                         encoding="utf-8",
                     )
+                entities_rebuilt = True
                 self._emit(PhaseCompleted(phase="entities", message="...done"))
 
-            _bible_path, _version_bible_path, bible_entities, bible_warnings = write_entities_bible(
-                campaign_root=self.campaigns_root / self.campaign,
-                version_dir=version_dir,
-                entities_path=entities_path,
-            )
-            if bible_warnings:
-                for warning in bible_warnings:
-                    self._emit(
-                        PhaseWarning(
-                            phase="entities",
-                            message="Entities continuity warning",
-                            warning=warning,
+            # Preserve manual edits and avoid re-merging when entities were cloned.
+            # Rebuild projection only when 02_entities was recomputed or episode cast is missing.
+            if entities_rebuilt or not episode_entities_path.exists():
+                _bible_path, _version_bible_path, bible_entities, bible_warnings = write_entities_bible(
+                    campaign_root=self.campaigns_root / self.campaign,
+                    version_dir=version_dir,
+                    entities_path=entities_path,
+                )
+                if bible_warnings:
+                    for warning in bible_warnings:
+                        self._emit(
+                            PhaseWarning(
+                                phase="entities",
+                                message="Entities continuity warning",
+                                warning=warning,
+                            )
                         )
-                    )
 
-            # Episode-scoped cast: only names from 02_entities.json, records from the bible.
-            # Downstream text stages (beater/script/prompt) use this, not the full campaign bible.
-            episode_entities = write_episode_entities(
-                entities_path=entities_path,
-                bible=bible_entities,
-                output_path=episode_entities_path,
-            )
+                # Episode-scoped cast: names from 02_entities.json, records from the bible.
+                # Downstream text stages (beater/script/prompt) use this, not the full campaign bible.
+                episode_entities = write_episode_entities(
+                    entities_path=entities_path,
+                    bible=bible_entities,
+                    output_path=episode_entities_path,
+                )
+            else:
+                episode_entities = WorldStateCheckpoint.model_validate_json(
+                    episode_entities_path.read_text(encoding="utf-8")
+                )
 
         story_bible: StoryBibleCheckpoint | None = None
         if self._should_run_stage("beater"):
