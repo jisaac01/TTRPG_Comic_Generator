@@ -605,6 +605,83 @@ async def test_first_run_writes_checkpoints_to_working_and_version(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_run_keeps_prompt_audit_trail_out_of_working(tmp_path):
+    """version/prompts is run audit only; campaign templates are the edit surface."""
+    def _fake_integrate_style(*, output_path: Path, **_kwargs):
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(_STYLED_SCRIPT_CHECKPOINT.model_dump_json(), encoding="utf-8")
+        return _STYLED_SCRIPT_CHECKPOINT
+
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=2,
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
+        patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
+        patch("pipeline.integrate_style", side_effect=_fake_integrate_style),
+        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT),
+    ):
+        result = await pipeline.run()
+
+    version_dir = _version_dir_from_result(result)
+    working = version_dir.parent / WORKING_DIR_NAME
+    assert (version_dir / "prompts").is_dir()
+    assert (version_dir / "prompts" / SCRIPTWRITER_SYSTEM_PROMPT_FILENAME).exists()
+    assert not (working / "prompts").exists()
+    # Phase-5 page prompt outputs are still episode checkpoints in working.
+    assert (working / "04_page_1_prompt.txt").exists()
+
+
+def test_create_version_dir_does_not_clone_prompts_audit_trail(tmp_path):
+    """prompts/ is not a stage dependency; do not feed it forward into new versions."""
+    episode_dir = tmp_path / "ep"
+    working = episode_dir / WORKING_DIR_NAME
+    working.mkdir(parents=True)
+    _write_version_checkpoints(working)
+    _write_run_config(working)
+    stale = working / "prompts" / "scriptwriter_system_FINAL_page_001.txt"
+    stale.parent.mkdir(parents=True, exist_ok=True)
+    stale.write_text("STALE AUDIT FROM WORKING", encoding="utf-8")
+    (working / "04_page_1_prompt.txt").write_text("PRESERVED PAGE PROMPT", encoding="utf-8")
+
+    version_dir, name, effective = _create_version_dir(
+        episode_dir,
+        rerun_from=None,
+        new_config=_default_run_config(),
+    )
+
+    assert name == "v001"
+    assert effective is None
+    assert (version_dir / "04_page_1_prompt.txt").read_text(encoding="utf-8") == (
+        "PRESERVED PAGE PROMPT"
+    )
+    assert not (version_dir / "prompts").exists()
+
+
+def test_ensure_working_dir_seed_excludes_prompts_audit_trail(tmp_path):
+    episode_dir = tmp_path / "ep"
+    v001 = episode_dir / "v001"
+    v001.mkdir(parents=True)
+    _write_version_checkpoints(v001)
+    _write_run_config(v001)
+    (v001 / "prompts" / "scriptwriter_system.txt").write_text(
+        "VERSION CAPTURE ONLY", encoding="utf-8"
+    )
+
+    working = _ensure_working_dir(episode_dir)
+
+    assert (working / "01_raw_text.json").exists()
+    assert (working / "04_page_1_prompt.txt").exists()
+    assert not (working / "prompts").exists()
+
+
+@pytest.mark.asyncio
 async def test_manual_working_edit_is_cloned_into_next_version(tmp_path):
     episode_dir = _make_episode(
         tmp_path, "dreadmarsh", "https://example.test/story", "Dreadmarsh Crossing"

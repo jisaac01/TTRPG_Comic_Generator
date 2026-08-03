@@ -170,10 +170,18 @@ def _latest_version_dir(episode_dir: Path) -> Path | None:
     return versions[-1] if versions else None
 
 
-def _copy_tree_contents(src: Path, dest: Path) -> None:
-    """Copy all files and subdirectories from src into dest (overwrite dest children)."""
+def _copy_tree_contents(
+    src: Path,
+    dest: Path,
+    *,
+    exclude_names: frozenset[str] | set[str] | None = None,
+) -> None:
+    """Copy files and subdirectories from src into dest (overwrite dest children)."""
+    excluded = exclude_names or frozenset()
     dest.mkdir(parents=True, exist_ok=True)
     for item in src.iterdir():
+        if item.name in excluded:
+            continue
         target = dest / item.name
         if item.is_dir():
             if target.exists():
@@ -189,13 +197,20 @@ def _ensure_working_dir(episode_dir: Path) -> Path:
 
     If working is missing or empty and a historical version exists, seed working
     from the latest version (migration path for pre-working campaigns).
+
+    Version prompt audit trails (prompts/) are not seeded into working; campaign
+    root templates remain the editable source for the next run.
     """
     working = _working_dir(episode_dir)
     working.mkdir(parents=True, exist_ok=True)
     if not any(working.iterdir()):
         latest = _latest_version_dir(episode_dir)
         if latest is not None:
-            _copy_tree_contents(latest, working)
+            _copy_tree_contents(
+                latest,
+                working,
+                exclude_names=frozenset({PROMPTS_SUBDIR_NAME}),
+            )
     return working
 
 
@@ -222,11 +237,25 @@ def _mirror_path_to_working(
 
 
 def _sync_version_to_working(version_dir: Path, working_dir: Path) -> None:
-    """Overwrite working files with every file currently present in the version dir."""
+    """Mirror version checkpoints into working, excluding prompt audit trails.
+
+    ``version/prompts/`` is a per-run capture (templates + FINAL interpolations)
+    written for reproducibility. It is not an episode edit surface and is not
+    mirrored into working. Campaign-level templates remain the source for the
+    next run. Stale ``working/prompts`` from older pipelines is removed.
+    """
     working_dir.mkdir(parents=True, exist_ok=True)
+    prompts_prefix = PROMPTS_SUBDIR_NAME + "/"
     for path in version_dir.rglob("*"):
-        if path.is_file():
-            _mirror_path_to_working(path, version_dir, working_dir)
+        if not path.is_file():
+            continue
+        relative = path.relative_to(version_dir)
+        relative_posix = relative.as_posix()
+        if relative_posix == PROMPTS_SUBDIR_NAME or relative_posix.startswith(
+            prompts_prefix
+        ):
+            continue
+        _mirror_path_to_working(path, version_dir, working_dir)
 
 
 def _dual_unlink(version_path: Path, version_dir: Path, working_dir: Path) -> None:
@@ -522,16 +551,12 @@ def _create_version_dir(
         )
         _copy_checkpoint_patterns(working, version_dir, files_to_copy)
 
+        # Phase-5 page/panel prompt *outputs* are stage checkpoints and may be
+        # preserved. version/prompts/ is audit-only and is never cloned forward;
+        # each run captures templates from campaign root when stages execute.
         if should_copy_prompt_artifacts(effective_rerun, prev_config, new_config or {}):
             for prev_prompt_file in working.glob(PAGE_PROMPT_GLOB):
                 shutil.copy2(prev_prompt_file, version_dir / prev_prompt_file.name)
-
-            prev_prompts_dir = working / PROMPTS_SUBDIR_NAME
-            if prev_prompts_dir.exists():
-                dest_prompts = version_dir / PROMPTS_SUBDIR_NAME
-                if dest_prompts.exists():
-                    shutil.rmtree(dest_prompts)
-                shutil.copytree(prev_prompts_dir, dest_prompts)
 
     return version_dir, version_name, effective_rerun
 
