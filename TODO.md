@@ -19,6 +19,7 @@
 - [ ] Add a warning when prompt templates are older than the defaults, out of date
 - [ ] Add "find and replace" function for fixing cascading errors through all version files
 - [x] Add a "working copy" that is the version we'll be passing into the next pass
+- [ ] Unify prompt audit capture (`render_and_capture` chokepoint; drop per-stage prepare I/O) — see [PLAN_prompt_audit.md](PLAN_prompt_audit.md)
 
 ---
 
