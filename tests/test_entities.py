@@ -32,7 +32,7 @@ from scraper import RawTextCheckpoint, ScrapedEntity, ScrapedQuote
 # ---------------------------------------------------------------------------
 
 
-def _fake_continuity_merge(existing, incoming, model="test-model"):
+def _fake_continuity_merge(existing, incoming, model="test-model", **_kwargs):
     """Lightweight simulation of LLM continuity merge for character fields only.
     Provides deterministic name-priority + alias union behavior so that existing
     write_entities_bible tests can assert on the resulting checkpoint and written files.
@@ -717,7 +717,7 @@ def test_write_entities_bible_uses_llm_continuity_merge(monkeypatch, tmp_path):
         encoding="utf-8",
     )
 
-    def fake_llm_merge(existing_checkpoint, incoming_checkpoint, model="test-model"):
+    def fake_llm_merge(existing_checkpoint, incoming_checkpoint, model="test-model", **_kwargs):
         assert existing_checkpoint == existing
         assert incoming_checkpoint == incoming
         return merged, ["LLM warning"]
@@ -879,7 +879,7 @@ def test_write_entities_bible_writes_locations_and_beats_from_merge_result(monke
         analyzed_at=existing.analyzed_at,
     )
 
-    def local_fake_merge(ex, inc, model="test-model"):
+    def local_fake_merge(ex, inc, model="test-model", **_kwargs):
         return clean_merged, ["name priority applied"]
 
     monkeypatch.setattr("entities._merge_entities_with_llm", local_fake_merge)

@@ -10,7 +10,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from llm_client import build_openai_client
 from model_defaults import DEFAULT_MODEL
-from prompt_templates import render_prompt_template
+from prompt_templates import (
+    ENTITIES_CONTINUITY_SYSTEM_PROMPT_FILENAME,
+    ENTITIES_CONTINUITY_USER_PROMPT_FILENAME,
+    render_prompt_template,
+)
 from scraper import RawTextCheckpoint
 
 
@@ -224,14 +228,22 @@ def _merge_entities_with_llm(
     incoming: WorldStateCheckpoint,
     *,
     model: str = DEFAULT_MODEL,
+    system_prompt_text: str | None = None,
+    user_prompt_text: str | None = None,
 ) -> tuple[WorldStateCheckpoint, list[str]]:
     """Use the configured LLM to merge and enrich entity continuity data."""
 
-    system_prompt = render_prompt_template(name="entities_continuity_system.txt")
-    user_prompt = render_prompt_template(
-        name="entities_continuity_user.txt",
-        existing_entities_json=json.dumps(existing.model_dump(mode="json"), indent=2, ensure_ascii=False),
-        incoming_entities_json=json.dumps(incoming.model_dump(mode="json"), indent=2, ensure_ascii=False),
+    system_prompt = system_prompt_text or render_prompt_template(
+        name=ENTITIES_CONTINUITY_SYSTEM_PROMPT_FILENAME
+    )
+    user_prompt = user_prompt_text or render_prompt_template(
+        name=ENTITIES_CONTINUITY_USER_PROMPT_FILENAME,
+        existing_entities_json=json.dumps(
+            existing.model_dump(mode="json"), indent=2, ensure_ascii=False
+        ),
+        incoming_entities_json=json.dumps(
+            incoming.model_dump(mode="json"), indent=2, ensure_ascii=False
+        ),
     )
 
     client = build_openai_client(model)
@@ -373,6 +385,8 @@ def write_entities_bible(
     campaign_root: Path,
     version_dir: Path,
     entities_path: Path,
+    system_prompt_path: Path | None = None,
+    user_prompt_path: Path | None = None,
 ) -> tuple[Path, Path, WorldStateCheckpoint, list[str]]:
     """Create/update the campaign-root entities bible and the version-local copy.
 
@@ -383,6 +397,8 @@ def write_entities_bible(
     4. the current version's entities checkpoint.
 
     """
+    from prompt_saver import prepare_entities_continuity_prompts
+
     if not entities_path.exists():
         raise FileNotFoundError(f"Entities checkpoint not found at {entities_path}.")
 
@@ -393,7 +409,19 @@ def write_entities_bible(
     version_copy_path = version_dir / ENTITIES_BIBLE_VERSION_FILENAME
 
     existing = _resolve_bible_source(campaign_root, version_dir, incoming)
-    merged, warnings = _merge_entities_with_llm(existing, incoming)
+    system_prompt_text, user_prompt_text = prepare_entities_continuity_prompts(
+        version_dir=version_dir,
+        existing=existing,
+        incoming=incoming,
+        system_prompt_path=system_prompt_path,
+        user_prompt_path=user_prompt_path,
+    )
+    merged, warnings = _merge_entities_with_llm(
+        existing,
+        incoming,
+        system_prompt_text=system_prompt_text,
+        user_prompt_text=user_prompt_text,
+    )
 
     bible_path.parent.mkdir(parents=True, exist_ok=True)
     bible_path.write_text(

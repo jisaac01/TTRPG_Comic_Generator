@@ -33,7 +33,7 @@ from pipeline_events import PhaseWarning
 
 @pytest.fixture(autouse=True)
 def _patch_entities_continuity_merge(monkeypatch):
-    def fake_merge(existing, incoming, model=DEFAULT_MODEL):
+    def fake_merge(existing, incoming, model=DEFAULT_MODEL, **_kwargs):
         return existing.model_copy(deep=True), ["continuity fixture warning"]
 
     monkeypatch.setattr(entities, "_merge_entities_with_llm", fake_merge)
@@ -950,6 +950,17 @@ async def test_first_run_bootstraps_campaign_prompt_templates_and_copies_version
             DEFAULT_PROMPTS_DIR / filename
         ).read_text(encoding="utf-8")
         assert version_prompt.read_text(encoding="utf-8") == campaign_prompt.read_text(encoding="utf-8")
+
+    # Continuity merge FINALs are written even when the LLM merge is faked.
+    assert (
+        version_dir / "prompts" / "entities_continuity_system_FINAL.txt"
+    ).exists()
+    assert (version_dir / "prompts" / "entities_continuity_user_FINAL.txt").exists()
+    continuity_user = (
+        version_dir / "prompts" / "entities_continuity_user_FINAL.txt"
+    ).read_text(encoding="utf-8")
+    assert "Existing entities bible:" in continuity_user
+    assert "Current episode entities:" in continuity_user
 
     _, architect_kwargs = mock_architect.call_args
     assert architect_kwargs["system_prompt_text"] == (
@@ -1914,15 +1925,22 @@ async def test_vignette_uses_vignette_beater_templates_and_page_prompts(tmp_path
     assert result.get("run_config", {}).get("vignette") is True
 
     version_dir = _version_dir_from_result(result)
-    rendered_system = (version_dir / "prompts" / "master_beater_system_FINAL.txt").read_text(
-        encoding="utf-8"
-    )
-    rendered_user = (version_dir / "prompts" / "master_beater_user_FINAL.txt").read_text(
-        encoding="utf-8"
-    )
+    prompts_dir = version_dir / "prompts"
+    rendered_system = (
+        prompts_dir / "master_beater_vignette_system_FINAL.txt"
+    ).read_text(encoding="utf-8")
+    rendered_user = (
+        prompts_dir / "master_beater_vignette_user_FINAL.txt"
+    ).read_text(encoding="utf-8")
     assert "single tight moment" in rendered_system.casefold() or "one tight" in rendered_system.casefold()
     assert "vignette" in rendered_system.casefold() or "one continuous moment" in rendered_system.casefold()
     assert "Target scene count: 2" in rendered_user
+    # Active vignette FINALs use vignette names; standard master_beater_*_FINAL is not written.
+    assert not (prompts_dir / "master_beater_system_FINAL.txt").exists()
+    assert not (prompts_dir / "master_beater_user_FINAL.txt").exists()
+    # Standard templates are still captured for audit of available campaign files.
+    assert (prompts_dir / "master_beater_system.txt").exists()
+    assert (prompts_dir / "master_beater_vignette_system.txt").exists()
 
     assert (version_dir / "04_page_1_prompt.txt").exists()
     assert not list(version_dir.glob("04_page_*_panel_*_prompt.txt"))

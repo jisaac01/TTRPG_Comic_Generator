@@ -242,7 +242,7 @@ def _sync_version_to_working(version_dir: Path, working_dir: Path) -> None:
     ``version/prompts/`` is a per-run capture (templates + FINAL interpolations)
     written for reproducibility. It is not an episode edit surface and is not
     mirrored into working. Campaign-level templates remain the source for the
-    next run. Stale ``working/prompts`` from older pipelines is removed.
+    next run. Existing ``working/prompts`` (if any) is left untouched.
     """
     working_dir.mkdir(parents=True, exist_ok=True)
     prompts_prefix = PROMPTS_SUBDIR_NAME + "/"
@@ -878,27 +878,31 @@ class ComicPipeline:
             shutil.copy2(DEFAULT_PROMPTS_DIR / filename, campaign_prompt)
 
     def _resolve_prompt_templates(self) -> dict[str, Path]:
-        if self.vignette:
-            default_beater_system = MASTER_BEATER_VIGNETTE_SYSTEM_PROMPT_FILENAME
-            default_beater_user = MASTER_BEATER_VIGNETTE_USER_PROMPT_FILENAME
-        else:
-            default_beater_system = MASTER_BEATER_SYSTEM_PROMPT_FILENAME
-            default_beater_user = MASTER_BEATER_USER_PROMPT_FILENAME
+        # Capture both standard and vignette beater templates under their true
+        # names. Explicit CLI overrides apply only to the active mode.
+        beater_system = self._campaign_prompt_path(MASTER_BEATER_SYSTEM_PROMPT_FILENAME)
+        beater_user = self._campaign_prompt_path(MASTER_BEATER_USER_PROMPT_FILENAME)
+        vignette_system = self._campaign_prompt_path(
+            MASTER_BEATER_VIGNETTE_SYSTEM_PROMPT_FILENAME
+        )
+        vignette_user = self._campaign_prompt_path(
+            MASTER_BEATER_VIGNETTE_USER_PROMPT_FILENAME
+        )
+        if self.master_beater_system_prompt is not None:
+            if self.vignette:
+                vignette_system = self.master_beater_system_prompt
+            else:
+                beater_system = self.master_beater_system_prompt
+        if self.master_beater_user_prompt is not None:
+            if self.vignette:
+                vignette_user = self.master_beater_user_prompt
+            else:
+                beater_user = self.master_beater_user_prompt
         return {
-            # Dict keys for active beater stay the standard names so
-            # prepare_beater_prompts still writes master_beater_*_FINAL.txt;
-            # source path may be the vignette template when vignette is on.
-            MASTER_BEATER_SYSTEM_PROMPT_FILENAME: self.master_beater_system_prompt
-            or self._campaign_prompt_path(default_beater_system),
-            MASTER_BEATER_USER_PROMPT_FILENAME: self.master_beater_user_prompt
-            or self._campaign_prompt_path(default_beater_user),
-            # Always capture vignette templates into campaign/version prompts.
-            MASTER_BEATER_VIGNETTE_SYSTEM_PROMPT_FILENAME: self._campaign_prompt_path(
-                MASTER_BEATER_VIGNETTE_SYSTEM_PROMPT_FILENAME
-            ),
-            MASTER_BEATER_VIGNETTE_USER_PROMPT_FILENAME: self._campaign_prompt_path(
-                MASTER_BEATER_VIGNETTE_USER_PROMPT_FILENAME
-            ),
+            MASTER_BEATER_SYSTEM_PROMPT_FILENAME: beater_system,
+            MASTER_BEATER_USER_PROMPT_FILENAME: beater_user,
+            MASTER_BEATER_VIGNETTE_SYSTEM_PROMPT_FILENAME: vignette_system,
+            MASTER_BEATER_VIGNETTE_USER_PROMPT_FILENAME: vignette_user,
             SCRIPTWRITER_SYSTEM_PROMPT_FILENAME: self.scriptwriter_system_prompt
             or self._campaign_prompt_path(SCRIPTWRITER_SYSTEM_PROMPT_FILENAME),
             SCRIPTWRITER_USER_PROMPT_FILENAME: self.scriptwriter_user_prompt
@@ -1144,6 +1148,12 @@ class ComicPipeline:
                     campaign_root=self.campaigns_root / self.campaign,
                     version_dir=version_dir,
                     entities_path=entities_path,
+                    system_prompt_path=prompt_template_paths[
+                        ENTITIES_CONTINUITY_SYSTEM_PROMPT_FILENAME
+                    ],
+                    user_prompt_path=prompt_template_paths[
+                        ENTITIES_CONTINUITY_USER_PROMPT_FILENAME
+                    ],
                 )
                 if bible_warnings:
                     for warning in bible_warnings:
@@ -1190,6 +1200,13 @@ class ComicPipeline:
                 try:
                     # Prepare and save prompts before model call.
                     # The exact rendered strings are also the ones sent to the model.
+                    # FINAL filenames follow the active template (standard vs vignette).
+                    if self.vignette:
+                        beater_system_key = MASTER_BEATER_VIGNETTE_SYSTEM_PROMPT_FILENAME
+                        beater_user_key = MASTER_BEATER_VIGNETTE_USER_PROMPT_FILENAME
+                    else:
+                        beater_system_key = MASTER_BEATER_SYSTEM_PROMPT_FILENAME
+                        beater_user_key = MASTER_BEATER_USER_PROMPT_FILENAME
                     beater_system_prompt, beater_user_prompt = prepare_beater_prompts(
                         version_dir=version_dir,
                         content=raw.content,
@@ -1199,8 +1216,8 @@ class ComicPipeline:
                             {"text": quote.text, "attribution": quote.attribution}
                             for quote in raw.quotes
                         ],
-                        system_prompt_path=prompt_template_paths[MASTER_BEATER_SYSTEM_PROMPT_FILENAME],
-                        user_prompt_path=prompt_template_paths[MASTER_BEATER_USER_PROMPT_FILENAME],
+                        system_prompt_path=prompt_template_paths[beater_system_key],
+                        user_prompt_path=prompt_template_paths[beater_user_key],
                     )
                     story_bible = create_story_bible(
                         raw_checkpoint_path=raw_path,

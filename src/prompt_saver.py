@@ -6,6 +6,8 @@ from pathlib import Path
 
 from entities import WorldStateCheckpoint
 from prompt_templates import (
+    ENTITIES_CONTINUITY_SYSTEM_PROMPT_FILENAME,
+    ENTITIES_CONTINUITY_USER_PROMPT_FILENAME,
     PAGE_PROMPT_TEMPLATE_FILENAME,
     SCRIPTWRITER_SYSTEM_PROMPT_FILENAME,
     SCRIPTWRITER_USER_PROMPT_FILENAME,
@@ -68,6 +70,12 @@ def _render_prompt_template_checked(
         ) from exc
 
 
+def _final_prompt_filename(template_filename: str) -> str:
+    """Build the audit-trail FINAL name for a template file (e.g. foo.txt → foo_FINAL.txt)."""
+    stem = template_filename.removesuffix(".txt")
+    return f"{stem}_FINAL.txt"
+
+
 def prepare_beater_prompts(
     version_dir: Path,
     content: str,
@@ -78,7 +86,9 @@ def prepare_beater_prompts(
     user_prompt_path: Path | None = None,
 ) -> tuple[str, str]:
     """Prepare and save master beater prompts before model call.
-    
+
+    FINAL filenames follow the active template names (standard or vignette).
+
     Returns tuple of (system_prompt, user_prompt) ready to send to model.
     """
     from master_beater import (
@@ -88,10 +98,20 @@ def prepare_beater_prompts(
     )
 
     prompts_dir = _ensure_prompts_dir(version_dir)
-    
-    # Save original templates
-    _save_prompt_template(prompts_dir, system_prompt_path, MASTER_BEATER_SYSTEM_PROMPT_FILENAME)
-    _save_prompt_template(prompts_dir, user_prompt_path, MASTER_BEATER_USER_PROMPT_FILENAME)
+    system_filename = (
+        system_prompt_path.name
+        if system_prompt_path is not None
+        else MASTER_BEATER_SYSTEM_PROMPT_FILENAME
+    )
+    user_filename = (
+        user_prompt_path.name
+        if user_prompt_path is not None
+        else MASTER_BEATER_USER_PROMPT_FILENAME
+    )
+
+    # Save original templates under their true names (incl. vignette).
+    _save_prompt_template(prompts_dir, system_prompt_path, system_filename)
+    _save_prompt_template(prompts_dir, user_prompt_path, user_filename)
 
     # Normalize STT/spelling aliases to canonical names in every free-text
     # slot the model sees (story, entity prose, quote attributions). These
@@ -111,23 +131,70 @@ def prepare_beater_prompts(
 
     # Render prompts
     system_prompt = _render_prompt_template_checked(
-        MASTER_BEATER_SYSTEM_PROMPT_FILENAME,
+        system_filename,
         template_path=system_prompt_path,
         **template_vars,
     )
     user_prompt = _render_prompt_template_checked(
-        MASTER_BEATER_USER_PROMPT_FILENAME,
+        user_filename,
         template_path=user_prompt_path,
         **template_vars,
     )
 
-    # Save interpolated versions
-    (prompts_dir / f"{MASTER_BEATER_SYSTEM_PROMPT_FILENAME.replace('.txt', '')}_FINAL.txt").write_text(
+    # Save interpolated versions named after the active templates.
+    (prompts_dir / _final_prompt_filename(system_filename)).write_text(
         system_prompt, encoding="utf-8"
     )
-    (prompts_dir / f"{MASTER_BEATER_USER_PROMPT_FILENAME.replace('.txt', '')}_FINAL.txt").write_text(
+    (prompts_dir / _final_prompt_filename(user_filename)).write_text(
         user_prompt, encoding="utf-8"
     )
+
+    return system_prompt, user_prompt
+
+
+def prepare_entities_continuity_prompts(
+    version_dir: Path,
+    existing: WorldStateCheckpoint,
+    incoming: WorldStateCheckpoint,
+    system_prompt_path: Path | None = None,
+    user_prompt_path: Path | None = None,
+) -> tuple[str, str]:
+    """Prepare and save entities continuity merge prompts before model call.
+
+    Returns tuple of (system_prompt, user_prompt) ready to send to model.
+    """
+    import json
+
+    prompts_dir = _ensure_prompts_dir(version_dir)
+
+    _save_prompt_template(
+        prompts_dir, system_prompt_path, ENTITIES_CONTINUITY_SYSTEM_PROMPT_FILENAME
+    )
+    _save_prompt_template(
+        prompts_dir, user_prompt_path, ENTITIES_CONTINUITY_USER_PROMPT_FILENAME
+    )
+
+    system_prompt = _render_prompt_template_checked(
+        ENTITIES_CONTINUITY_SYSTEM_PROMPT_FILENAME,
+        template_path=system_prompt_path,
+    )
+    user_prompt = _render_prompt_template_checked(
+        ENTITIES_CONTINUITY_USER_PROMPT_FILENAME,
+        template_path=user_prompt_path,
+        existing_entities_json=json.dumps(
+            existing.model_dump(mode="json"), indent=2, ensure_ascii=False
+        ),
+        incoming_entities_json=json.dumps(
+            incoming.model_dump(mode="json"), indent=2, ensure_ascii=False
+        ),
+    )
+
+    (
+        prompts_dir / _final_prompt_filename(ENTITIES_CONTINUITY_SYSTEM_PROMPT_FILENAME)
+    ).write_text(system_prompt, encoding="utf-8")
+    (
+        prompts_dir / _final_prompt_filename(ENTITIES_CONTINUITY_USER_PROMPT_FILENAME)
+    ).write_text(user_prompt, encoding="utf-8")
 
     return system_prompt, user_prompt
 
