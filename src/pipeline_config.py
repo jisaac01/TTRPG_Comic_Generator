@@ -13,7 +13,7 @@ from typing import Literal
 
 from app_paths import default_campaigns_root
 
-RerunFrom = Literal["scrape", "entities", "beater", "script", "style", "prompt"]
+RerunFrom = Literal["scrape", "entities", "architect", "script", "style", "prompt"]
 RecapVersion = Literal["short", "standard", "alternate", "long"]
 AspectRatio = Literal["1:1", "4:3", "3:2"]
 GenerationMode = Literal["page", "panel"]
@@ -45,7 +45,7 @@ class RunConfig:
     total_pages: int = 1
     aspect_ratio: AspectRatio = "3:2"
     generation_mode: GenerationMode = "page"
-    # When True, master beater focuses on one tight moment (micro-beats), not the full recap.
+    # When True, story architect focuses on one tight moment (micro-beats), not the full recap.
     # Orthogonal to generation_mode (page vs panel image layout).
     vignette: bool = False
 
@@ -53,8 +53,8 @@ class RunConfig:
     art_style_template: Path | None = None
     # Selector id: "bundled:<stem>" or "campaign:<stem>" (resolved by pipeline)
     art_style: str | None = None
-    master_beater_system_prompt: Path | None = None
-    master_beater_user_prompt: Path | None = None
+    story_architect_system_prompt: Path | None = None
+    story_architect_user_prompt: Path | None = None
     scriptwriter_system_prompt: Path | None = None
     scriptwriter_user_prompt: Path | None = None
     style_integrator_system_prompt: Path | None = None
@@ -85,8 +85,8 @@ class RunConfig:
         path_fields = {
             "campaigns_root",
             "art_style_template",
-            "master_beater_system_prompt",
-            "master_beater_user_prompt",
+            "story_architect_system_prompt",
+            "story_architect_user_prompt",
             "scriptwriter_system_prompt",
             "scriptwriter_user_prompt",
             "style_integrator_system_prompt",
@@ -118,8 +118,8 @@ class RunConfig:
         if self.art_style_template is not None and not self.art_style_template.exists():
             errors.append(f"art_style_template path does not exist: {self.art_style_template}")
         path_fields = [
-            ("master_beater_system_prompt", self.master_beater_system_prompt),
-            ("master_beater_user_prompt", self.master_beater_user_prompt),
+            ("story_architect_system_prompt", self.story_architect_system_prompt),
+            ("story_architect_user_prompt", self.story_architect_user_prompt),
             ("scriptwriter_system_prompt", self.scriptwriter_system_prompt),
             ("scriptwriter_user_prompt", self.scriptwriter_user_prompt),
             ("style_integrator_system_prompt", self.style_integrator_system_prompt),
@@ -135,7 +135,7 @@ class RunConfig:
 STAGE_ORDER: list[RerunFrom] = [
     "scrape",
     "entities",
-    "beater",
+    "architect",
     "script",
     "style",
     "prompt",
@@ -148,20 +148,20 @@ SETTING_COMPARE_DEFAULTS: dict[str, object] = {
 
 SETTING_MIN_STAGE: dict[str, RerunFrom] = {
     # Recap body text feeds the story bible, not keyed entity extraction.
-    "recap_version": "beater",
-    "panel_count": "beater",
-    "total_pages": "beater",
-    "vignette": "beater",
+    "recap_version": "architect",
+    "panel_count": "architect",
+    "total_pages": "architect",
+    "vignette": "architect",
     "generation_mode": "script",
     "art_style": "style",
     "aspect_ratio": "prompt",
 }
 
 SETTING_FIELD_MIN_STAGE: dict[str, RerunFrom] = {
-    "recap": "beater",
-    "panels": "beater",
-    "pages": "beater",
-    "vignette": "beater",
+    "recap": "architect",
+    "panels": "architect",
+    "pages": "architect",
+    "vignette": "architect",
     "generation_mode": "script",
     "art_style": "style",
     "aspect_ratio": "prompt",

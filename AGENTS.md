@@ -51,7 +51,7 @@ src/
 
   scraper.py           # Phase 1: ScrybeQuill scrape → 01_raw_text.json
   entities.py          # Phase 2: entity extraction + LLM continuity merge
-  master_beater.py     # Phase 3: story bible → 02_5_story_bible.txt
+  story_architect.py     # Phase 3: story bible → 02_5_story_bible.txt
   scriptwriter.py      # Phase 4: per-page or per-panel scripts
   style_integrator.py  # Phase 4.5: art-direction rewrite of setting/visual_action
   prompter.py          # Phase 5: image prompts from script + art direction
@@ -91,7 +91,7 @@ Only phases invalidated by `--rerun-from` or changed run settings are recomputed
 |-------|--------|-------------|
 | 1 Scrape | `scraper.py` | `01_raw_text.json` |
 | 2 Entities | `entities.py` | `02_entities.json`, campaign `entities_bible.json` (LLM merge), `02_5_episode_entities.json` (episode cast enriched from bible) |
-| 3 Beater | `master_beater.py` | `02_5_story_bible.txt`, `02_6_story_bible_page_*.txt` |
+| 3 Architect | `story_architect.py` | `02_5_story_bible.txt`, `02_6_story_bible_page_*.txt` |
 | 4 Script | `scriptwriter.py` | `03_script_page_*.json` (panel mode also writes per-panel checkpoints) |
 | 4.5 Style | `style_integrator.py` | `03_5_styled_script_page_*.json` |
 | 5 Prompt | `prompter.py` | `04_page_*_prompt.txt` or `04_page_*_panel_*_prompt.txt` |
@@ -103,11 +103,11 @@ Only phases invalidated by `--rerun-from` or changed run settings are recomputed
 - `page` — one prompt and one image per page (default)
 - `panel` — one prompt/image per panel, then stitch into `06_page_*.png`
 
-**Vignette** (`RunConfig.vignette: bool`, default `False`) is orthogonal to generation mode. When on, the master beater uses vignette templates (`master_beater_vignette_*.txt`) to pick one tight dramatic moment and expand it into the full scene count as micro-beats, instead of covering the whole recap. Page vs panel still controls prompt/image layout. Toggling vignette invalidates from `beater`.
+**Vignette** (`RunConfig.vignette: bool`, default `False`) is orthogonal to generation mode. When on, the story architect uses vignette templates (`story_architect_vignette_*.txt`) to pick one tight dramatic moment and expand it into the full scene count as micro-beats, instead of covering the whole recap. Page vs panel still controls prompt/image layout. Toggling vignette invalidates from `architect`.
 
 **Run settings** persisted in `run_status.json` under each version and mirrored to `working/`: `panel_count`, `total_pages`, `aspect_ratio`, `generation_mode`, `vignette`, `generate_images`, `recap_version`, `skip_style`, `rerun_from`. Config invalidation for the next run reads `working/run_status.json`.
 
-Scene count for the master beater = `panel_count × total_pages`.
+Scene count for the story architect = `panel_count × total_pages`.
 
 ## Domain rules agents must preserve
 

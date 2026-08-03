@@ -86,13 +86,13 @@ Primary workflow surface for launching and monitoring runs.
    - Story URL text field: accepts ScrybeQuill URLs.
 
 2. **Run Configuration Panel** (collapsible or always visible):
-   - **Rerun stage**: Dropdown with "Full run" (default), "scrape", "entities", "beater", "script", "style", "prompt".
+   - **Rerun stage**: Dropdown with "Full run" (default), "scrape", "entities", "architect", "script", "style", "prompt".
    - **Recap variant**: Dropdown (short, standard, alternate, long).
    - **Skip style**: Toggle checkbox.
    - **Panel count / Total pages**: Spinner controls.
    - **Model settings**: 
      - Default/Per-stage radio buttons.
-     - If per-stage selected, three dropdowns for beater, script, style models.
+     - If per-stage selected, three dropdowns for architect, script, style models.
 
 3. **Run Status Panel** (always visible):
    - Status indicator: idle/running/complete/error (icon + text).
@@ -122,8 +122,8 @@ Edit campaign-level prompts and art direction templates.
 │  Campaign: [dreadmarsh ▼]                                        │
 │                                                                   │
 │  ┌─── Template Files ──────────────────────────────────────┐   │
-│  │  ○ master_beater_system.txt                              │   │
-│  │  ○ master_beater_user.txt                                │   │
+│  │  ○ story_architect_system.txt                              │   │
+│  │  ○ story_architect_user.txt                                │   │
 │  │  ○ scriptwriter_system.txt                               │   │
 │  │  ○ scriptwriter_user.txt                                 │   │
 │  │  ○ style_integrator_system.txt                           │   │
@@ -151,7 +151,7 @@ Edit campaign-level prompts and art direction templates.
 │  └─────────────────────────────────────────────────────────┘   │
 │                                                                   │
 │  ✓ Art direction template is valid (6/6 required fields).      │
-│    Next run will capture: campaigns/dreadmarsh/master_beater... │
+│    Next run will capture: campaigns/dreadmarsh/story_architect... │
 │                          campaigns/dreadmarsh/scriptwriter...   │
 │                          ... (all 8 files listed)              │
 │                                                                   │
@@ -224,7 +224,7 @@ Browse and preview versioned outputs.
 │  │  ✓ 03_5_styled_script.json      (art-integrated)      │   │
 │  │  ✓ 04_page_1_prompt.txt         (image generation)    │   │
 │  │  📁 prompts/                     (captured prompts)     │   │
-│  │     - master_beater_system_FINAL.txt                    │   │
+│  │     - story_architect_system_FINAL.txt                    │   │
 │  │     - scriptwriter_system_FINAL_page_001.txt            │   │
 │  │     ...                                                  │   │
 │  │  ✓ run_status.json              (metadata)              │   │

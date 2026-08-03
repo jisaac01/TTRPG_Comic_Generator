@@ -11,15 +11,15 @@ from prompt_templates import (
     PAGE_PROMPT_TEMPLATE_FILENAME,
     SCRIPTWRITER_SYSTEM_PROMPT_FILENAME,
     SCRIPTWRITER_USER_PROMPT_FILENAME,
-    MASTER_BEATER_SYSTEM_PROMPT_FILENAME,
-    MASTER_BEATER_USER_PROMPT_FILENAME,
+    STORY_ARCHITECT_SYSTEM_PROMPT_FILENAME,
+    STORY_ARCHITECT_USER_PROMPT_FILENAME,
     STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME,
     STYLE_INTEGRATOR_USER_PROMPT_FILENAME,
     render_prompt_template,
     resolve_prompt_template_path,
 )
 from scriptwriter import ScriptCheckpoint, WorldStateInput
-from master_beater import StoryBibleCheckpoint
+from story_architect import StoryBibleCheckpoint
 
 
 PROMPTS_SUBDIR_NAME = "prompts"
@@ -76,7 +76,7 @@ def _final_prompt_filename(template_filename: str) -> str:
     return f"{stem}_FINAL.txt"
 
 
-def prepare_beater_prompts(
+def prepare_architect_prompts(
     version_dir: Path,
     content: str,
     world: WorldStateCheckpoint,
@@ -85,13 +85,13 @@ def prepare_beater_prompts(
     system_prompt_path: Path | None = None,
     user_prompt_path: Path | None = None,
 ) -> tuple[str, str]:
-    """Prepare and save master beater prompts before model call.
+    """Prepare and save story architect prompts before model call.
 
     FINAL filenames follow the active template names (standard or vignette).
 
     Returns tuple of (system_prompt, user_prompt) ready to send to model.
     """
-    from master_beater import (
+    from story_architect import (
         _format_entities_for_prompt,
         _format_quotes_for_prompt,
         _normalize_aliases_in_text,
@@ -101,12 +101,12 @@ def prepare_beater_prompts(
     system_filename = (
         system_prompt_path.name
         if system_prompt_path is not None
-        else MASTER_BEATER_SYSTEM_PROMPT_FILENAME
+        else STORY_ARCHITECT_SYSTEM_PROMPT_FILENAME
     )
     user_filename = (
         user_prompt_path.name
         if user_prompt_path is not None
-        else MASTER_BEATER_USER_PROMPT_FILENAME
+        else STORY_ARCHITECT_USER_PROMPT_FILENAME
     )
 
     # Save original templates under their true names (incl. vignette).
@@ -213,7 +213,7 @@ def prepare_scriptwriter_prompts(
     
     Returns tuple of (system_prompt, user_prompt) ready to send to model.
     """
-    from master_beater import _normalize_aliases_in_text
+    from story_architect import _normalize_aliases_in_text
     from scriptwriter import _format_entities_for_prompt, _format_story_bible_for_prompt
 
     prompts_dir = _ensure_prompts_dir(version_dir)

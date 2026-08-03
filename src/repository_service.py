@@ -14,8 +14,8 @@ from art_styles import (
     campaign_art_direction_dir,
 )
 from prompt_templates import (
-    MASTER_BEATER_SYSTEM_PROMPT_FILENAME,
-    MASTER_BEATER_USER_PROMPT_FILENAME,
+    STORY_ARCHITECT_SYSTEM_PROMPT_FILENAME,
+    STORY_ARCHITECT_USER_PROMPT_FILENAME,
     PAGE_PROMPT_TEMPLATE_FILENAME,
     SCRIPTWRITER_SYSTEM_PROMPT_FILENAME,
     SCRIPTWRITER_USER_PROMPT_FILENAME,
@@ -65,8 +65,8 @@ class VersionFiles:
 @dataclass(frozen=True)
 class CampaignPrompts:
     art_direction_template: Path
-    master_beater_system: Path
-    master_beater_user: Path
+    story_architect_system: Path
+    story_architect_user: Path
     scriptwriter_system: Path
     scriptwriter_user: Path
     style_integrator_system: Path
@@ -201,8 +201,8 @@ class RepositoryService:
         )
         return CampaignPrompts(
             art_direction_template=art_path,
-            master_beater_system=campaign_root / MASTER_BEATER_SYSTEM_PROMPT_FILENAME,
-            master_beater_user=campaign_root / MASTER_BEATER_USER_PROMPT_FILENAME,
+            story_architect_system=campaign_root / STORY_ARCHITECT_SYSTEM_PROMPT_FILENAME,
+            story_architect_user=campaign_root / STORY_ARCHITECT_USER_PROMPT_FILENAME,
             scriptwriter_system=campaign_root / SCRIPTWRITER_SYSTEM_PROMPT_FILENAME,
             scriptwriter_user=campaign_root / SCRIPTWRITER_USER_PROMPT_FILENAME,
             style_integrator_system=campaign_root / STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME,
@@ -215,8 +215,8 @@ class RepositoryService:
         prompts_dir = version_dir / "prompts"
         return CampaignPrompts(
             art_direction_template=version_dir / ART_DIRECTION_TEMPLATE_FILENAME,
-            master_beater_system=prompts_dir / MASTER_BEATER_SYSTEM_PROMPT_FILENAME,
-            master_beater_user=prompts_dir / MASTER_BEATER_USER_PROMPT_FILENAME,
+            story_architect_system=prompts_dir / STORY_ARCHITECT_SYSTEM_PROMPT_FILENAME,
+            story_architect_user=prompts_dir / STORY_ARCHITECT_USER_PROMPT_FILENAME,
             scriptwriter_system=prompts_dir / SCRIPTWRITER_SYSTEM_PROMPT_FILENAME,
             scriptwriter_user=prompts_dir / SCRIPTWRITER_USER_PROMPT_FILENAME,
             style_integrator_system=prompts_dir / STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME,

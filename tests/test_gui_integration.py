@@ -303,8 +303,8 @@ def _make_campaign_prompts(tmp_path: Path, campaign: str = "test_camp") -> Path:
     art_dir.mkdir(parents=True, exist_ok=True)
     (art_dir / "brutalist.json").write_text(json.dumps(art), encoding="utf-8")
     for filename in (
-        "master_beater_system.txt",
-        "master_beater_user.txt",
+        "story_architect_system.txt",
+        "story_architect_user.txt",
         "scriptwriter_system.txt",
         "scriptwriter_user.txt",
         "style_integrator_system.txt",
@@ -480,8 +480,8 @@ def test_prompt_page_campaign_switch_reloads_editor_content(tmp_path):
     second = campaigns_root / "other_camp"
     second.mkdir(parents=True, exist_ok=True)
     for filename in (
-        "master_beater_system.txt",
-        "master_beater_user.txt",
+        "story_architect_system.txt",
+        "story_architect_user.txt",
         "scriptwriter_system.txt",
         "scriptwriter_user.txt",
         "style_integrator_system.txt",
@@ -529,8 +529,8 @@ def test_prompt_page_campaign_switch_uses_event_data(tmp_path):
     second = campaigns_root / "other_camp"
     second.mkdir(parents=True, exist_ok=True)
     for filename in (
-        "master_beater_system.txt",
-        "master_beater_user.txt",
+        "story_architect_system.txt",
+        "story_architect_user.txt",
         "scriptwriter_system.txt",
         "scriptwriter_user.txt",
         "style_integrator_system.txt",
@@ -726,8 +726,8 @@ def test_prompt_page_save_bundled_art_writes_campaign_override(tmp_path):
     camp.mkdir(parents=True)
     # Non-art campaign prompts only — no campaign art_direction yet.
     for filename in (
-        "master_beater_system.txt",
-        "master_beater_user.txt",
+        "story_architect_system.txt",
+        "story_architect_user.txt",
         "scriptwriter_system.txt",
         "scriptwriter_user.txt",
         "style_integrator_system.txt",
@@ -1030,7 +1030,7 @@ def test_output_page_build_rerun_config_uses_live_controls(tmp_path):
     state["aspect_ratio_dropdown"].value = "4:3"
     state["vignette_checkbox"].value = True
 
-    config = state["build_rerun_config"]("test_camp", "episode-1", "beater")
+    config = state["build_rerun_config"]("test_camp", "episode-1", "architect")
 
     assert config.panel_count == 10
     assert config.total_pages == 4
@@ -1221,7 +1221,7 @@ def test_output_page_defaults_to_run_status_when_latest_failed(tmp_path):
     v003 = episode_dir / "v003"
     v003.mkdir(parents=True, exist_ok=True)
     (v003 / "run_status.json").write_text(
-        json.dumps({"status": "failed", "checkpoints": [], "failed": ["beater"], "errors": ["fatal"]}),
+        json.dumps({"status": "failed", "checkpoints": [], "failed": ["architect"], "errors": ["fatal"]}),
         encoding="utf-8",
     )
     page = _FakePage()

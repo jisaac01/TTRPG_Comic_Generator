@@ -18,7 +18,7 @@ def test_run_config_defaults_generate_images_off_and_uses_current_schema() -> No
     config = RunConfig(url="https://example.test/story", campaign="dreadmarsh")
 
     assert config.generate_images is False
-    assert not hasattr(config, "beater_model")
+    assert not hasattr(config, "architect_model")
     assert not hasattr(config, "script_model")
     assert not hasattr(config, "style_model")
 
@@ -92,16 +92,16 @@ def test_effective_rerun_from_bumps_when_generation_mode_changes() -> None:
     assert effective_rerun_from("prompt", prev, new) == "script"
 
 
-def test_effective_rerun_from_bumps_to_beater_when_vignette_changes() -> None:
+def test_effective_rerun_from_bumps_to_architect_when_vignette_changes() -> None:
     prev = run_config_snapshot(
         RunConfig(url="https://example.test/story", campaign="dreadmarsh")
     )
     new = dict(prev)
     new["vignette"] = True
 
-    assert effective_rerun_from("prompt", prev, new) == "beater"
-    assert effective_rerun_from("script", prev, new) == "beater"
-    assert effective_rerun_from("beater", prev, new) == "beater"
+    assert effective_rerun_from("prompt", prev, new) == "architect"
+    assert effective_rerun_from("script", prev, new) == "architect"
+    assert effective_rerun_from("architect", prev, new) == "architect"
     assert effective_rerun_from("entities", prev, new) == "entities"
 
 
@@ -121,8 +121,8 @@ def test_effective_rerun_from_treats_missing_vignette_as_false() -> None:
     assert effective_rerun_from(None, prev, new) is None
 
 
-def test_setting_field_enabled_allows_vignette_at_beater_not_script() -> None:
-    assert setting_field_enabled("vignette", "beater") is True
+def test_setting_field_enabled_allows_vignette_at_architect_not_script() -> None:
+    assert setting_field_enabled("vignette", "architect") is True
     assert setting_field_enabled("vignette", "entities") is True
     assert setting_field_enabled("vignette", "script") is False
 
@@ -134,25 +134,25 @@ def test_effective_rerun_from_bumps_when_panel_count_changes() -> None:
     new = dict(prev)
     new["panel_count"] = 8
 
-    assert effective_rerun_from("style", prev, new) == "beater"
+    assert effective_rerun_from("style", prev, new) == "architect"
 
 
-def test_effective_rerun_from_bumps_to_beater_when_recap_version_changes() -> None:
+def test_effective_rerun_from_bumps_to_architect_when_recap_version_changes() -> None:
     prev = run_config_snapshot(
         RunConfig(url="https://example.test/story", campaign="dreadmarsh")
     )
     new = dict(prev)
     new["recap_version"] = "long"
 
-    assert effective_rerun_from("prompt", prev, new) == "beater"
-    assert effective_rerun_from("script", prev, new) == "beater"
-    assert effective_rerun_from("beater", prev, new) == "beater"
+    assert effective_rerun_from("prompt", prev, new) == "architect"
+    assert effective_rerun_from("script", prev, new) == "architect"
+    assert effective_rerun_from("architect", prev, new) == "architect"
     # Explicit earlier stage still wins (min of requested and config).
     assert effective_rerun_from("entities", prev, new) == "entities"
 
 
-def test_setting_field_enabled_allows_recap_at_beater_not_script() -> None:
-    assert setting_field_enabled("recap", "beater") is True
+def test_setting_field_enabled_allows_recap_at_architect_not_script() -> None:
+    assert setting_field_enabled("recap", "architect") is True
     assert setting_field_enabled("recap", "entities") is True
     assert setting_field_enabled("recap", "scrape") is True
     assert setting_field_enabled("recap", "script") is False
@@ -231,7 +231,7 @@ def test_run_config_snapshot_includes_stop_after() -> None:
         RunConfig(
             url="https://example.test/story",
             campaign="dreadmarsh",
-            stop_after="beater",
+            stop_after="architect",
         )
     )
-    assert snap["stop_after"] == "beater"
+    assert snap["stop_after"] == "architect"

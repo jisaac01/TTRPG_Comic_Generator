@@ -1,6 +1,6 @@
 ## Pipeline & Core
 
-- [x] figure out why the entities bible is created in the beater step and not in the entities step
+- [x] figure out why the entities bible is created in the architect step and not in the entities step
 - [x] Add a style selector (Run + Output; bundled + campaign `art_direction/`)
 - [x] Add some descriptors like age, hair style, height, skin color, to physical description prompt
 - [x] Fix bug where characters is blank

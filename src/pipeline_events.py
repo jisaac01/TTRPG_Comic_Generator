@@ -18,7 +18,7 @@ from typing import Any, Callable, Literal, Union
 PhaseName = Literal[
     "scrape",
     "entities",
-    "beater",
+    "architect",
     "script",
     "style",
     "prompt",
@@ -51,7 +51,7 @@ class PhaseStarted(PipelineEvent):
 
     # Example:
     #   phase="scrape", message="Scraping...", details={"url": "..."}
-    #   phase="beater", message="Creating story bible...", details={"model": "gemini-3.1-flash-lite", "scene_count": 6}
+    #   phase="architect", message="Creating story bible...", details={"model": "gemini-3.1-flash-lite", "scene_count": 6}
 
 
 @dataclass
@@ -97,7 +97,7 @@ class PhaseError(PipelineEvent):
     exception: Exception | None = None
 
     # Example:
-    #   phase="beater", message="...ERROR", error="story_bible: API rate limit exceeded", exception=<RateLimitError>
+    #   phase="architect", message="...ERROR", error="story_bible: API rate limit exceeded", exception=<RateLimitError>
 
 
 @dataclass

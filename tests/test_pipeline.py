@@ -18,8 +18,8 @@ from prompt_templates import (
     DEFAULT_PROMPTS_DIR,
     PAGE_PROMPT_TEMPLATE_FILENAME,
     PROMPT_TEMPLATE_FILENAMES,
-    MASTER_BEATER_SYSTEM_PROMPT_FILENAME,
-    MASTER_BEATER_USER_PROMPT_FILENAME,
+    STORY_ARCHITECT_SYSTEM_PROMPT_FILENAME,
+    STORY_ARCHITECT_USER_PROMPT_FILENAME,
     SCRIPTWRITER_SYSTEM_PROMPT_FILENAME,
     SCRIPTWRITER_USER_PROMPT_FILENAME,
     STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME,
@@ -27,7 +27,7 @@ from prompt_templates import (
 )
 import scraper
 import scriptwriter
-import master_beater
+import story_architect
 from pipeline_events import PhaseWarning
 
 
@@ -170,7 +170,7 @@ def _single_panel_script_checkpoint(panel_index: int) -> scriptwriter.ScriptChec
     )
 
 
-_STORY_BIBLE_CHECKPOINT = master_beater.StoryBibleCheckpoint(
+_STORY_BIBLE_CHECKPOINT = story_architect.StoryBibleCheckpoint(
     url="https://example.test/story",
     title="Dreadmarsh Crossing",
     author="GM",
@@ -451,13 +451,13 @@ def test_create_version_dir_rerun_from_prompt_deletes_only_prompt(tmp_path):
     assert not (version_dir / "04_page_1_prompt.txt").exists()
 
 
-def test_create_version_dir_rerun_from_beater_deletes_beater_onwards(tmp_path):
+def test_create_version_dir_rerun_from_architect_deletes_architect_onwards(tmp_path):
     episode_dir = tmp_path / "ep"
     v001 = episode_dir / "v001"
     v001.mkdir(parents=True)
     _write_version_checkpoints(v001)
 
-    version_dir, _, _ = _create_version_dir(episode_dir, rerun_from="beater")
+    version_dir, _, _ = _create_version_dir(episode_dir, rerun_from="architect")
 
     assert (version_dir / "01_raw_text.json").exists()
     assert (version_dir / "02_entities.json").exists()
@@ -706,7 +706,7 @@ async def test_manual_working_edit_is_cloned_into_next_version(tmp_path):
     with (
         patch("pipeline.scrape_scrybequill", new_callable=AsyncMock) as mock_scrape,
         patch("pipeline.build_entities_from_raw") as mock_entities,
-        patch("pipeline.create_story_bible") as mock_beater,
+        patch("pipeline.create_story_bible") as mock_architect,
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT) as mock_script,
         patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT),
@@ -715,7 +715,7 @@ async def test_manual_working_edit_is_cloned_into_next_version(tmp_path):
 
     mock_scrape.assert_not_awaited()
     mock_entities.assert_not_called()
-    mock_beater.assert_not_called()
+    mock_architect.assert_not_called()
     mock_script.assert_called_once()
 
     version_dir = _version_dir_from_result(result)
@@ -964,10 +964,10 @@ async def test_first_run_bootstraps_campaign_prompt_templates_and_copies_version
 
     _, architect_kwargs = mock_architect.call_args
     assert architect_kwargs["system_prompt_text"] == (
-        version_dir / "prompts" / "master_beater_system_FINAL.txt"
+        version_dir / "prompts" / "story_architect_system_FINAL.txt"
     ).read_text(encoding="utf-8")
     assert architect_kwargs["user_prompt_text"] == (
-        version_dir / "prompts" / "master_beater_user_FINAL.txt"
+        version_dir / "prompts" / "story_architect_user_FINAL.txt"
     ).read_text(encoding="utf-8")
 
     _, script_kwargs = mock_script.call_args
@@ -1012,8 +1012,8 @@ async def test_explicit_prompt_overrides_are_copied_into_version(tmp_path):
         campaign="dreadmarsh",
         campaigns_root=tmp_path,
         panel_count=2,
-        master_beater_system_prompt=architect_system,
-        master_beater_user_prompt=architect_user,
+        story_architect_system_prompt=architect_system,
+        story_architect_user_prompt=architect_user,
         scriptwriter_system_prompt=system_prompt,
         scriptwriter_user_prompt=user_prompt,
         style_integrator_system_prompt=style_system,
@@ -1033,8 +1033,8 @@ async def test_explicit_prompt_overrides_are_copied_into_version(tmp_path):
 
     version_dir = _version_dir_from_result(result)
     prompts_dir = version_dir / "prompts"
-    assert (prompts_dir / MASTER_BEATER_SYSTEM_PROMPT_FILENAME).read_text(encoding="utf-8") == "ARCHITECT SYSTEM OVERRIDE"
-    assert (prompts_dir / MASTER_BEATER_USER_PROMPT_FILENAME).read_text(encoding="utf-8") == "ARCHITECT USER OVERRIDE"
+    assert (prompts_dir / STORY_ARCHITECT_SYSTEM_PROMPT_FILENAME).read_text(encoding="utf-8") == "ARCHITECT SYSTEM OVERRIDE"
+    assert (prompts_dir / STORY_ARCHITECT_USER_PROMPT_FILENAME).read_text(encoding="utf-8") == "ARCHITECT USER OVERRIDE"
     assert (prompts_dir / SCRIPTWRITER_SYSTEM_PROMPT_FILENAME).read_text(encoding="utf-8") == "SYSTEM OVERRIDE"
     assert (prompts_dir / SCRIPTWRITER_USER_PROMPT_FILENAME).read_text(encoding="utf-8") == "USER OVERRIDE"
     assert (prompts_dir / STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME).read_text(encoding="utf-8") == "STYLE SYSTEM OVERRIDE"
@@ -1043,10 +1043,10 @@ async def test_explicit_prompt_overrides_are_copied_into_version(tmp_path):
 
     _, architect_kwargs = mock_architect.call_args
     assert architect_kwargs["system_prompt_text"] == (
-        version_dir / "prompts" / "master_beater_system_FINAL.txt"
+        version_dir / "prompts" / "story_architect_system_FINAL.txt"
     ).read_text(encoding="utf-8")
     assert architect_kwargs["user_prompt_text"] == (
-        version_dir / "prompts" / "master_beater_user_FINAL.txt"
+        version_dir / "prompts" / "story_architect_user_FINAL.txt"
     ).read_text(encoding="utf-8")
 
     _, script_kwargs = mock_script.call_args
@@ -1195,7 +1195,7 @@ async def test_run_skips_all_phases_when_all_checkpoints_exist(tmp_path):
 
 @pytest.mark.asyncio
 async def test_cached_raw_recap_switch_updates_content_and_reruns_downstream(tmp_path):
-    """Recap switch uses cached variants: no scrape/entities rebuild; beater onward runs."""
+    """Recap switch uses cached variants: no scrape/entities rebuild; architect onward runs."""
     _make_episode(tmp_path, "dreadmarsh", "https://example.test/story", "Dreadmarsh Crossing")
 
     pipeline = ComicPipeline(
@@ -1312,7 +1312,7 @@ async def test_rerun_from_architect_reruns_architect_and_downstream(tmp_path):
         campaign="dreadmarsh",
         campaigns_root=tmp_path,
         panel_count=2,
-        rerun_from="beater",
+        rerun_from="architect",
     )
 
     with (
@@ -1843,7 +1843,7 @@ async def test_script_model_and_panel_count_forwarded(tmp_path):
         url="https://example.test/story",
         campaign="dreadmarsh",
         campaigns_root=tmp_path,
-        beater_model="llama3.1:8b",
+        architect_model="llama3.1:8b",
         script_model="llama3.1:8b",
         panel_count=8,
     )
@@ -1868,7 +1868,7 @@ async def test_script_model_and_panel_count_forwarded(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_beater_prompt_uses_total_scene_count(tmp_path):
+async def test_architect_prompt_uses_total_scene_count(tmp_path):
     pipeline = ComicPipeline(
         url="https://example.test/story",
         campaign="dreadmarsh",
@@ -1891,7 +1891,7 @@ async def test_beater_prompt_uses_total_scene_count(tmp_path):
     assert architect_kwargs.get("scene_count") == 6
 
     version_dir = _version_dir_from_result(result)
-    rendered_prompt = (version_dir / "prompts" / "master_beater_user_FINAL.txt").read_text(
+    rendered_prompt = (version_dir / "prompts" / "story_architect_user_FINAL.txt").read_text(
         encoding="utf-8"
     )
     assert "Target scene count: 6" in rendered_prompt
@@ -1899,7 +1899,7 @@ async def test_beater_prompt_uses_total_scene_count(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_vignette_uses_vignette_beater_templates_and_page_prompts(tmp_path):
+async def test_vignette_uses_vignette_architect_templates_and_page_prompts(tmp_path):
     pipeline = ComicPipeline(
         url="https://example.test/story",
         campaign="dreadmarsh",
@@ -1927,20 +1927,20 @@ async def test_vignette_uses_vignette_beater_templates_and_page_prompts(tmp_path
     version_dir = _version_dir_from_result(result)
     prompts_dir = version_dir / "prompts"
     rendered_system = (
-        prompts_dir / "master_beater_vignette_system_FINAL.txt"
+        prompts_dir / "story_architect_vignette_system_FINAL.txt"
     ).read_text(encoding="utf-8")
     rendered_user = (
-        prompts_dir / "master_beater_vignette_user_FINAL.txt"
+        prompts_dir / "story_architect_vignette_user_FINAL.txt"
     ).read_text(encoding="utf-8")
     assert "single tight moment" in rendered_system.casefold() or "one tight" in rendered_system.casefold()
     assert "vignette" in rendered_system.casefold() or "one continuous moment" in rendered_system.casefold()
     assert "Target scene count: 2" in rendered_user
-    # Active vignette FINALs use vignette names; standard master_beater_*_FINAL is not written.
-    assert not (prompts_dir / "master_beater_system_FINAL.txt").exists()
-    assert not (prompts_dir / "master_beater_user_FINAL.txt").exists()
+    # Active vignette FINALs use vignette names; standard story_architect_*_FINAL is not written.
+    assert not (prompts_dir / "story_architect_system_FINAL.txt").exists()
+    assert not (prompts_dir / "story_architect_user_FINAL.txt").exists()
     # Standard templates are still captured for audit of available campaign files.
-    assert (prompts_dir / "master_beater_system.txt").exists()
-    assert (prompts_dir / "master_beater_vignette_system.txt").exists()
+    assert (prompts_dir / "story_architect_system.txt").exists()
+    assert (prompts_dir / "story_architect_vignette_system.txt").exists()
 
     assert (version_dir / "04_page_1_prompt.txt").exists()
     assert not list(version_dir.glob("04_page_*_panel_*_prompt.txt"))

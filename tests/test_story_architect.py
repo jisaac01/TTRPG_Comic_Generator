@@ -4,7 +4,7 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
-import master_beater
+import story_architect
 from model_defaults import DEFAULT_MODEL
 
 
@@ -83,7 +83,7 @@ The party enters the marsh at dusk. Del leads them through the foggy trail lined
 Scene 2:
 Del lights a torch to guide the group through the narrow marsh path. The firelight cuts through the darkness, casting dancing shadows on the reeds. With Del taking control of the route with firelight, the party pushes forward with renewed confidence."""
 
-    checkpoint = master_beater.create_story_bible(
+    checkpoint = story_architect.create_story_bible(
         raw_checkpoint_path=raw_path,
         entities_checkpoint_path=entities_path,
         output_path=output_path,
@@ -114,7 +114,7 @@ def test_load_story_bible_derives_scene_count_from_headers(tmp_path):
         encoding="utf-8",
     )
 
-    loaded = master_beater.load_story_bible(path)
+    loaded = story_architect.load_story_bible(path)
 
     assert loaded.scene_count == 3
     assert "Scene 2:" in loaded.story_bible
@@ -135,7 +135,7 @@ Opening scene with reference to "Stay close to me."
 Scene 2:
 Continuation scene."""
 
-    master_beater.create_story_bible(
+    story_architect.create_story_bible(
         raw_checkpoint_path=raw_path,
         entities_checkpoint_path=entities_path,
         output_path=output_path,
@@ -200,7 +200,7 @@ def test_create_story_bible_normalizes_aliases_as_whole_words(tmp_path):
         received_content = raw_content
         return "Scene 1:\nNormalized story."
 
-    master_beater.create_story_bible(
+    story_architect.create_story_bible(
         raw_checkpoint_path=raw_path,
         entities_checkpoint_path=entities_path,
         output_path=tmp_path / "02_5_story_bible.txt",
@@ -242,7 +242,7 @@ def test_normalize_aliases_replaces_nobby_with_knobby():
         "His pleas fell on deaf ears as Nobby, in a startling display, "
         "stabbed the man. Later Nobby adopted Titch."
     )
-    normalized = master_beater._normalize_aliases_in_text(text, world)
+    normalized = story_architect._normalize_aliases_in_text(text, world)
     assert "Nobby" not in normalized
     assert normalized.count("Knobby") == 2
     assert "as Knobby, in a startling" in normalized
@@ -270,7 +270,7 @@ def test_normalize_aliases_does_not_reexpand_prefix_of_canonical_name():
         analyzed_at="2026-05-04T00:00:00+00:00",
     )
     text = "Lucky Clover walked in. Lucky smiled. Orson waved."
-    normalized = master_beater._normalize_aliases_in_text(text, world)
+    normalized = story_architect._normalize_aliases_in_text(text, world)
     assert normalized == (
         "Lucky Clover walked in. Lucky Clover smiled. Lucky Clover waved."
     )
@@ -314,7 +314,7 @@ def test_create_story_bible_normalizes_aliases_in_generated_output(tmp_path):
     def fake_generator(raw_content, world, model, scene_count):
         return "Scene 1:\nNobby, ever defiant, accepts the deal."
 
-    master_beater.create_story_bible(
+    story_architect.create_story_bible(
         raw_checkpoint_path=raw_path,
         entities_checkpoint_path=entities_path,
         output_path=output_path,
@@ -330,15 +330,15 @@ def test_create_story_bible_normalizes_aliases_in_generated_output(tmp_path):
     assert "Knobby, ever defiant, accepts the deal." in written
 
 
-def test_prepare_beater_prompts_normalizes_aliases_in_rendered_prompts(tmp_path):
+def test_prepare_architect_prompts_normalizes_aliases_in_rendered_prompts(tmp_path):
     """Production path: prompts sent to the model must use canonical names.
 
     Regression for Nobby→Knobby: create_story_bible normalized content for
-    test generators, but prepare_beater_prompts (used by the pipeline) was
+    test generators, but prepare_architect_prompts (used by the pipeline) was
     still embedding raw alias-heavy text in the FINAL prompts.
     """
     from entities import Character, StoryBeat, WorldStateCheckpoint
-    from prompt_saver import prepare_beater_prompts
+    from prompt_saver import prepare_architect_prompts
 
     world = WorldStateCheckpoint(
         url="https://example.test/story",
@@ -385,7 +385,7 @@ def test_prepare_beater_prompts_normalizes_aliases_in_rendered_prompts(tmp_path)
         }
     ]
 
-    _system, user_prompt = prepare_beater_prompts(
+    _system, user_prompt = prepare_architect_prompts(
         version_dir=tmp_path,
         content=content,
         world=world,
@@ -401,7 +401,7 @@ def test_prepare_beater_prompts_normalizes_aliases_in_rendered_prompts(tmp_path)
     assert "Knobby stabbed the Choirmaster" in user_prompt
     assert "Knobby's frustrated exclamation" in user_prompt
 
-    final_user = (tmp_path / "prompts" / "master_beater_user_FINAL.txt").read_text(
+    final_user = (tmp_path / "prompts" / "story_architect_user_FINAL.txt").read_text(
         encoding="utf-8"
     )
     assert "Nobby" not in final_user
@@ -412,7 +412,7 @@ def test_create_story_bible_rejects_invalid_scene_count(tmp_path):
     raw_path, entities_path = _write_input_checkpoints(tmp_path)
 
     try:
-        master_beater.create_story_bible(
+        story_architect.create_story_bible(
             raw_checkpoint_path=raw_path,
             entities_checkpoint_path=entities_path,
             output_path=tmp_path / "02_5_story_bible.txt",
@@ -429,7 +429,7 @@ def test_create_story_bible_rejects_invalid_scene_count(tmp_path):
 
 def test_story_bible_checkpoint_validates_text_field(tmp_path):
     """Verify StoryBibleCheckpoint enforces text-only output."""
-    checkpoint = master_beater.StoryBibleCheckpoint(
+    checkpoint = story_architect.StoryBibleCheckpoint(
         url="https://example.test/story",
         title="Test Story",
         author="Test Author",

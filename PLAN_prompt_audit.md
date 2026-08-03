@@ -28,11 +28,11 @@ Adding “entities continuity FINAL” or “vignette FINAL under the right name
 | `_capture_prompt_templates_for_version` | Start of run | All known template files (bulk copy) |
 | `prepare_*_prompts` | At each LLM call | Template again + rendered FINAL |
 
-Bulk capture already covers “save every template.” FINALs live only in decentralized `prepare_*` paths—and those paths sometimes re-save templates under the wrong names (e.g. vignette content as `master_beater_*`).
+Bulk capture already covers “save every template.” FINALs live only in decentralized `prepare_*` paths—and those paths sometimes re-save templates under the wrong names (e.g. vignette content as `story_architect_*`).
 
 ### 3. Template identity was allowed to lie
 
-Vignette mode historically remapped source paths onto standard keys so FINALs stayed `master_beater_*_FINAL.txt`. That optimized “one prepare_beater path” at the cost of “FINAL name ≠ real template name.”
+Vignette mode historically remapped source paths onto standard keys so FINALs stayed `story_architect_*_FINAL.txt`. That optimized “one prepare_architect path” at the cost of “FINAL name ≠ real template name.”
 
 Rule that should hold: **FINAL stem = basename of the template path actually used.**
 
@@ -93,22 +93,22 @@ Rules:
 - No special cases for vignette / continuity / scriptwriter—names follow paths
 - Stages only supply `template_path` + `values` (+ optional `suffix`)
 
-Then shrink or delete `prepare_beater_prompts`, `prepare_scriptwriter_prompts`, etc. into thin “build values + call primitive” wrappers (or move values-building into the stage modules).
+Then shrink or delete `prepare_architect_prompts`, `prepare_scriptwriter_prompts`, etc. into thin “build values + call primitive” wrappers (or move values-building into the stage modules).
 
 ### B. One mandatory chokepoint for model-bound text
 
 Policy: **no raw `render_prompt_template` on paths that hit an LLM** outside the audit helper.
 
 - Entities continuity merge goes through it
-- Beater / script / style / page prompts go through it
+- Architect / script / style / page prompts go through it
 - Prefer tests that assert rendered prompts used in a stage left a FINAL
 
 ### C. Stop remapping template identity
 
 Resolve and use real paths:
 
-- standard beater → `master_beater_*.txt`
-- vignette → `master_beater_vignette_*.txt`
+- standard architect → `story_architect_*.txt`
+- vignette → `story_architect_vignette_*.txt`
 
 Never copy vignette content onto the standard filename for convenience. Bulk capture may still dump both; FINAL only for the one used.
 
@@ -151,7 +151,7 @@ FINALs still require runtime values; the registry only stops forgetting a filena
 ## Suggested implementation phases
 
 1. **Introduce `render_and_capture`** (or equivalent name) with tests on naming + contents.  
-2. **Migrate one stage** (e.g. beater or style) end-to-end; delete its bespoke save/FINAL logic.  
+2. **Migrate one stage** (e.g. architect or style) end-to-end; delete its bespoke save/FINAL logic.  
 3. **Migrate remaining stages** including entities continuity and page prompts.  
 4. **Choose D1 or D2**; remove duplicate template re-copy.  
 5. **Enforce chokepoint** (code review + tests; no direct render for LLM call sites).  
@@ -172,4 +172,4 @@ FINALs still require runtime values; the registry only stops forgetting a filena
 
 ## Context
 
-Discussed after working-dir / prompt-paradigm cleanup and ad hoc FINAL capture for `entities_continuity_*` and `master_beater_vignette_*`. Those patches closed gaps but confirmed the design tax of per-stage prepare helpers.
+Discussed after working-dir / prompt-paradigm cleanup and ad hoc FINAL capture for `entities_continuity_*` and `story_architect_vignette_*`. Those patches closed gaps but confirmed the design tax of per-stage prepare helpers.

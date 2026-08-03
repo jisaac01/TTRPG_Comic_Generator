@@ -53,7 +53,7 @@ from prompter import (
     _load_art_template,
 )
 from prompt_saver import (
-    prepare_beater_prompts,
+    prepare_architect_prompts,
     prepare_page_prompt_template,
     prepare_scriptwriter_prompts,
     prepare_style_integrator_prompts,
@@ -64,10 +64,10 @@ from prompt_templates import (
     ENTITIES_CONTINUITY_USER_PROMPT_FILENAME,
     PAGE_PROMPT_TEMPLATE_FILENAME,
     PROMPT_TEMPLATE_FILENAMES,
-    MASTER_BEATER_SYSTEM_PROMPT_FILENAME,
-    MASTER_BEATER_USER_PROMPT_FILENAME,
-    MASTER_BEATER_VIGNETTE_SYSTEM_PROMPT_FILENAME,
-    MASTER_BEATER_VIGNETTE_USER_PROMPT_FILENAME,
+    STORY_ARCHITECT_SYSTEM_PROMPT_FILENAME,
+    STORY_ARCHITECT_USER_PROMPT_FILENAME,
+    STORY_ARCHITECT_VIGNETTE_SYSTEM_PROMPT_FILENAME,
+    STORY_ARCHITECT_VIGNETTE_USER_PROMPT_FILENAME,
     SCRIPTWRITER_SYSTEM_PROMPT_FILENAME,
     SCRIPTWRITER_USER_PROMPT_FILENAME,
     STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME,
@@ -86,7 +86,7 @@ from scriptwriter import (
     write_story_bible_pages,
     write_story_bible_panels,
 )
-from master_beater import (
+from story_architect import (
     StoryBibleCheckpoint,
     create_story_bible,
     load_story_bible,
@@ -418,7 +418,7 @@ _ENTITIES_STAGE_OUTPUTS = [
 _PRESERVE_PATTERNS_BY_STAGE: dict[RerunFrom | None, list[str]] = {
     "scrape": [],
     "entities": ["01_raw_text.json"],
-    "beater": ["01_raw_text.json", "02_entities.json", *_ENTITIES_STAGE_OUTPUTS],
+    "architect": ["01_raw_text.json", "02_entities.json", *_ENTITIES_STAGE_OUTPUTS],
     "script": [
         "01_raw_text.json",
         "02_entities.json",
@@ -638,7 +638,7 @@ class ComicPipeline:
         url: str,
         campaign: str,
         campaigns_root: Path = CAMPAIGNS_ROOT,
-        beater_model: str = DEFAULT_MODEL,
+        architect_model: str = DEFAULT_MODEL,
         script_model: str = DEFAULT_MODEL,
         style_model: str = DEFAULT_MODEL,
         panel_count: int = 6,
@@ -648,8 +648,8 @@ class ComicPipeline:
         vignette: bool = False,
         art_style_template: Path | None = None,
         art_style: str | None = None,
-        master_beater_system_prompt: Path | None = None,
-        master_beater_user_prompt: Path | None = None,
+        story_architect_system_prompt: Path | None = None,
+        story_architect_user_prompt: Path | None = None,
         scriptwriter_system_prompt: Path | None = None,
         scriptwriter_user_prompt: Path | None = None,
         style_integrator_system_prompt: Path | None = None,
@@ -666,7 +666,7 @@ class ComicPipeline:
         self.url = url
         self.campaign = campaign
         self.campaigns_root = campaigns_root
-        self.beater_model = beater_model
+        self.architect_model = architect_model
         self.script_model = script_model
         self.style_model = style_model
         self.panel_count = panel_count
@@ -676,8 +676,8 @@ class ComicPipeline:
         self.vignette = vignette
         self.art_style_template = art_style_template
         self.art_style = art_style
-        self.master_beater_system_prompt = master_beater_system_prompt
-        self.master_beater_user_prompt = master_beater_user_prompt
+        self.story_architect_system_prompt = story_architect_system_prompt
+        self.story_architect_user_prompt = story_architect_user_prompt
         self.scriptwriter_system_prompt = scriptwriter_system_prompt
         self.scriptwriter_user_prompt = scriptwriter_user_prompt
         self.style_integrator_system_prompt = style_integrator_system_prompt
@@ -717,7 +717,7 @@ class ComicPipeline:
         """Emit an event via the callback."""
         self.event_callback(event)
 
-    def _emit_prompt_template_mismatch_warning(self, phase: Literal["beater", "script", "style", "prompt"], exc: BaseException) -> None:
+    def _emit_prompt_template_mismatch_warning(self, phase: Literal["architect", "script", "style", "prompt"], exc: BaseException) -> None:
         detail = _prompt_template_mismatch_detail(exc)
         if detail is None:
             return
@@ -878,31 +878,31 @@ class ComicPipeline:
             shutil.copy2(DEFAULT_PROMPTS_DIR / filename, campaign_prompt)
 
     def _resolve_prompt_templates(self) -> dict[str, Path]:
-        # Capture both standard and vignette beater templates under their true
+        # Capture both standard and vignette architect templates under their true
         # names. Explicit CLI overrides apply only to the active mode.
-        beater_system = self._campaign_prompt_path(MASTER_BEATER_SYSTEM_PROMPT_FILENAME)
-        beater_user = self._campaign_prompt_path(MASTER_BEATER_USER_PROMPT_FILENAME)
+        architect_system = self._campaign_prompt_path(STORY_ARCHITECT_SYSTEM_PROMPT_FILENAME)
+        architect_user = self._campaign_prompt_path(STORY_ARCHITECT_USER_PROMPT_FILENAME)
         vignette_system = self._campaign_prompt_path(
-            MASTER_BEATER_VIGNETTE_SYSTEM_PROMPT_FILENAME
+            STORY_ARCHITECT_VIGNETTE_SYSTEM_PROMPT_FILENAME
         )
         vignette_user = self._campaign_prompt_path(
-            MASTER_BEATER_VIGNETTE_USER_PROMPT_FILENAME
+            STORY_ARCHITECT_VIGNETTE_USER_PROMPT_FILENAME
         )
-        if self.master_beater_system_prompt is not None:
+        if self.story_architect_system_prompt is not None:
             if self.vignette:
-                vignette_system = self.master_beater_system_prompt
+                vignette_system = self.story_architect_system_prompt
             else:
-                beater_system = self.master_beater_system_prompt
-        if self.master_beater_user_prompt is not None:
+                architect_system = self.story_architect_system_prompt
+        if self.story_architect_user_prompt is not None:
             if self.vignette:
-                vignette_user = self.master_beater_user_prompt
+                vignette_user = self.story_architect_user_prompt
             else:
-                beater_user = self.master_beater_user_prompt
+                architect_user = self.story_architect_user_prompt
         return {
-            MASTER_BEATER_SYSTEM_PROMPT_FILENAME: beater_system,
-            MASTER_BEATER_USER_PROMPT_FILENAME: beater_user,
-            MASTER_BEATER_VIGNETTE_SYSTEM_PROMPT_FILENAME: vignette_system,
-            MASTER_BEATER_VIGNETTE_USER_PROMPT_FILENAME: vignette_user,
+            STORY_ARCHITECT_SYSTEM_PROMPT_FILENAME: architect_system,
+            STORY_ARCHITECT_USER_PROMPT_FILENAME: architect_user,
+            STORY_ARCHITECT_VIGNETTE_SYSTEM_PROMPT_FILENAME: vignette_system,
+            STORY_ARCHITECT_VIGNETTE_USER_PROMPT_FILENAME: vignette_user,
             SCRIPTWRITER_SYSTEM_PROMPT_FILENAME: self.scriptwriter_system_prompt
             or self._campaign_prompt_path(SCRIPTWRITER_SYSTEM_PROMPT_FILENAME),
             SCRIPTWRITER_USER_PROMPT_FILENAME: self.scriptwriter_user_prompt
@@ -1048,7 +1048,7 @@ class ComicPipeline:
                         )
                     )
                     # Recap body feeds the story bible, not keyed entities.
-                    # Keep 02_entities.json; invalidate beater outputs and below.
+                    # Keep 02_entities.json; invalidate architect outputs and below.
                     _dual_unlink(version_dir / "02_5_story_bible.txt", version_dir, working_dir)
                     _dual_delete_matching(version_dir, working_dir, STORY_BIBLE_PAGE_GLOB)
                     _dual_delete_matching(version_dir, working_dir, STORY_BIBLE_PANEL_GLOB)
@@ -1166,7 +1166,7 @@ class ComicPipeline:
                         )
 
                 # Episode-scoped cast: names from 02_entities.json, records from the bible.
-                # Downstream text stages (beater/script/prompt) use this, not the full campaign bible.
+                # Downstream text stages (architect/script/prompt) use this, not the full campaign bible.
                 episode_entities = write_episode_entities(
                     entities_path=entities_path,
                     bible=bible_entities,
@@ -1178,11 +1178,11 @@ class ComicPipeline:
                 )
 
         story_bible: StoryBibleCheckpoint | None = None
-        if self._should_run_stage("beater"):
+        if self._should_run_stage("architect"):
             if story_bible_path.exists():
                 self._emit(
                     PhaseSkipped(
-                        phase="beater",
+                        phase="architect",
                         message="Skipped",
                         reason="checkpoint exists",
                     )
@@ -1192,9 +1192,9 @@ class ComicPipeline:
                 scene_count = self.total_pages * self.panel_count
                 self._emit(
                     PhaseStarted(
-                        phase="beater",
+                        phase="architect",
                         message="Creating story bible...",
-                        details={"model": self.beater_model, "scene_count": scene_count},
+                        details={"model": self.architect_model, "scene_count": scene_count},
                     )
                 )
                 try:
@@ -1202,12 +1202,12 @@ class ComicPipeline:
                     # The exact rendered strings are also the ones sent to the model.
                     # FINAL filenames follow the active template (standard vs vignette).
                     if self.vignette:
-                        beater_system_key = MASTER_BEATER_VIGNETTE_SYSTEM_PROMPT_FILENAME
-                        beater_user_key = MASTER_BEATER_VIGNETTE_USER_PROMPT_FILENAME
+                        architect_system_key = STORY_ARCHITECT_VIGNETTE_SYSTEM_PROMPT_FILENAME
+                        architect_user_key = STORY_ARCHITECT_VIGNETTE_USER_PROMPT_FILENAME
                     else:
-                        beater_system_key = MASTER_BEATER_SYSTEM_PROMPT_FILENAME
-                        beater_user_key = MASTER_BEATER_USER_PROMPT_FILENAME
-                    beater_system_prompt, beater_user_prompt = prepare_beater_prompts(
+                        architect_system_key = STORY_ARCHITECT_SYSTEM_PROMPT_FILENAME
+                        architect_user_key = STORY_ARCHITECT_USER_PROMPT_FILENAME
+                    architect_system_prompt, architect_user_prompt = prepare_architect_prompts(
                         version_dir=version_dir,
                         content=raw.content,
                         world=episode_entities,
@@ -1216,33 +1216,33 @@ class ComicPipeline:
                             {"text": quote.text, "attribution": quote.attribution}
                             for quote in raw.quotes
                         ],
-                        system_prompt_path=prompt_template_paths[beater_system_key],
-                        user_prompt_path=prompt_template_paths[beater_user_key],
+                        system_prompt_path=prompt_template_paths[architect_system_key],
+                        user_prompt_path=prompt_template_paths[architect_user_key],
                     )
                     story_bible = create_story_bible(
                         raw_checkpoint_path=raw_path,
                         entities_checkpoint_path=episode_entities_path,
                         output_path=story_bible_path,
-                        model=self.beater_model,
+                        model=self.architect_model,
                         scene_count=scene_count,
-                        system_prompt_text=beater_system_prompt,
-                        user_prompt_text=beater_user_prompt,
+                        system_prompt_text=architect_system_prompt,
+                        user_prompt_text=architect_user_prompt,
                     )
                     if not story_bible_path.exists():
                         write_story_bible(story_bible_path, story_bible.story_bible)
-                    self._emit(PhaseCompleted(phase="beater", message="...done"))
+                    self._emit(PhaseCompleted(phase="architect", message="...done"))
                 except Exception as exc:
                     errors.append(f"story_bible: {exc}")
                     error_details.append(f"story_bible: {_format_exception_detail(exc)}")
                     self._emit(
                         PhasePartialFailure(
-                            phase="beater",
+                            phase="architect",
                             message="Story bible generation failed - skipping downstream phases",
                             skipped_phases=["script", "style", "prompt"],
                             error_detail=str(exc),
                         )
                     )
-                    self._emit_prompt_template_mismatch_warning("beater", exc)
+                    self._emit_prompt_template_mismatch_warning("architect", exc)
 
         script_pages: list[ScriptCheckpoint] | None = None
         script_generated_this_run = False
@@ -1665,8 +1665,8 @@ class ComicPipeline:
             checkpoints_created.append("page_prompt")
 
         failed_phases = []
-        if self._should_run_stage("beater") and story_bible is None:
-            failed_phases.append("beater")
+        if self._should_run_stage("architect") and story_bible is None:
+            failed_phases.append("architect")
         if self._should_run_stage("script") and script_pages is None and story_bible is not None:
             failed_phases.append("script")
         if (
@@ -1730,7 +1730,7 @@ def _format_event_for_cli(event: PipelineEventUnion) -> str:
             msg = f"[1/5] {event.message}"
         elif event.phase == "entities":
             msg = f"[2/5] {event.message}"
-        elif event.phase == "beater":
+        elif event.phase == "architect":
             msg = f"[3/5] {event.message}"
         elif event.phase == "script":
             msg = f"[4/5] {event.message}"
@@ -1749,7 +1749,7 @@ def _format_event_for_cli(event: PipelineEventUnion) -> str:
             msg = f"[1/5] Scraping...skipped ({event.reason})"
         elif event.phase == "entities":
             msg = f"[2/5] Building entities...skipped ({event.reason})"
-        elif event.phase == "beater":
+        elif event.phase == "architect":
             msg = f"[3/5] Creating story bible...skipped ({event.reason})"
         elif event.phase == "script":
             msg = f"[4/5] Writing script...skipped ({event.reason})"
@@ -1824,10 +1824,10 @@ async def _run_cli() -> None:
     parser.add_argument(
         "--model",
         default=DEFAULT_MODEL,
-        help="Model name used for all stages (default: %(default)s). Override per-stage with --beater-model, --script-model, --style-model.",
+        help="Model name used for all stages (default: %(default)s). Override per-stage with --architect-model, --script-model, --style-model.",
     )
     parser.add_argument(
-        "--beater-model",
+        "--architect-model",
         default=None,
         help="Model name for Phase 3 story bible creation (overrides --model)",
     )
@@ -1870,20 +1870,20 @@ async def _run_cli() -> None:
         ),
     )
     parser.add_argument(
-        "--master-beater-system-prompt",
+        "--story-architect-system-prompt",
         default=None,
         help=(
-            "Explicit path to the master beater system prompt template. "
-            f"If omitted, the pipeline uses campaigns/<campaign>/{MASTER_BEATER_SYSTEM_PROMPT_FILENAME} "
+            "Explicit path to the story architect system prompt template. "
+            f"If omitted, the pipeline uses campaigns/<campaign>/{STORY_ARCHITECT_SYSTEM_PROMPT_FILENAME} "
             "and bootstraps it from prompts/ on first use."
         ),
     )
     parser.add_argument(
-        "--master-beater-user-prompt",
+        "--story-architect-user-prompt",
         default=None,
         help=(
-            "Explicit path to the master beater user prompt template. "
-            f"If omitted, the pipeline uses campaigns/<campaign>/{MASTER_BEATER_USER_PROMPT_FILENAME} "
+            "Explicit path to the story architect user prompt template. "
+            f"If omitted, the pipeline uses campaigns/<campaign>/{STORY_ARCHITECT_USER_PROMPT_FILENAME} "
             "and bootstraps it from prompts/ on first use."
         ),
     )
@@ -1934,12 +1934,12 @@ async def _run_cli() -> None:
     )
     parser.add_argument(
         "--rerun-from",
-        choices=["scrape", "entities", "beater", "script", "style", "prompt"],
+        choices=["scrape", "entities", "architect", "script", "style", "prompt"],
         default=None,
         help=(
             "Invalidate checkpoints from this phase onward and rerun. "
             "Prior phases are cloned from the last version. "
-            "Options: scrape, entities, beater, script, style, prompt"
+            "Options: scrape, entities, architect, script, style, prompt"
         ),
     )
     parser.add_argument(
@@ -1990,18 +1990,18 @@ async def _run_cli() -> None:
         url=args.url,
         campaign=args.campaign,
         campaigns_root=Path(args.campaigns_root),
-        beater_model=args.beater_model or args.model,
+        architect_model=args.architect_model or args.model,
         script_model=args.script_model or args.model,
         style_model=args.style_model or args.model,
         panel_count=args.panel_count,
         total_pages=args.total_pages,
         art_style_template=Path(args.art_style_template) if args.art_style_template else None,
         art_style=art_style_id,
-        master_beater_system_prompt=Path(args.master_beater_system_prompt)
-        if args.master_beater_system_prompt
+        story_architect_system_prompt=Path(args.story_architect_system_prompt)
+        if args.story_architect_system_prompt
         else None,
-        master_beater_user_prompt=Path(args.master_beater_user_prompt)
-        if args.master_beater_user_prompt
+        story_architect_user_prompt=Path(args.story_architect_user_prompt)
+        if args.story_architect_user_prompt
         else None,
         scriptwriter_system_prompt=Path(args.scriptwriter_system_prompt)
         if args.scriptwriter_system_prompt

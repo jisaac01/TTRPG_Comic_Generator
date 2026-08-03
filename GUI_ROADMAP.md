@@ -113,11 +113,11 @@
 - [x] `RunPage` component: 
   - Campaign dropdown (populated by RepositoryService.list_campaigns()).
   - Story URL text field.
-  - Rerun stage dropdown (scrape, entities, beater, script, style, prompt, or "Full run").
+  - Rerun stage dropdown (scrape, entities, architect, script, style, prompt, or "Full run").
   - Recap version dropdown (short, standard, alternate, long).
   - Skip style toggle.
   - Panel count / total pages spinners.
-  - Model selectors (dropdown for each: analysis, beater, script, style, or a single "all stages" selector with per-stage overrides hidden behind a toggle).
+  - Model selectors (dropdown for each: analysis, architect, script, style, or a single "all stages" selector with per-stage overrides hidden behind a toggle).
   - Run button, disabled while a run is active.
   - Current phase badge (e.g., "Running Phase 4: Writing script").
   - Run status summary (final: "✓ OK", "⚠ Partial", "✗ Failed").
@@ -148,7 +148,7 @@
 **Deliverables**:
 - [x] `PromptPage` component:
   - Campaign dropdown to select which campaign's prompts to edit.
-  - List of 7 editable files: master_beater_system.txt, master_beater_user.txt, scriptwriter_system.txt, scriptwriter_user.txt, style_integrator_system.txt, style_integrator_user.txt, page_prompt.txt.
+  - List of 7 editable files: story_architect_system.txt, story_architect_user.txt, scriptwriter_system.txt, scriptwriter_user.txt, style_integrator_system.txt, style_integrator_user.txt, page_prompt.txt.
   - Art direction template JSON: special handling to validate required fields (base_style, characters, color_palette, layout_and_composition, lettering_and_dialog, text_rendering_guide) using rules from `src/prompter.py`.
   - File list with Load, Save, and Reset-to-Default buttons.
   - Large text area for editing.

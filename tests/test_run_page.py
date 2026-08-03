@@ -241,7 +241,7 @@ def test_run_page_build_config_maps_form_fields() -> None:
     assert config.art_style == "bundled:brutalist"
     assert config.generate_images is True
     assert config.image_generation_model == "gemini-3.1-flash-image"
-    assert not hasattr(config, "beater_model")
+    assert not hasattr(config, "architect_model")
     assert not hasattr(config, "script_model")
     assert not hasattr(config, "style_model")
 

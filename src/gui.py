@@ -59,7 +59,7 @@ LOADING_GIF_URL = "https://upload.wikimedia.org/wikipedia/commons/b/b1/Loading_i
 _STAGE_LABELS: list[tuple[str, str]] = [
     ("scrape", "Scrape"),
     ("entities", "Entities"),
-    ("beater", "Beater"),
+    ("architect", "Architect"),
     ("script", "Script"),
     ("style", "Style"),
     ("prompt", "Prompt"),
@@ -270,7 +270,7 @@ def build_run_page(
         if is_story_url:
             rerun_dropdown.value = "scrape"
         elif rerun_dropdown.value == "scrape" or rerun_dropdown.value is None:
-            rerun_dropdown.value = "beater"
+            rerun_dropdown.value = "architect"
 
     def _set_busy_state(busy: bool) -> None:
         run_button.disabled = busy
@@ -289,7 +289,7 @@ def build_run_page(
             rerun = "scrape"
         else:
             url = selected_episode.url if selected_episode and selected_episode.url else (url_field.value or "")
-            rerun = rerun_dropdown.value or "beater"
+            rerun = rerun_dropdown.value or "architect"
         return RunConfig(
             url=url,
             campaign=campaign_dropdown.value or "",
@@ -490,8 +490,8 @@ def _validate_art_template(text: str) -> str | None:
 
 _PROMPT_FILE_LABELS: list[tuple[str, str]] = [
     ("art_direction_template", f"art_direction/{DEFAULT_ART_STYLE_STEM}.json"),
-    ("master_beater_system", "master_beater_system.txt"),
-    ("master_beater_user", "master_beater_user.txt"),
+    ("story_architect_system", "story_architect_system.txt"),
+    ("story_architect_user", "story_architect_user.txt"),
     ("scriptwriter_system", "scriptwriter_system.txt"),
     ("scriptwriter_user", "scriptwriter_user.txt"),
     ("style_integrator_system", "style_integrator_system.txt"),
@@ -986,7 +986,7 @@ def build_output_page(
 
     quick_rerun_stage_dropdown = _ft.Dropdown(
         label="Rerun from stage",
-        value="beater",
+        value="architect",
         options=[_ft.dropdown.Option(stage, label) for stage, label in _STAGE_LABELS],
         width=190,
     )
@@ -1199,7 +1199,7 @@ def build_output_page(
         }
 
     def _apply_stage_gating() -> None:
-        stage = quick_rerun_stage_dropdown.value or "beater"
+        stage = quick_rerun_stage_dropdown.value or "architect"
         recap_dropdown.disabled = not setting_field_enabled("recap", stage)
         panel_count_field.disabled = not setting_field_enabled("panels", stage)
         total_pages_field.disabled = not setting_field_enabled("pages", stage)
@@ -1232,7 +1232,7 @@ def build_output_page(
         )
 
     def _validate_rerun_settings() -> str | None:
-        stage = quick_rerun_stage_dropdown.value or "beater"
+        stage = quick_rerun_stage_dropdown.value or "architect"
         if stage not in STAGE_ORDER:
             return None
         required = required_rerun_for_config_diff(
@@ -1628,7 +1628,7 @@ def build_output_page(
 
         campaign = campaign_dropdown.value or ""
         episode_slug = episode_dropdown.value or ""
-        stage = quick_rerun_stage_dropdown.value or "beater"
+        stage = quick_rerun_stage_dropdown.value or "architect"
         episode = _episodes_by_slug.get(episode_slug)
         url = episode.url if episode and episode.url else ""
 

@@ -19,7 +19,7 @@ from prompt_templates import (
     render_prompt_template,
 )
 from scraper import RawTextCheckpoint
-from master_beater import (
+from story_architect import (
     SCENE_HEADER_RE,
     StoryBibleCheckpoint,
     load_story_bible,

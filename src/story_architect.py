@@ -13,8 +13,8 @@ from entities import StoryBeat, WorldStateCheckpoint, format_character_details
 from llm_client import build_openai_client
 from model_defaults import DEFAULT_MODEL
 from prompt_templates import (
-    MASTER_BEATER_SYSTEM_PROMPT_FILENAME,
-    MASTER_BEATER_USER_PROMPT_FILENAME,
+    STORY_ARCHITECT_SYSTEM_PROMPT_FILENAME,
+    STORY_ARCHITECT_USER_PROMPT_FILENAME,
     render_prompt_template,
 )
 from scraper import RawTextCheckpoint
@@ -383,11 +383,11 @@ def _run_cli() -> None:
         ),
     }
     system_prompt_text = render_prompt_template(
-        MASTER_BEATER_SYSTEM_PROMPT_FILENAME,
+        STORY_ARCHITECT_SYSTEM_PROMPT_FILENAME,
         **template_vars,
     )
     user_prompt_text = render_prompt_template(
-        MASTER_BEATER_USER_PROMPT_FILENAME,
+        STORY_ARCHITECT_USER_PROMPT_FILENAME,
         **template_vars,
     )
 

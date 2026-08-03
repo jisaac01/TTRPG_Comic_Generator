@@ -139,7 +139,7 @@ def format_character_details(
     atoms, clothing, weapons, and props. Omits narrative description and
     personality quirks when any visual content exists.
 
-    audience=\"narrative\" (script / beater): identity header, role description,
+    audience=\"narrative\" (script / architect): identity header, role description,
     visual summary, and character_quirks.
 
     Placeholder values (None, Unknown, etc.) are omitted. Falls back to

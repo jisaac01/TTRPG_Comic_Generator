@@ -21,8 +21,8 @@ def _write_version(version_dir: Path, status: str = "ok") -> None:
     prompts_dir = version_dir / "prompts"
     prompts_dir.mkdir(exist_ok=True)
     for filename in (
-        "master_beater_system.txt",
-        "master_beater_user.txt",
+        "story_architect_system.txt",
+        "story_architect_user.txt",
         "scriptwriter_system.txt",
         "scriptwriter_user.txt",
         "style_integrator_system.txt",
@@ -51,8 +51,8 @@ def test_repository_service_discovers_campaigns_episodes_versions_and_prompts(tm
     art_dir.mkdir()
     (art_dir / "brutalist.json").write_text("{}", encoding="utf-8")
     for filename in (
-        "master_beater_system.txt",
-        "master_beater_user.txt",
+        "story_architect_system.txt",
+        "story_architect_user.txt",
         "scriptwriter_system.txt",
         "scriptwriter_user.txt",
         "style_integrator_system.txt",

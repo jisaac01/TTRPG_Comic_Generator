@@ -5,7 +5,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
 import scriptwriter
-import master_beater
+import story_architect
 from model_defaults import DEFAULT_MODEL
 
 
@@ -94,7 +94,7 @@ The group pushes deeper into the marsh. The narrow path winds between walls of r
 Scene 3:
 They pause at a collapsed ruin gate to reassess. The ancient structure looms before them, half-buried in the marsh. Del calls out, "We hold here." as the party takes shelter behind the crumbling stones. Del still holds the torch, the flame casting eerie shadows on the ruins.
 """
-    master_beater.write_story_bible(story_bible_path, story_bible_text)
+    story_architect.write_story_bible(story_bible_path, story_bible_text)
     return raw_path, entities_path, story_bible_path
 
 
@@ -400,7 +400,7 @@ def test_format_entities_for_prompt_excludes_reference_quotes():
 def test_format_story_bible_for_prompt_includes_entities(tmp_path):
     _, _, architecture_path = _write_input_checkpoints(tmp_path)
 
-    architecture = master_beater.load_story_bible(architecture_path)
+    architecture = story_architect.load_story_bible(architecture_path)
 
     prompt_blob = scriptwriter._format_story_bible_for_prompt(architecture)
 

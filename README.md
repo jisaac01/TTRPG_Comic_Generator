@@ -123,7 +123,7 @@ The GUI provides:
 
 Each campaign has its own folder under the **user campaigns root** (see [Runtime paths](#runtime-paths)). On the first pipeline run, the campaign folder is bootstrapped automatically with reusable text-prompt defaults for:
 
-- `master_beater_system.txt` / `master_beater_user.txt`
+- `story_architect_system.txt` / `story_architect_user.txt`
 - `scriptwriter_system.txt` / `scriptwriter_user.txt`
 - `style_integrator_system.txt` / `style_integrator_user.txt`
 - `entities_continuity_system.txt` / `entities_continuity_user.txt`
@@ -188,7 +188,7 @@ python src/pipeline.py dreadmarsh https://scrybequill.com/share/...
 python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --recap-version short
 
 # Update story bible and everything downstream
-python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --rerun-from beater
+python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --rerun-from architect
 
 # Update art style integration only — creates v003/, clones from working/, re-runs Phase 4.5 and Phase 5
 python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --rerun-from style
@@ -222,17 +222,17 @@ python src/pipeline.py belowdown https://scrybequill.com/share/...
 
 ```
 --campaigns-root PATH        default: user app-data campaigns/ (see Runtime paths)
---beater-model NAME          default: DEFAULT_MODEL (src/model_defaults.py)
+--architect-model NAME          default: DEFAULT_MODEL (src/model_defaults.py)
 --script-model NAME          default: DEFAULT_MODEL (src/model_defaults.py)
 --style-model NAME           default: DEFAULT_MODEL (src/model_defaults.py)
 --panel-count N              default: 6 (panels per page)
 --total-pages N              default: 1 (number of comic pages)
 --art-style NAME             Named style (stem or id, e.g. brutalist or bundled:brutalist)
 --art-style-template PATH    Explicit art direction JSON path (overrides --art-style)
---master-beater-system-prompt PATH
-                             Override the master beater system prompt template for this run only
---master-beater-user-prompt PATH
-                             Override the master beater user prompt template for this run only
+--story-architect-system-prompt PATH
+                             Override the story architect system prompt template for this run only
+--story-architect-user-prompt PATH
+                             Override the story architect user prompt template for this run only
 --scriptwriter-system-prompt PATH
                              Override the system prompt template for this run only
 --scriptwriter-user-prompt PATH
@@ -242,7 +242,7 @@ python src/pipeline.py belowdown https://scrybequill.com/share/...
 --style-integrator-user-prompt PATH
                              Override the style integrator user prompt template for this run only
 --page-prompt-template PATH  Override the page prompt template for this run only
---rerun-from PHASE           scrape | entities | beater | script | style | prompt
+--rerun-from PHASE           scrape | entities | architect | script | style | prompt
 --recap-version VERSION      short | standard | alternate/alt | long
 --skip-style                 Skip Phase 4.5 and generate Phase 5 prompt from 03_script.json
 ```
@@ -281,7 +281,7 @@ You can also generate images outside a full pipeline run from the Output tab: se
 
 - Phase 1 scrapes the ScrybeQuill recap and caches all recap variants.
 - Phase 2 extracts entities from scraped notes, then merges them with the campaign entities bible via an LLM continuity pass.
-- Phase 3 master beater creates a story bible from beats (text-only scene breakdown). Total scene count = `panel_count × total_pages`.
+- Phase 3 story architect creates a story bible from beats (text-only scene breakdown). Total scene count = `panel_count × total_pages`.
 - Phase 4 scriptwriter realizes the story bible into per-page script checkpoints with panel prose, dialogue, and continuity state. In panel mode, scripting runs per panel.
 - Phase 4.5 style integrator rewrites only `setting` and `visual_action` on each page checkpoint.
 - Phase 5 prompt generation produces image prompts from the styled script (or unstyled script when `--skip-style` is set).
@@ -290,7 +290,7 @@ You can also generate images outside a full pipeline run from the Output tab: se
 
 ### Script generation behavior
 
-- `--panel-count` and `--total-pages` together determine how many scenes the master beater produces.
+- `--panel-count` and `--total-pages` together determine how many scenes the story architect produces.
 - Scriptwriter follows the story bible text rather than deciding pacing from beats directly.
 - Scraped quotes are included in model context as reference dialogue and used when scene-appropriate.
 
@@ -309,8 +309,8 @@ src/prompts/art_direction/          # bundled art style library (in repo)
   dreadmarsh/
     art_direction/                  # optional campaign-local art styles
       brutalist.json
-    master_beater_system.txt        # campaign-level master beater system prompt
-    master_beater_user.txt          # campaign-level master beater user prompt
+    story_architect_system.txt        # campaign-level story architect system prompt
+    story_architect_user.txt          # campaign-level story architect user prompt
     scriptwriter_system.txt         # campaign-level scriptwriter system prompt
     scriptwriter_user.txt           # campaign-level scriptwriter user prompt
     style_integrator_system.txt     # campaign-level style integrator system prompt
@@ -381,9 +381,9 @@ python src/scraper.py <URL> --checkpoint "$EP/01_raw_text.json" --recap-version 
 python -c "from pathlib import Path; from entities import build_entities_from_raw; build_entities_from_raw(Path('$EP/01_raw_text.json'), Path('$EP/02_entities.json'))"
 ```
 
-**Phase 3 — Master Beater**
+**Phase 3 — Story Architect**
 ```bash
-python src/master_beater.py \
+python src/story_architect.py \
   --raw-input "$EP/01_raw_text.json" \
   --entities-input "$EP/02_entities.json" \
   --output "$EP/02_5_story_bible.txt" \
