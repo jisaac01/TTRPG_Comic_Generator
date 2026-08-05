@@ -322,7 +322,9 @@ src/prompts/art_direction/          # bundled art style library (in repo)
     dreadmarsh-crossing/            # episode folder (slug from story title, identity from URL)
       episode_meta.json             # url, title, created_at
       working/                      # mutable workspace; clone source for the next run
+        creative_direction.txt      # optional user scene/character guidance for architect
       v001/
+        creative_direction.txt                  # snapshot of working guidance for this run
         01_raw_text.json
         02_entities.json
         02_5_entities_bible.json            # version-local full campaign entities bible
@@ -355,6 +357,7 @@ src/prompts/art_direction/          # bundled art style library (in repo)
 - After a run completes, the new version's artifacts (and `run_status.json`) are mirrored into `working/` so the workspace matches what the next run will start from.
 - If `working/` is missing (older campaigns), the next run seeds it from the latest `vNNN` automatically.
 - Edit intermediate artifacts (story bible, scripts, etc.) in `working/` for the next pass; leave `vNNN` folders as immutable history.
+- **Creative direction** (`working/creative_direction.txt`): optional freeform notes that steer the story architect (scene choice / what to emphasize or avoid—especially useful in vignette mode). The file is always cloned into each new version when present. If the file is missing or blank, no creative-direction section is added to prompts. Edit it on the Output tab under `working` (Save), then re-run from **architect** for scene steering to take effect. (Scriptwriter is not wired to this file yet.)
 - Only phases invalidated by `--rerun-from` (or changed run settings like generation mode or panel count) are re-computed.
 - The effective art direction and prompt template files are copied into every version folder for reproducibility.
 - Episode identity is canonical by URL — if the story title changes on the source site, the same episode folder is reused.

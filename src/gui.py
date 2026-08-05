@@ -1020,6 +1020,7 @@ def build_output_page(
         expand=True,
         text_style=_ft.TextStyle(font_family="monospace", size=12),
     )
+    save_file_button = _ft.OutlinedButton("Save", visible=False)
     copy_content_button = _ft.IconButton(
         icon=_ft.Icons.CONTENT_COPY,
         tooltip="Copy to clipboard",
@@ -1306,6 +1307,7 @@ def build_output_page(
 
     def _list_version_files(version_dir: Path) -> list[Path]:
         preferred = [
+            "creative_direction.txt",
             "01_raw_text.json",
             "02_entities.json",
             "02_5_story_bible.txt",
@@ -1320,13 +1322,31 @@ def build_output_page(
             path = version_dir / name
             if path.exists() and path.is_file():
                 files.append(path)
-        extra = sorted(
-            p
-            for p in version_dir.iterdir()
-            if p.is_file() and p not in files
-        )
-        files.extend(extra)
+            elif (
+                name == "creative_direction.txt"
+                and version_dir.name == WORKING_DIR_NAME
+            ):
+                # Always list under working so users can create guidance before a run.
+                files.append(path)
+        if version_dir.exists():
+            extra = sorted(
+                p
+                for p in version_dir.iterdir()
+                if p.is_file() and p not in files
+            )
+            files.extend(extra)
         return files
+
+    def _creative_direction_editable() -> bool:
+        return (
+            (version_dropdown.value or "") == WORKING_DIR_NAME
+            and (file_list.value or "") == "creative_direction.txt"
+        )
+
+    def _update_preview_editability() -> None:
+        editable = _creative_direction_editable()
+        preview.read_only = not editable
+        save_file_button.visible = editable
 
     def _refresh_file_list(status_value: str | None = None) -> None:
         _selected_files.clear()
@@ -1380,17 +1400,41 @@ def build_output_page(
         if not selected:
             preview.value = ""
             generate_selected_image_button.visible = False
+            _update_preview_editability()
             return
         path = _selected_files.get(selected)
-        if not path or not path.exists():
+        if not path:
             preview.value = ""
             generate_selected_image_button.visible = False
+            _update_preview_editability()
+            return
+        if not path.exists():
+            # Allow empty editor for working/creative_direction.txt before first save.
+            preview.value = ""
+            generate_selected_image_button.visible = False
+            _update_preview_editability()
             return
         try:
             preview.value = _format_preview(path)
         except Exception as exc:
             preview.value = f"Unable to render preview: {exc}"
         generate_selected_image_button.visible = path.name.startswith("04_page_") and path.name.endswith("_prompt.txt")
+        _update_preview_editability()
+
+    def on_save_file(_e: Any) -> None:
+        if not _creative_direction_editable():
+            return
+        path = _selected_files.get(file_list.value or "")
+        if path is None:
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        text = preview.value or ""
+        if text and not text.endswith("\n"):
+            text = text + "\n"
+        path.write_text(text, encoding="utf-8")
+        _selected_files[path.name] = path
+        output_status_text.value = f"Saved {path.name} → working/"
+        page.update()
 
     def _selected_prompt_path() -> Path | None:
         selected = file_list.value
@@ -1538,6 +1582,7 @@ def build_output_page(
         page.update()
 
     file_list.on_change = on_file_change
+    save_file_button.on_click = on_save_file
 
     def _refresh_all() -> None:
         _refresh_versions()
@@ -1763,7 +1808,7 @@ def build_output_page(
                     _ft.Column(
                         controls=[
                             _ft.Row(
-                                controls=[copy_content_button],
+                                controls=[save_file_button, copy_content_button],
                                 alignment=_ft.MainAxisAlignment.END,
                             ),
                             preview,
@@ -1788,6 +1833,8 @@ def build_output_page(
         "version_dropdown": version_dropdown,
         "file_list": file_list,
         "preview": preview,
+        "save_file_button": save_file_button,
+        "on_save_file": on_save_file,
         "copy_content_button": copy_content_button,
         "on_copy_content": on_copy_content,
         "run_status_text": run_status_text,

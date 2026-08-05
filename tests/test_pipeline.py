@@ -500,6 +500,30 @@ def test_create_version_dir_rerun_from_scrape_deletes_all(tmp_path):
     assert not (version_dir / "04_page_1_prompt.txt").exists()
 
 
+def test_create_version_dir_always_clones_creative_direction(tmp_path):
+    """creative_direction.txt is episode guidance; clone regardless of rerun stage."""
+    from pipeline import CREATIVE_DIRECTION_FILENAME
+
+    episode_dir = tmp_path / "ep"
+    working = episode_dir / WORKING_DIR_NAME
+    working.mkdir(parents=True)
+    _write_version_checkpoints(working)
+    _write_run_config(working)
+    guidance = "Prefer the tavern argument; avoid sword-leg close-ups.\n"
+    (working / CREATIVE_DIRECTION_FILENAME).write_text(guidance, encoding="utf-8")
+
+    stages = ["scrape", "entities", "architect", "script", "style", "prompt", None]
+    for rerun_from in stages:
+        version_dir, _, _ = _create_version_dir(
+            episode_dir,
+            rerun_from=rerun_from,
+            new_config=_default_run_config(),
+        )
+        path = version_dir / CREATIVE_DIRECTION_FILENAME
+        assert path.exists(), f"missing for rerun_from={rerun_from!r}"
+        assert path.read_text(encoding="utf-8") == guidance
+
+
 def test_create_version_dir_clones_from_working_not_latest_version(tmp_path):
     """Clone source is working/, even when a newer historical version diverged."""
     episode_dir = tmp_path / "ep"
@@ -1896,6 +1920,84 @@ async def test_architect_prompt_uses_total_scene_count(tmp_path):
     )
     assert "Target scene count: 6" in rendered_prompt
     assert "Break the story into exactly 6 scenes." in rendered_prompt
+
+
+@pytest.mark.asyncio
+async def test_architect_prompt_includes_creative_direction_from_working(tmp_path):
+    from pipeline import CREATIVE_DIRECTION_FILENAME
+
+    episode_dir = _make_episode(
+        tmp_path, "dreadmarsh", "https://example.test/story", "Dreadmarsh Crossing"
+    )
+    working = _ensure_working_dir(episode_dir)
+    guidance = "Prefer the tavern argument; avoid any sword-for-a-leg close-up."
+    (working / CREATIVE_DIRECTION_FILENAME).write_text(guidance + "\n", encoding="utf-8")
+
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=2,
+        rerun_from="architect",
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock),
+        patch("pipeline.build_entities_from_raw"),
+        patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT) as mock_architect,
+        patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
+        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT),
+    ):
+        result = await pipeline.run()
+
+    version_dir = _version_dir_from_result(result)
+    assert (version_dir / CREATIVE_DIRECTION_FILENAME).exists()
+    assert guidance in (version_dir / CREATIVE_DIRECTION_FILENAME).read_text(encoding="utf-8")
+
+    _, architect_kwargs = mock_architect.call_args
+    user_prompt = architect_kwargs["user_prompt_text"]
+    assert user_prompt.startswith("**Creative direction (user):**")
+    assert guidance in user_prompt
+    final_user = (version_dir / "prompts" / "story_architect_user_FINAL.txt").read_text(
+        encoding="utf-8"
+    )
+    assert guidance in final_user
+
+    # Scriptwriter is not wired to creative_direction in this pass.
+    script_final = (
+        version_dir / "prompts" / "scriptwriter_user_FINAL_page_001.txt"
+    ).read_text(encoding="utf-8")
+    assert "Creative direction" not in script_final
+
+
+@pytest.mark.asyncio
+async def test_architect_prompt_omits_creative_direction_when_file_missing(tmp_path):
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=2,
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT) as mock_architect,
+        patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
+        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT),
+    ):
+        result = await pipeline.run()
+
+    _, architect_kwargs = mock_architect.call_args
+    assert "Creative direction" not in architect_kwargs["user_prompt_text"]
+
+    version_dir = _version_dir_from_result(result)
+    final_user = (version_dir / "prompts" / "story_architect_user_FINAL.txt").read_text(
+        encoding="utf-8"
+    )
+    assert "Creative direction" not in final_user
 
 
 @pytest.mark.asyncio

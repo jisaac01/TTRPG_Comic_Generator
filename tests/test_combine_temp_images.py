@@ -18,8 +18,17 @@ def test_sorted_image_paths_uses_oldest_to_newest_creation_order(tmp_path, monke
         third: 20.0,
     }
 
-    def fake_stat(self):
-        return SimpleNamespace(st_birthtime=timestamps[self], st_ctime=timestamps[self])
+    real_stat = Path.stat
+
+    def fake_stat(self, *args, **kwargs):
+        if self in timestamps:
+            real = real_stat(self, *args, **kwargs)
+            return SimpleNamespace(
+                st_mode=real.st_mode,
+                st_birthtime=timestamps[self],
+                st_ctime=timestamps[self],
+            )
+        return real_stat(self, *args, **kwargs)
 
     monkeypatch.setattr(Path, "stat", fake_stat)
 

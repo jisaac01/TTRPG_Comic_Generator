@@ -408,6 +408,71 @@ def test_prepare_architect_prompts_normalizes_aliases_in_rendered_prompts(tmp_pa
     assert "as Knobby stabbed the man" in final_user
 
 
+def test_prepare_architect_prompts_prepends_creative_direction_when_present(tmp_path):
+    from entities import Character, WorldStateCheckpoint
+    from prompt_saver import prepare_architect_prompts
+
+    world = WorldStateCheckpoint(
+        url="https://example.test/story",
+        title="Swamp Trouble",
+        author="GM",
+        model=DEFAULT_MODEL,
+        player_characters=[
+            Character(name="Del", description="A druid in mossy robes"),
+        ],
+        npcs=[],
+        locations=[],
+        beats=[],
+        analyzed_at="2026-05-04T00:00:00+00:00",
+    )
+    direction = "Prefer the tavern argument; avoid any sword-for-a-leg close-up."
+
+    _system, user_prompt = prepare_architect_prompts(
+        version_dir=tmp_path,
+        content="Del enters the tavern and argues with the barkeep.",
+        world=world,
+        scene_count=2,
+        creative_direction=direction,
+    )
+
+    assert user_prompt.startswith("**Creative direction (user):**")
+    assert direction in user_prompt
+    assert "hard constraints" in user_prompt.casefold()
+    final_user = (tmp_path / "prompts" / "story_architect_user_FINAL.txt").read_text(
+        encoding="utf-8"
+    )
+    assert direction in final_user
+
+
+def test_prepare_architect_prompts_omits_creative_direction_when_empty(tmp_path):
+    from entities import Character, WorldStateCheckpoint
+    from prompt_saver import prepare_architect_prompts
+
+    world = WorldStateCheckpoint(
+        url="https://example.test/story",
+        title="Swamp Trouble",
+        author="GM",
+        model=DEFAULT_MODEL,
+        player_characters=[
+            Character(name="Del", description="A druid in mossy robes"),
+        ],
+        npcs=[],
+        locations=[],
+        beats=[],
+        analyzed_at="2026-05-04T00:00:00+00:00",
+    )
+
+    for creative_direction in ("", "   ", None):
+        _system, user_prompt = prepare_architect_prompts(
+            version_dir=tmp_path,
+            content="Del crosses the marsh.",
+            world=world,
+            scene_count=1,
+            creative_direction=creative_direction,
+        )
+        assert "Creative direction" not in user_prompt
+
+
 def test_create_story_bible_rejects_invalid_scene_count(tmp_path):
     raw_path, entities_path = _write_input_checkpoints(tmp_path)
 

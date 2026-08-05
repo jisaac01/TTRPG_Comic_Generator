@@ -76,6 +76,23 @@ def _final_prompt_filename(template_filename: str) -> str:
     return f"{stem}_FINAL.txt"
 
 
+def _prepend_creative_direction(user_prompt: str, creative_direction: str | None) -> str:
+    """Prepend a creative-direction block when the user provided non-empty guidance.
+
+    Empty or missing guidance leaves the prompt unchanged (no sentinel section).
+    """
+    text = (creative_direction or "").strip()
+    if not text:
+        return user_prompt
+    block = (
+        "**Creative direction (user):**\n"
+        f"{text}\n\n"
+        "Treat the above as hard constraints on which moment to adapt, "
+        "what to emphasize, and what to omit.\n\n"
+    )
+    return block + user_prompt
+
+
 def prepare_architect_prompts(
     version_dir: Path,
     content: str,
@@ -84,10 +101,13 @@ def prepare_architect_prompts(
     raw_quotes: list[dict[str, str | None]] | None = None,
     system_prompt_path: Path | None = None,
     user_prompt_path: Path | None = None,
+    creative_direction: str | None = None,
 ) -> tuple[str, str]:
     """Prepare and save story architect prompts before model call.
 
     FINAL filenames follow the active template names (standard or vignette).
+    When *creative_direction* is non-empty after strip, a guidance block is
+    prepended to the user prompt only (section omitted when empty).
 
     Returns tuple of (system_prompt, user_prompt) ready to send to model.
     """
@@ -135,10 +155,13 @@ def prepare_architect_prompts(
         template_path=system_prompt_path,
         **template_vars,
     )
-    user_prompt = _render_prompt_template_checked(
-        user_filename,
-        template_path=user_prompt_path,
-        **template_vars,
+    user_prompt = _prepend_creative_direction(
+        _render_prompt_template_checked(
+            user_filename,
+            template_path=user_prompt_path,
+            **template_vars,
+        ),
+        creative_direction,
     )
 
     # Save interpolated versions named after the active templates.

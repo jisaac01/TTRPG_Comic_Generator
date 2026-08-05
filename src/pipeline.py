@@ -102,6 +102,7 @@ EPISODE_META_FILENAME = "episode_meta.json"
 RUN_STATUS_FILENAME = "run_status.json"
 WORKING_DIR_NAME = "working"
 PROMPTS_SUBDIR_NAME = "prompts"
+CREATIVE_DIRECTION_FILENAME = "creative_direction.txt"
 STORY_BIBLE_PAGE_GLOB = "02_6_story_bible_page_*.txt"
 STORY_BIBLE_PANEL_GLOB = "02_6_story_bible_page_*_panel_*.txt"
 SCRIPT_PAGE_GLOB = "03_script_page_*.json"
@@ -551,6 +552,10 @@ def _create_version_dir(
         )
         _copy_checkpoint_patterns(working, version_dir, files_to_copy)
 
+        # Episode creative direction is user guidance, not a stage output:
+        # always clone when present, independent of rerun_from.
+        _copy_checkpoint_patterns(working, version_dir, [CREATIVE_DIRECTION_FILENAME])
+
         # Phase-5 page/panel prompt *outputs* are stage checkpoints and may be
         # preserved. version/prompts/ is audit-only and is never cloned forward;
         # each run captures templates from campaign root when stages execute.
@@ -559,6 +564,14 @@ def _create_version_dir(
                 shutil.copy2(prev_prompt_file, version_dir / prev_prompt_file.name)
 
     return version_dir, version_name, effective_rerun
+
+
+def _load_creative_direction(version_dir: Path) -> str:
+    """Return stripped creative_direction.txt text, or empty string if missing/blank."""
+    path = version_dir / CREATIVE_DIRECTION_FILENAME
+    if not path.exists():
+        return ""
+    return path.read_text(encoding="utf-8").strip()
 
 
 def _generate_script_pages_panel_mode(
@@ -1218,6 +1231,7 @@ class ComicPipeline:
                         ],
                         system_prompt_path=prompt_template_paths[architect_system_key],
                         user_prompt_path=prompt_template_paths[architect_user_key],
+                        creative_direction=_load_creative_direction(version_dir),
                     )
                     story_bible = create_story_bible(
                         raw_checkpoint_path=raw_path,

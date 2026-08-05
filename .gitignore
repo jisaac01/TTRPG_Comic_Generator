@@ -60,6 +60,7 @@ dmypy.json
 .env
 .env.*
 .venv/
+.venv-sandbox/
 venv/
 env/
 ENV/
