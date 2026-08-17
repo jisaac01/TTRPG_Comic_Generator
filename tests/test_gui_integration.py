@@ -1375,3 +1375,63 @@ def test_output_page_campaign_switch_on_select_path(tmp_path):
     assert state["episode_dropdown"].value == "other-episode"
     assert state["version_dropdown"].value == "v001"
     assert "Loaded: other_camp / other-episode / v001" == state["output_status_text"].value
+
+
+def test_output_page_lists_episodes_when_meta_slugs_collide(tmp_path):
+    import flet as ft
+
+    campaigns_root = _make_output_versions(tmp_path)
+    campaign_root = campaigns_root / "belowdown"
+    live = campaign_root / "belowdown-ep-12"
+    archive = campaign_root / "belowdown-ep-12_pre_entity_bible"
+    newest = campaign_root / "the-vault-of-the-once-great-thief-ep-3"
+    for episode_dir, slug, created_at in (
+        (archive, "belowdown-ep-12", "2026-06-13T16:24:46.013591+00:00"),
+        (live, "belowdown-ep-12", "2026-06-13T22:14:48.252712+00:00"),
+        (newest, "the-vault-of-the-once-great-thief-ep-3", "2026-08-15T18:50:26.072604+00:00"),
+    ):
+        v001 = episode_dir / "v001"
+        v001.mkdir(parents=True, exist_ok=True)
+        (episode_dir / "episode_meta.json").write_text(
+            json.dumps(
+                {
+                    "slug": slug,
+                    "url": f"https://example.com/{episode_dir.name}",
+                    "title": episode_dir.name,
+                    "created_at": created_at,
+                }
+            ),
+            encoding="utf-8",
+        )
+        (v001 / "run_status.json").write_text(
+            json.dumps({"status": "ok", "checkpoints": [], "failed": [], "errors": []}),
+            encoding="utf-8",
+        )
+        (v001 / "04_page_1_prompt.txt").write_text(episode_dir.name, encoding="utf-8")
+
+    page = _FakePage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+
+    handler = state["campaign_dropdown"].on_select or state["campaign_dropdown"].on_change
+    handler(
+        type(
+            "CampaignSelectEvent",
+            (),
+            {
+                "data": "belowdown",
+                "control": type("CampaignControl", (), {"value": "belowdown"})(),
+            },
+        )()
+    )
+
+    option_keys = [option.key for option in state["episode_dropdown"].options]
+    assert option_keys == [
+        "belowdown-ep-12_pre_entity_bible",
+        "belowdown-ep-12",
+        "the-vault-of-the-once-great-thief-ep-3",
+    ]
+    assert len(option_keys) == len(set(option_keys))
+    assert state["episode_dropdown"].value == "the-vault-of-the-once-great-thief-ep-3"
+    assert state["version_dropdown"].value == "v001"
+    assert state["loading_ring"].visible is False

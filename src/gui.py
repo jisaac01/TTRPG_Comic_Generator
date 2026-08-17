@@ -1607,10 +1607,12 @@ def build_output_page(
             campaign_dropdown.value = selected
         _set_loading(True)
         page.update()
-        _refresh_episodes()
-        _refresh_all()
-        _set_loading(False)
-        page.update()
+        try:
+            _refresh_episodes()
+            _refresh_all()
+        finally:
+            _set_loading(False)
+            page.update()
 
     def on_episode_changed(event: Any) -> None:
         selected = _extract_change_value(event)
@@ -1618,9 +1620,11 @@ def build_output_page(
             episode_dropdown.value = selected
         _set_loading(True)
         page.update()
-        _refresh_all()
-        _set_loading(False)
-        page.update()
+        try:
+            _refresh_all()
+        finally:
+            _set_loading(False)
+            page.update()
 
     def on_version_changed(event: Any) -> None:
         selected = _extract_change_value(event)
@@ -1628,11 +1632,13 @@ def build_output_page(
             version_dropdown.value = selected
         _set_loading(True)
         page.update()
-        status_value = _set_run_status()
-        _refresh_file_list(status_value)
-        _load_selected_file()
-        _set_loading(False)
-        page.update()
+        try:
+            status_value = _set_run_status()
+            _refresh_file_list(status_value)
+            _load_selected_file()
+        finally:
+            _set_loading(False)
+            page.update()
 
     _bind_dropdown_handler(campaign_dropdown, on_campaign_changed)
     _bind_dropdown_handler(episode_dropdown, on_episode_changed)
@@ -1858,6 +1864,7 @@ def build_output_page(
         "refresh_campaigns": _refresh_campaign_options,
         "refresh_episodes": _refresh_episodes,
         "refresh_all": _refresh_all,
+        "loading_ring": loading_ring,
     }
 
 

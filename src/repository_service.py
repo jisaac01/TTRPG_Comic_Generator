@@ -111,7 +111,7 @@ class RepositoryService:
             episodes.append(
                 Episode(
                     campaign=campaign,
-                    slug=meta.get("slug", episode_dir.name),
+                    slug=episode_dir.name,
                     url=meta.get("url"),
                     title=meta.get("title"),
                     created_at=meta.get("created_at"),

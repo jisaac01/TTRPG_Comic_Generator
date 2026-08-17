@@ -123,3 +123,53 @@ def test_repository_service_discovers_campaigns_episodes_versions_and_prompts(tm
     ]
     working_files = service.get_version_files("dreadmarsh", "dreadmarsh-crossing", "working")
     assert working_files.raw_text == working / "01_raw_text.json"
+
+
+def test_list_episodes_uses_directory_name_when_meta_slugs_collide(tmp_path):
+    campaigns_root = tmp_path / "campaigns"
+    campaign_root = campaigns_root / "belowdown"
+    live = campaign_root / "belowdown-ep-12"
+    archive = campaign_root / "belowdown-ep-12_pre_entity_bible"
+    for episode_dir, created_at in (
+        (archive, "2026-06-13T16:24:46.013591+00:00"),
+        (live, "2026-06-13T22:14:48.252712+00:00"),
+    ):
+        episode_dir.mkdir(parents=True)
+        (episode_dir / "episode_meta.json").write_text(
+            json.dumps(
+                {
+                    "url": "https://example.test/ep-12",
+                    "slug": "belowdown-ep-12",
+                    "title": "Belowdown Ep. 12",
+                    "created_at": created_at,
+                }
+            ),
+            encoding="utf-8",
+        )
+        _write_version(episode_dir / "v001")
+
+    newest = campaign_root / "the-vault-of-the-once-great-thief-ep-3"
+    newest.mkdir()
+    (newest / "episode_meta.json").write_text(
+        json.dumps(
+            {
+                "url": "https://example.test/ep-3",
+                "slug": "the-vault-of-the-once-great-thief-ep-3",
+                "title": "The Vault of the Once Great Thief Ep 3",
+                "created_at": "2026-08-15T18:50:26.072604+00:00",
+            }
+        ),
+        encoding="utf-8",
+    )
+    _write_version(newest / "v001")
+
+    service = RepositoryService(campaigns_root)
+    episodes = service.list_episodes("belowdown")
+
+    assert [episode.slug for episode in episodes] == [
+        "belowdown-ep-12_pre_entity_bible",
+        "belowdown-ep-12",
+        "the-vault-of-the-once-great-thief-ep-3",
+    ]
+    assert len({episode.slug for episode in episodes}) == 3
+    assert service.list_versions("belowdown", "belowdown-ep-12_pre_entity_bible")
