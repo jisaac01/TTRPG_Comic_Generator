@@ -6,7 +6,7 @@
 - [x] Fix bug where characters is blank
 - [x] Add a new pipeline mode: refresh just the current stage (e.g. entities)
 - [ ] Add a second pass for continuity and fun
-- [ ] remove validation (e.g. carried items)
+- [ ] First-run scriptwriter almost always fails held-item continuity (`held_items_before` / `held_items_after` missing or mismatched between panels). Runs land as Partial with red GUI errors even when the rest of the pipeline is fine. Repair the fields, loosen the validator, or stop treating these soft failures as a failed/partial run.
 - [ ] camera angle, panel lighting
 - [ ] Allow rerun from specific version
 - [ ] Style template editing UX beyond Prompts-tab multi-style list
@@ -20,6 +20,9 @@
 - [ ] Add "find and replace" function for fixing cascading errors through all version files
 - [x] Add a "working copy" that is the version we'll be passing into the next pass
 - [ ] Unify prompt audit capture (`render_and_capture` chokepoint; drop per-stage prepare I/O) — see [PLAN_prompt_audit.md](PLAN_prompt_audit.md)
+- [ ] allowing edits in the output tab
+- [ ] warning when the templates are out of date, updating the style template to allow a splash of color, having the stylist style characters, showing the entities bible somewhere for editing, adding functionality to easily regenerate the episode entities, rerun a particular version, star versions as favorites, add a description to each run
+
 
 ---
 

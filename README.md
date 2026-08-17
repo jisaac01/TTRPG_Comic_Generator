@@ -1,15 +1,21 @@
 # TTRPG Comic Generator
 
-Converts a ScrybeQuill session recap into a structured comic script via a campaign-aware, versioned, checkpoint-resumable pipeline — then optionally generates comic images with Gemini.
+Converts a [ScrybeQuill](https://scrybequill.com) session recap into a structured comic script via a campaign-aware, versioned, checkpoint-resumable pipeline — then optionally generates comic images with Gemini.
 
 Each run is isolated in its own version folder. Prior runs are never overwritten, so you can compare outputs across art style changes, text corrections, model switches, or generation modes.
+
+![Output tab — browse version checkpoints, preview prompts, and rerun stages](docs/screenshots/output.png)
+
+![Run tab — configure a campaign and launch a pipeline run](docs/screenshots/run.png)
+
+![Prompts tab — edit art-direction styles and campaign prompt templates](docs/screenshots/prompts.png)
 
 ## Requirements
 
 - Python 3.12+
-- One of the following model backends configured for the text models selected in `src/model_defaults.py`:
-  - [Ollama](https://ollama.com) running locally for non-`gemini-` models
+- One of the following model backends configured for the text models selected in `src/model_defaults.py` (default: `gemini-3.1-flash-lite`):
   - Google Gemini API access via `GEMINI_API_KEY` for models whose name starts with `gemini-`
+  - [Ollama](https://ollama.com) running locally for non-`gemini-` models
 - **Image generation** (optional): a Gemini image model (default: `gemini-2.5-flash-image`) and a valid `GEMINI_API_KEY`. Image generation uses Gemini's OpenAI-compatible image API regardless of which backend you use for text stages.
 
 ## Setup
@@ -35,38 +41,26 @@ winget install Microsoft.VCRedist.2015+.x64
 
 Then restart your terminal and re-run `python -m playwright install chromium`.
 
-## Building for Windows
+If you are using Gemini, set `GEMINI_API_KEY` in your environment, in a local `.env` file, or in the GUI Settings dialog (stored via the system keyring).
 
-The build must be run **on a Windows machine**. Prerequisites (one-time):
+If you are using Ollama, make sure Ollama is running locally and the selected model is available. `OLLAMA_BASE_URL` defaults to `http://localhost:11434/v1`.
 
-1. Install **Visual Studio 2022+** with the "Desktop development with C++" workload.
-2. Install the VC++ Redistributable (also required at runtime for Playwright):
-   ```powershell
-   winget install Microsoft.VCRedist.2015+.x64
-   ```
+## GUI
 
-Flutter SDK is required by `flet build` but does **not** need to be installed manually — on first run, `flet build` will detect it is missing and offer to download it automatically.
+The Flet GUI is the recommended way to run the pipeline and generate images.
 
-Build command (run from project root):
-
-```powershell
-# Bundle Chromium into the packaged app (run in the same venv used for build)
-$env:PLAYWRIGHT_BROWSERS_PATH="src/playwright-browsers"
-python -m playwright install chromium
-
-# Build the EXE
-flet build windows
+```bash
+python src/main.py
 ```
 
-Verify Chromium was bundled into the build output:
+The app has three workspaces plus a Settings dialog:
 
-```powershell
-Get-ChildItem -Recurse .\build\windows -Filter chrome-headless-shell.exe
-```
+- **Run** — create campaigns and launch pipeline runs. Use **Story URL** for a new scrape, or **Existing Episode** to re-run from a chosen start stage. Configure recap variant, panel/page counts, page vs panel generation, vignette, aspect ratio, art style, skip-style, and optional image generation.
+- **Prompts** — edit campaign-level prompt templates and art-direction JSON. Bundled styles stay in the repo library; **Save** writes a campaign override that then appears on Run/Output as `name (campaign)`.
+- **Output** — browse campaign / episode / version (including the editable `working/` workspace). Preview checkpoints and prompts, regenerate a selected image or all images, stitch panel images, and re-run from a stage (optionally that stage only). Episode settings on this tab apply to the next rerun.
+- **Settings** (toolbar) — Gemini API key, default text model, and image generation model.
 
-Output is placed in `build/windows/`. The build configuration is in `pyproject.toml` — the `src/` directory is packaged as the application root, with `src/main.py` as the entry point.
-
-With the commands above, Chromium is bundled into the app, so end users do not need to run Playwright install commands.
+A shared event log at the bottom records pipeline progress and UI actions.
 
 ## Runtime paths
 
@@ -90,40 +84,14 @@ Optional overrides:
 - `COMIC_GENERATOR_CONFIG_PATH`
 - `COMIC_GENERATOR_APP_DATA_ROOT`
 
-Playwright prerequisites for Windows users:
-
-- Install VC++ runtime if needed:
-
-```powershell
-winget install Microsoft.VCRedist.2015+.x64
-```
-
 The GUI shows a startup warning when Playwright runtime prerequisites appear to be missing.
-
-If you are using Gemini, set `GEMINI_API_KEY` in your environment, in a local `.env` file, or in the GUI Settings tab (stored via the system keyring).
-
-If you are using Ollama, make sure Ollama is running locally and the selected model is available. `OLLAMA_BASE_URL` defaults to `http://localhost:11434/v1`.
-
-## GUI
-
-The Flet GUI is the recommended way to run the pipeline and manage image generation.
-
-```bash
-python src/main.py
-(python src/gui.py)
-```
-
-The GUI provides:
-
-- **Run tab** — configure and launch pipeline runs with campaign, URL, recap variant, panel/page counts, aspect ratio, generation mode, and optional image generation.
-- **Output tab** — browse version checkpoints, preview prompt files, regenerate individual images, generate all images for a version, and stitch panel images into finished pages.
-- **Settings tab** — store your Gemini API key, default text model, and image generation model.
 
 ## Campaign setup
 
 Each campaign has its own folder under the **user campaigns root** (see [Runtime paths](#runtime-paths)). On the first pipeline run, the campaign folder is bootstrapped automatically with reusable text-prompt defaults for:
 
 - `story_architect_system.txt` / `story_architect_user.txt`
+- `story_architect_vignette_system.txt` / `story_architect_vignette_user.txt`
 - `scriptwriter_system.txt` / `scriptwriter_user.txt`
 - `style_integrator_system.txt` / `style_integrator_user.txt`
 - `entities_continuity_system.txt` / `entities_continuity_user.txt`
@@ -169,7 +137,7 @@ python scripts/harvest_art_styles.py --write  # write src/prompts/art_direction/
 python src/pipeline.py <campaign> <SCRYBEQUILL_URL>
 ```
 
-On the first run the episode folder is auto-named from the story title. Subsequent runs for the same URL create a new versioned subfolder, cloning the previous version as a baseline.
+On the first run the episode folder is auto-named from the story title. Subsequent runs for the same URL create a new versioned subfolder, cloning checkpoints from that episode's `working/` directory as a baseline.
 
 Each run also copies the effective art direction and prompt templates into the new version folder so the exact generation inputs are preserved alongside the checkpoints.
 
@@ -187,6 +155,9 @@ python src/pipeline.py dreadmarsh https://scrybequill.com/share/...
 # Select a different recap variant from cached scrape data
 python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --recap-version short
 
+# Focus the story bible on one dramatic moment, expanded into the full scene count
+python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --vignette
+
 # Update story bible and everything downstream
 python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --rerun-from architect
 
@@ -196,7 +167,7 @@ python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --rerun-from
 # Rebuild only the final page prompt from the styled script
 python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --rerun-from prompt
 
-# Skip style integration (Phase 4.5 becomes a no-op); Phase 5 reads from 03_script.json
+# Skip style integration (Phase 4.5 becomes a no-op); Phase 5 reads from 03_script_page_*.json
 python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --skip-style
 
 # Multi-page comic: 2 pages × 6 panels = 12 scenes in the story bible
@@ -222,9 +193,10 @@ python src/pipeline.py belowdown https://scrybequill.com/share/...
 
 ```
 --campaigns-root PATH        default: user app-data campaigns/ (see Runtime paths)
---architect-model NAME          default: DEFAULT_MODEL (src/model_defaults.py)
---script-model NAME          default: DEFAULT_MODEL (src/model_defaults.py)
---style-model NAME           default: DEFAULT_MODEL (src/model_defaults.py)
+--model NAME                 default: DEFAULT_MODEL (src/model_defaults.py); used for all text stages
+--architect-model NAME          default: --model (Phase 3 story bible)
+--script-model NAME          default: --model (Phase 4 scripting)
+--style-model NAME           default: --model (Phase 4.5 style integration)
 --panel-count N              default: 6 (panels per page)
 --total-pages N              default: 1 (number of comic pages)
 --art-style NAME             Named style (stem or id, e.g. brutalist or bundled:brutalist)
@@ -244,8 +216,11 @@ python src/pipeline.py belowdown https://scrybequill.com/share/...
 --page-prompt-template PATH  Override the page prompt template for this run only
 --rerun-from PHASE           scrape | entities | architect | script | style | prompt
 --recap-version VERSION      short | standard | alternate/alt | long
---skip-style                 Skip Phase 4.5 and generate Phase 5 prompt from 03_script.json
+--skip-style                 Skip Phase 4.5 and generate Phase 5 prompt from 03_script_page_*.json
+--vignette                   Focus the story bible on one dramatic moment (micro-beats)
 ```
+
+Page vs panel generation mode, aspect ratio, and automated image generation are configured in the GUI, not the CLI.
 
 ### Generation modes
 
@@ -265,9 +240,13 @@ In **panel** mode:
 
 Changing generation mode invalidates checkpoints from the script phase onward.
 
+### Vignette mode
+
+Vignette is independent of page vs panel layout. When on (`--vignette`, or **Vignette (one scene)** in the GUI), the story architect uses the vignette templates (`story_architect_vignette_*.txt`) to pick one tight dramatic moment and expand it into the full scene count as micro-beats, instead of covering the whole recap. Toggling vignette invalidates from the architect phase.
+
 ### Image generation
 
-When `generate_images` is enabled (via the GUI **Generate images** checkbox or **Generate Images** button on the Output tab), the pipeline automatically:
+When `generate_images` is enabled (via the GUI **Generate images** checkbox or **Generate Images** on the Output tab), the pipeline automatically:
 
 1. Sends each `04_page_*_prompt.txt` file to the configured Gemini image model.
 2. Saves the result as `05_page_*.png` (or `05_page_*_panel_*.png` in panel mode).
@@ -275,13 +254,13 @@ When `generate_images` is enabled (via the GUI **Generate images** checkbox or *
 
 Image generation always uses Gemini via the OpenAI-compatible image API (`client.images.generate`). Configure the model in GUI Settings (default: `gemini-2.5-flash-image`). Prior versions of generated images are rotated to `_v1`, `_v2`, etc. when regenerated.
 
-You can also generate images outside a full pipeline run from the Output tab: select a prompt file to regenerate a single image, use **Generate Images** to process all prompts in a version, or **Stitch Images** to rebuild composite pages from existing panel PNGs.
+You can also generate images outside a full pipeline run from the Output tab: select a prompt file to regenerate a single image, use **Generate Images** to process all prompts in a version, or **Stitch** to rebuild composite pages from existing panel PNGs.
 
 ### Stage responsibilities
 
 - Phase 1 scrapes the ScrybeQuill recap and caches all recap variants.
 - Phase 2 extracts entities from scraped notes, then merges them with the campaign entities bible via an LLM continuity pass.
-- Phase 3 story architect creates a story bible from beats (text-only scene breakdown). Total scene count = `panel_count × total_pages`.
+- Phase 3 story architect creates a story bible from beats (text-only scene breakdown). Total scene count = `panel_count × total_pages`. In vignette mode, that count is spent on one moment instead of the full recap.
 - Phase 4 scriptwriter realizes the story bible into per-page script checkpoints with panel prose, dialogue, and continuity state. In panel mode, scripting runs per panel.
 - Phase 4.5 style integrator rewrites only `setting` and `visual_action` on each page checkpoint.
 - Phase 5 prompt generation produces image prompts from the styled script (or unstyled script when `--skip-style` is set).
@@ -311,6 +290,8 @@ src/prompts/art_direction/          # bundled art style library (in repo)
       brutalist.json
     story_architect_system.txt        # campaign-level story architect system prompt
     story_architect_user.txt          # campaign-level story architect user prompt
+    story_architect_vignette_system.txt
+    story_architect_vignette_user.txt
     scriptwriter_system.txt         # campaign-level scriptwriter system prompt
     scriptwriter_user.txt           # campaign-level scriptwriter user prompt
     style_integrator_system.txt     # campaign-level style integrator system prompt
@@ -358,11 +339,11 @@ src/prompts/art_direction/          # bundled art style library (in repo)
 - If `working/` is missing (older campaigns), the next run seeds it from the latest `vNNN` automatically.
 - Edit intermediate artifacts (story bible, scripts, etc.) in `working/` for the next pass; leave `vNNN` folders as immutable history.
 - **Creative direction** (`working/creative_direction.txt`): optional freeform notes that steer the story architect (scene choice / what to emphasize or avoid—especially useful in vignette mode). The file is always cloned into each new version when present. If the file is missing or blank, no creative-direction section is added to prompts. Edit it on the Output tab under `working` (Save), then re-run from **architect** for scene steering to take effect. (Scriptwriter is not wired to this file yet.)
-- Only phases invalidated by `--rerun-from` (or changed run settings like generation mode or panel count) are re-computed.
+- Only phases invalidated by `--rerun-from` (or changed run settings like generation mode, vignette, or panel count) are re-computed.
 - The effective art direction and prompt template files are copied into every version folder for reproducibility.
 - Episode identity is canonical by URL — if the story title changes on the source site, the same episode folder is reused.
 - When `--skip-style` is set, Phase 4.5 is skipped and Phase 5 consumes `03_script_page_*.json` directly.
-- Run settings (`panel_count`, `total_pages`, `aspect_ratio`, `generation_mode`, `generate_images`, etc.) are persisted per version in `run_status.json` and mirrored to `working/run_status.json`.
+- Run settings (`panel_count`, `total_pages`, `aspect_ratio`, `generation_mode`, `vignette`, `generate_images`, `recap_version`, `skip_style`, `art_style`, `rerun_from`) are persisted per version in `run_status.json` and mirrored to `working/run_status.json`.
 
 ## Running individual phases
 
@@ -491,3 +472,36 @@ pytest
 | `episode_meta.json` | Episode URL, display slug, creation timestamp |
 | `<campaigns-root>/index.json` | Global campaign+URL → episode folder lookup |
 | `entities_bible.json` | Campaign-level merged entity continuity across episodes |
+
+## Building for Windows
+
+The build must be run **on a Windows machine**. Prerequisites (one-time):
+
+1. Install **Visual Studio 2022+** with the "Desktop development with C++" workload.
+2. Install the VC++ Redistributable (also required at runtime for Playwright):
+   ```powershell
+   winget install Microsoft.VCRedist.2015+.x64
+   ```
+
+Flutter SDK is required by `flet build` but does **not** need to be installed manually — on first run, `flet build` will detect it is missing and offer to download it automatically.
+
+Build command (run from project root):
+
+```powershell
+# Bundle Chromium into the packaged app (run in the same venv used for build)
+$env:PLAYWRIGHT_BROWSERS_PATH="src/playwright-browsers"
+python -m playwright install chromium
+
+# Build the EXE
+flet build windows
+```
+
+Verify Chromium was bundled into the build output:
+
+```powershell
+Get-ChildItem -Recurse .\build\windows -Filter chrome-headless-shell.exe
+```
+
+Output is placed in `build/windows/`. The build configuration is in `pyproject.toml` — the `src/` directory is packaged as the application root, with `src/main.py` as the entry point.
+
+With the commands above, Chromium is bundled into the app, so end users do not need to run Playwright install commands.
