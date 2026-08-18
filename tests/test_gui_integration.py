@@ -1452,7 +1452,8 @@ def test_output_page_shows_star_in_dropdown_for_starred_versions(tmp_path):
     _view, state = build_output_page(services, page, ft)
 
     options = {option.key: option for option in state["version_dropdown"].options}
-    assert options["v001"].leading_icon == ft.Icons.STAR
+    assert options["v001"].leading_icon.icon == ft.Icons.STAR
+    assert options["v001"].leading_icon.color == ft.Colors.GREEN_700
     assert options["v002"].leading_icon is None
     assert state["version_dropdown"].value == "v002"
     assert state["star_button"].visible is True
@@ -1497,7 +1498,8 @@ def test_output_page_clicking_star_toggles_favorite(tmp_path):
     v002_option = next(
         option for option in state["version_dropdown"].options if option.key == "v002"
     )
-    assert v002_option.leading_icon == ft.Icons.STAR
+    assert v002_option.leading_icon.icon == ft.Icons.STAR
+    assert v002_option.leading_icon.color == ft.Colors.GREEN_700
 
     state["star_button"].on_click(None)
     on_disk = json.loads((v002 / "run_status.json").read_text(encoding="utf-8"))
@@ -1527,7 +1529,8 @@ def test_output_page_clicking_star_replaces_frozen_dropdown_options(tmp_path):
     v002_option = next(
         option for option in state["version_dropdown"].options if option.key == "v002"
     )
-    assert v002_option.leading_icon == ft.Icons.STAR
+    assert v002_option.leading_icon.icon == ft.Icons.STAR
+    assert v002_option.leading_icon.color == ft.Colors.GREEN_700
     assert v002_option is not frozen_options[-1]
 
 
@@ -1588,3 +1591,75 @@ def test_output_page_description_blur_saves_note(tmp_path):
     state["version_description_field"].on_submit(None)
     on_disk = json.loads((v002 / "run_status.json").read_text(encoding="utf-8"))
     assert on_disk["description"] == "kept panel mode"
+
+
+def test_output_page_shows_error_icon_for_incomplete_versions(tmp_path):
+    import flet as ft
+
+    campaigns_root = _make_output_versions(tmp_path)
+    episode_dir = campaigns_root / "test_camp" / "episode-1"
+    v003 = episode_dir / "v003"
+    v003.mkdir()
+    (v003 / "01_raw_text.json").write_text("{}", encoding="utf-8")
+    (v003 / "run_status.json").write_text(
+        json.dumps(
+            {
+                "status": "failed",
+                "checkpoints": [],
+                "failed": ["script"],
+                "errors": ["script crashed"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    working = episode_dir / "working"
+    working.mkdir()
+    (working / "01_raw_text.json").write_text("{}", encoding="utf-8")
+    (working / "run_status.json").write_text(
+        json.dumps(
+            {
+                "status": "cancelled",
+                "checkpoints": ["scrape"],
+                "failed": [],
+                "errors": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    page = _FakePage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+
+    options = {option.key: option for option in state["version_dropdown"].options}
+    assert options["v001"].trailing_icon is None
+    assert options["v002"].trailing_icon.icon == ft.Icons.WARNING
+    assert options["v002"].trailing_icon.color == ft.Colors.AMBER_700
+    assert options["v003"].trailing_icon.icon == ft.Icons.ERROR
+    assert options["v003"].trailing_icon.color == ft.Colors.RED_700
+    assert options["working"].trailing_icon.icon == ft.Icons.ERROR
+    assert options["working"].trailing_icon.color == ft.Colors.RED_700
+
+
+def test_output_page_starred_failed_version_shows_star_and_error(tmp_path):
+    import flet as ft
+
+    campaigns_root = _make_output_versions(tmp_path)
+    v001_status = campaigns_root / "test_camp" / "episode-1" / "v001" / "run_status.json"
+    payload = json.loads(v001_status.read_text(encoding="utf-8"))
+    payload["starred"] = True
+    payload["status"] = "failed"
+    v001_status.write_text(json.dumps(payload), encoding="utf-8")
+
+    page = _FakePage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+
+    options = {option.key: option for option in state["version_dropdown"].options}
+    assert options["v001"].leading_icon.icon == ft.Icons.STAR
+    assert options["v001"].leading_icon.color == ft.Colors.GREEN_700
+    assert options["v001"].trailing_icon.icon == ft.Icons.ERROR
+    assert options["v001"].trailing_icon.color == ft.Colors.RED_700
+    assert options["v002"].leading_icon is None
+    assert options["v002"].trailing_icon.icon == ft.Icons.WARNING
+    assert options["v002"].trailing_icon.color == ft.Colors.AMBER_700

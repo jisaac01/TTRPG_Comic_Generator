@@ -989,6 +989,7 @@ def build_output_page(
     star_button = _ft.IconButton(
         icon=_ft.Icons.STAR_BORDER,
         selected_icon=_ft.Icons.STAR,
+        selected_icon_color=_ft.Colors.GREEN_700,
         selected=False,
         tooltip="Star this version",
     )
@@ -1123,6 +1124,16 @@ def build_output_page(
             episode_dropdown.options.append(_ft.dropdown.Option(ep.slug))
         episode_dropdown.value = episodes[-1].slug if episodes else None
 
+    def _star_icon() -> Any:
+        return _ft.Icon(_ft.Icons.STAR, color=_ft.Colors.GREEN_700)
+
+    def _incomplete_run_icon(status: str | None) -> Any:
+        if status == "partial":
+            return _ft.Icon(_ft.Icons.WARNING, color=_ft.Colors.AMBER_700)
+        if status in {"failed", "cancelled"}:
+            return _ft.Icon(_ft.Icons.ERROR, color=_ft.Colors.RED_700)
+        return None
+
     def _refresh_versions(*, keep_selection: bool = False) -> None:
         campaign = campaign_dropdown.value or ""
         episode_slug = episode_dropdown.value or ""
@@ -1130,13 +1141,21 @@ def build_output_page(
         versions = services.repository.list_versions(campaign, episode_slug)
         options: list[Any] = []
         if services.repository.has_working(campaign, episode_slug):
+            working_status = services.repository.run_status(
+                campaign, episode_slug, WORKING_DIR_NAME
+            ) or {}
             options.append(
-                _ft.dropdown.Option(WORKING_DIR_NAME, f"{WORKING_DIR_NAME} (editable)")
+                _ft.dropdown.Option(
+                    WORKING_DIR_NAME,
+                    f"{WORKING_DIR_NAME} (editable)",
+                    trailing_icon=_incomplete_run_icon(working_status.get("status")),
+                )
             )
         options.extend(
             _ft.dropdown.Option(
                 v.version,
-                leading_icon=_ft.Icons.STAR if v.starred else None,
+                leading_icon=_star_icon() if v.starred else None,
+                trailing_icon=_incomplete_run_icon(v.status),
             )
             for v in versions
         )
