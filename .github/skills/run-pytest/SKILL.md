@@ -13,9 +13,9 @@ user-invocable: true
 - When the user asks to verify, test, or check regressions
 
 ## Procedure
-1. Run the project test suite immediately in a terminal using proper venv activation.
-2. Use this command for the full suite: `source .venv/bin/activate && python -m pytest -q`
-3. For scoped or focused pytest runs, use the dedicated focused-test skill or: `source .venv/bin/activate && python -m pytest -q <selector>`.
+1. Run the project test suite immediately in a terminal using the workspace venv interpreter.
+2. Use this command for the full suite: `.venv/bin/python -m pytest -q`
+3. For scoped or focused pytest runs, use the dedicated focused-test skill or: `.venv/bin/python -m pytest -q <selector>`.
 4. Report the result concisely, including the final pass/fail summary.
 
 ## Completion Checks

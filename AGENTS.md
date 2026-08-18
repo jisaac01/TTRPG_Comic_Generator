@@ -25,7 +25,7 @@ This project is primarily a **test suite** from which the application is derived
 3. **Prefer functional tests over mock-heavy unit tests.** Use realistic fixtures, temp campaign directories, and checkpoint files. Accept more setup when it exercises real behavior.
 4. **Mock only true external boundaries**: LLM API calls, Playwright scraping, Gemini image generation, keyring, and filesystem paths that must be isolated. Do not mock internal plumbing between project modules.
 5. **Avoid negative/absence tests** (e.g. "no code path does X", "file must not contain Y"). Test what the system *does*, not what it avoids.
-6. **Run tests before finishing work**: `source .venv/bin/activate && python -m pytest -q` (full suite) or a focused selector for the area you changed.
+6. **Run tests before finishing work**: `.venv/bin/python -m pytest -q` (full suite) or a focused selector for the area you changed.
 
 ### Code style (required)
 
@@ -129,7 +129,7 @@ Scene count for the story architect = `panel_count × total_pages`.
 Focused test example:
 
 ```bash
-source .venv/bin/activate && python -m pytest -q tests/test_pipeline.py -k image_generation
+.venv/bin/python -m pytest -q tests/test_pipeline.py -k image_generation
 ```
 
 ## What not to do
