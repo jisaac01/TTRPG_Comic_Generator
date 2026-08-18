@@ -1037,7 +1037,17 @@ def build_output_page(
         expand=True,
         text_style=_ft.TextStyle(font_family="monospace", size=12),
     )
-    save_file_button = _ft.OutlinedButton("Save", visible=False)
+    _WORKING_EDIT_TOOLTIP = "Change to the working version to edit"
+    save_file_button = _ft.OutlinedButton(
+        "Save",
+        disabled=True,
+        tooltip=_WORKING_EDIT_TOOLTIP,
+    )
+    reload_file_button = _ft.OutlinedButton(
+        "Reload",
+        disabled=True,
+        tooltip=_WORKING_EDIT_TOOLTIP,
+    )
     copy_content_button = _ft.IconButton(
         icon=_ft.Icons.CONTENT_COPY,
         tooltip="Copy to clipboard",
@@ -1402,16 +1412,31 @@ def build_output_page(
             files.extend(extra)
         return files
 
-    def _creative_direction_editable() -> bool:
-        return (
-            (version_dropdown.value or "") == WORKING_DIR_NAME
-            and (file_list.value or "") == "creative_direction.txt"
-        )
+    def _is_working_selected() -> bool:
+        return (version_dropdown.value or "") == WORKING_DIR_NAME
+
+    def _selected_file_is_editable() -> bool:
+        selected = file_list.value or ""
+        path = _selected_files.get(selected)
+        if path is None:
+            return False
+        if path.suffix.lower() in {".png", ".jpg", ".jpeg", ".gif", ".webp"}:
+            return False
+        if not path.exists() and selected != "creative_direction.txt":
+            return False
+        return True
+
+    def _working_file_editable() -> bool:
+        return _is_working_selected() and _selected_file_is_editable()
 
     def _update_preview_editability() -> None:
-        editable = _creative_direction_editable()
+        editable = _working_file_editable()
         preview.read_only = not editable
-        save_file_button.visible = editable
+        save_file_button.disabled = not editable
+        reload_file_button.disabled = not editable
+        tooltip = None if _is_working_selected() else _WORKING_EDIT_TOOLTIP
+        save_file_button.tooltip = tooltip
+        reload_file_button.tooltip = tooltip
 
     def _refresh_file_list(status_value: str | None = None) -> None:
         _selected_files.clear()
@@ -1487,7 +1512,7 @@ def build_output_page(
         _update_preview_editability()
 
     def on_save_file(_e: Any) -> None:
-        if not _creative_direction_editable():
+        if not _working_file_editable():
             return
         path = _selected_files.get(file_list.value or "")
         if path is None:
@@ -1499,6 +1524,15 @@ def build_output_page(
         path.write_text(text, encoding="utf-8")
         _selected_files[path.name] = path
         output_status_text.value = f"Saved {path.name} → working/"
+        page.update()
+
+    def on_reload_file(_e: Any) -> None:
+        if not _is_working_selected():
+            return
+        _load_selected_file()
+        selected = file_list.value or ""
+        if selected:
+            output_status_text.value = f"Reloaded {selected}"
         page.update()
 
     def _selected_prompt_path() -> Path | None:
@@ -1648,6 +1682,7 @@ def build_output_page(
 
     file_list.on_change = on_file_change
     save_file_button.on_click = on_save_file
+    reload_file_button.on_click = on_reload_file
 
     def _refresh_all() -> None:
         _refresh_versions()
@@ -1934,7 +1969,11 @@ def build_output_page(
                     _ft.Column(
                         controls=[
                             _ft.Row(
-                                controls=[save_file_button, copy_content_button],
+                                controls=[
+                                    save_file_button,
+                                    reload_file_button,
+                                    copy_content_button,
+                                ],
                                 alignment=_ft.MainAxisAlignment.END,
                             ),
                             preview,
@@ -1962,7 +2001,9 @@ def build_output_page(
         "file_list": file_list,
         "preview": preview,
         "save_file_button": save_file_button,
+        "reload_file_button": reload_file_button,
         "on_save_file": on_save_file,
+        "on_reload_file": on_reload_file,
         "copy_content_button": copy_content_button,
         "on_copy_content": on_copy_content,
         "run_status_text": run_status_text,

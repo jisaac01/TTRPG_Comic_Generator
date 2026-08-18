@@ -1663,3 +1663,152 @@ def test_output_page_starred_failed_version_shows_star_and_error(tmp_path):
     assert options["v002"].leading_icon is None
     assert options["v002"].trailing_icon.icon == ft.Icons.WARNING
     assert options["v002"].trailing_icon.color == ft.Colors.AMBER_700
+
+
+_WORKING_EDIT_TOOLTIP = "Change to the working version to edit"
+
+
+def _select_output_version(state: dict, version: str) -> None:
+    handler = state["version_dropdown"].on_select or state["version_dropdown"].on_change
+    handler(
+        type(
+            "VersionSelectEvent",
+            (),
+            {
+                "data": version,
+                "control": type("VersionControl", (), {"value": version})(),
+            },
+        )()
+    )
+
+
+def _select_output_file(state: dict, name: str) -> None:
+    state["file_list"].value = name
+    state["file_list"].on_change(
+        type(
+            "RadioChangeEvent",
+            (),
+            {"control": type("RadioControl", (), {"value": name})()},
+        )()
+    )
+
+
+def _make_output_with_working(tmp_path: Path) -> Path:
+    campaigns_root = _make_output_versions(tmp_path)
+    working = campaigns_root / "test_camp" / "episode-1" / "working"
+    working.mkdir()
+    (working / "01_raw_text.json").write_text('{"a": 2}', encoding="utf-8")
+    (working / "02_5_story_bible.txt").write_text("original bible\n", encoding="utf-8")
+    (working / "04_page_1_prompt.txt").write_text("working prompt\n", encoding="utf-8")
+    (working / "run_status.json").write_text(
+        json.dumps({"status": "ok", "checkpoints": [], "failed": [], "errors": []}),
+        encoding="utf-8",
+    )
+    return campaigns_root
+
+
+def test_output_page_version_disables_save_and_reload_with_tooltip(tmp_path):
+    import flet as ft
+
+    campaigns_root = _make_output_with_working(tmp_path)
+    page = _FakePage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+
+    assert state["version_dropdown"].value == "v002"
+    assert state["save_file_button"].disabled is True
+    assert state["reload_file_button"].disabled is True
+    assert state["save_file_button"].tooltip == _WORKING_EDIT_TOOLTIP
+    assert state["reload_file_button"].tooltip == _WORKING_EDIT_TOOLTIP
+    assert state["preview"].read_only is True
+
+
+def test_output_page_working_enables_save_and_reload(tmp_path):
+    import flet as ft
+
+    campaigns_root = _make_output_with_working(tmp_path)
+    page = _FakePage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+
+    _select_output_version(state, "working")
+    _select_output_file(state, "02_5_story_bible.txt")
+
+    assert state["version_dropdown"].value == "working"
+    assert state["save_file_button"].disabled is False
+    assert state["reload_file_button"].disabled is False
+    assert state["preview"].read_only is False
+    assert state["save_file_button"].tooltip in {None, ""}
+    assert state["reload_file_button"].tooltip in {None, ""}
+
+
+def test_output_page_switching_from_working_to_version_relocks_editor(tmp_path):
+    import flet as ft
+
+    campaigns_root = _make_output_with_working(tmp_path)
+    page = _FakePage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+
+    _select_output_version(state, "working")
+    assert state["save_file_button"].disabled is False
+
+    _select_output_version(state, "v002")
+    assert state["save_file_button"].disabled is True
+    assert state["reload_file_button"].disabled is True
+    assert state["save_file_button"].tooltip == _WORKING_EDIT_TOOLTIP
+    assert state["reload_file_button"].tooltip == _WORKING_EDIT_TOOLTIP
+    assert state["preview"].read_only is True
+
+
+def test_output_page_save_writes_working_file(tmp_path):
+    import flet as ft
+
+    campaigns_root = _make_output_with_working(tmp_path)
+    working = campaigns_root / "test_camp" / "episode-1" / "working"
+    page = _FakePage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+
+    _select_output_version(state, "working")
+    _select_output_file(state, "02_5_story_bible.txt")
+    state["preview"].value = "edited bible"
+    state["on_save_file"](None)
+
+    assert (working / "02_5_story_bible.txt").read_text(encoding="utf-8") == "edited bible\n"
+    assert "Saved 02_5_story_bible.txt" in state["output_status_text"].value
+
+
+def test_output_page_reload_discards_unsaved_edits(tmp_path):
+    import flet as ft
+
+    campaigns_root = _make_output_with_working(tmp_path)
+    page = _FakePage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+
+    _select_output_version(state, "working")
+    _select_output_file(state, "02_5_story_bible.txt")
+    assert "original bible" in state["preview"].value
+    state["preview"].value = "unsaved draft"
+    state["on_reload_file"](None)
+
+    assert "original bible" in state["preview"].value
+    assert "unsaved draft" not in state["preview"].value
+
+
+def test_output_page_save_on_version_does_not_write(tmp_path):
+    import flet as ft
+
+    campaigns_root = _make_output_with_working(tmp_path)
+    version_file = campaigns_root / "test_camp" / "episode-1" / "v002" / "01_raw_text.json"
+    original = version_file.read_text(encoding="utf-8")
+    page = _FakePage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+
+    _select_output_file(state, "01_raw_text.json")
+    state["preview"].value = '{"tampered": true}'
+    state["on_save_file"](None)
+
+    assert version_file.read_text(encoding="utf-8") == original
