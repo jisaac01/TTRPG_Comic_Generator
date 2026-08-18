@@ -4,6 +4,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
 from repository_service import RepositoryService
@@ -92,6 +94,10 @@ def test_repository_service_discovers_campaigns_episodes_versions_and_prompts(tm
     assert [version.version for version in versions] == ["v001", "v002"]
     assert versions[0].status == "ok"
     assert versions[1].status == "partial"
+    assert versions[0].starred is False
+    assert versions[0].description == ""
+    assert versions[1].starred is False
+    assert versions[1].description == ""
 
     files = service.get_version_files("dreadmarsh", "dreadmarsh-crossing", "v002")
     assert files.raw_text == episode_dir / "v002" / "01_raw_text.json"
@@ -173,3 +179,96 @@ def test_list_episodes_uses_directory_name_when_meta_slugs_collide(tmp_path):
     ]
     assert len({episode.slug for episode in episodes}) == 3
     assert service.list_versions("belowdown", "belowdown-ep-12_pre_entity_bible")
+
+
+def test_list_versions_reads_starred_and_description_from_run_status(tmp_path):
+    campaigns_root = tmp_path / "campaigns"
+    episode_dir = campaigns_root / "dreadmarsh" / "dreadmarsh-crossing"
+    _write_version(episode_dir / "v001", status="ok")
+    _write_version(episode_dir / "v002", status="ok")
+    status_path = episode_dir / "v002" / "run_status.json"
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    status["starred"] = True
+    status["description"] = "kept the swamp punchline"
+    status_path.write_text(json.dumps(status), encoding="utf-8")
+
+    service = RepositoryService(campaigns_root)
+    versions = service.list_versions("dreadmarsh", "dreadmarsh-crossing")
+
+    assert versions[0].starred is False
+    assert versions[0].description == ""
+    assert versions[1].starred is True
+    assert versions[1].description == "kept the swamp punchline"
+    assert versions[1].label == "★ v002"
+    assert versions[0].label == "v001"
+
+
+def test_update_version_meta_stars_and_describes_without_clobbering_status(tmp_path):
+    campaigns_root = tmp_path / "campaigns"
+    episode_dir = campaigns_root / "dreadmarsh" / "dreadmarsh-crossing"
+    _write_version(episode_dir / "v001", status="partial")
+
+    service = RepositoryService(campaigns_root)
+    updated = service.update_version_meta(
+        "dreadmarsh",
+        "dreadmarsh-crossing",
+        "v001",
+        starred=True,
+        description="  first readable bible  ",
+    )
+
+    assert updated.starred is True
+    assert updated.description == "first readable bible"
+    assert updated.status == "partial"
+
+    on_disk = json.loads((episode_dir / "v001" / "run_status.json").read_text(encoding="utf-8"))
+    assert on_disk["starred"] is True
+    assert on_disk["description"] == "first readable bible"
+    assert on_disk["status"] == "partial"
+    assert on_disk["checkpoints"] == ["raw_text", "entities", "script"]
+
+    unstarred = service.update_version_meta(
+        "dreadmarsh",
+        "dreadmarsh-crossing",
+        "v001",
+        starred=False,
+    )
+    assert unstarred.starred is False
+    assert unstarred.description == "first readable bible"
+    reread = service.list_versions("dreadmarsh", "dreadmarsh-crossing")[0]
+    assert reread.starred is False
+    assert reread.description == "first readable bible"
+
+
+def test_update_version_meta_rejects_working_and_missing_status(tmp_path):
+    campaigns_root = tmp_path / "campaigns"
+    episode_dir = campaigns_root / "dreadmarsh" / "dreadmarsh-crossing"
+    _write_version(episode_dir / "v001")
+    working = episode_dir / "working"
+    working.mkdir()
+    (working / "run_status.json").write_text(
+        json.dumps({"status": "ok", "checkpoints": [], "failed": [], "errors": []}),
+        encoding="utf-8",
+    )
+
+    service = RepositoryService(campaigns_root)
+
+    with pytest.raises(ValueError, match="historical"):
+        service.update_version_meta(
+            "dreadmarsh", "dreadmarsh-crossing", "working", starred=True
+        )
+    with pytest.raises(ValueError, match="historical"):
+        service.update_version_meta(
+            "dreadmarsh", "dreadmarsh-crossing", "scratch", description="nope"
+        )
+
+    missing = episode_dir / "v002"
+    missing.mkdir()
+    with pytest.raises(FileNotFoundError, match="run_status"):
+        service.update_version_meta(
+            "dreadmarsh", "dreadmarsh-crossing", "v002", starred=True
+        )
+
+    # working/run_status.json must stay unstarred even if a caller tries.
+    working_status = json.loads((working / "run_status.json").read_text(encoding="utf-8"))
+    assert "starred" not in working_status

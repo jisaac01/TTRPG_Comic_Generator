@@ -1435,3 +1435,156 @@ def test_output_page_lists_episodes_when_meta_slugs_collide(tmp_path):
     assert state["episode_dropdown"].value == "the-vault-of-the-once-great-thief-ep-3"
     assert state["version_dropdown"].value == "v001"
     assert state["loading_ring"].visible is False
+
+
+def test_output_page_shows_star_in_dropdown_for_starred_versions(tmp_path):
+    import flet as ft
+
+    campaigns_root = _make_output_versions(tmp_path)
+    v001_status = campaigns_root / "test_camp" / "episode-1" / "v001" / "run_status.json"
+    payload = json.loads(v001_status.read_text(encoding="utf-8"))
+    payload["starred"] = True
+    payload["description"] = "the one I liked"
+    v001_status.write_text(json.dumps(payload), encoding="utf-8")
+
+    page = _FakePage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+
+    options = {option.key: option for option in state["version_dropdown"].options}
+    assert options["v001"].leading_icon == ft.Icons.STAR
+    assert options["v002"].leading_icon is None
+    assert state["version_dropdown"].value == "v002"
+    assert state["star_button"].visible is True
+    assert state["star_button"].selected is False
+    assert state["version_description_field"].visible is True
+    assert state["version_description_field"].value == ""
+
+    handler = state["version_dropdown"].on_select or state["version_dropdown"].on_change
+    handler(
+        type(
+            "VersionSelectEvent",
+            (),
+            {
+                "data": "v001",
+                "control": type("VersionControl", (), {"value": "v001"})(),
+            },
+        )()
+    )
+    assert state["star_button"].selected is True
+    assert state["version_description_field"].value == "the one I liked"
+
+
+def test_output_page_clicking_star_toggles_favorite(tmp_path):
+    import flet as ft
+
+    campaigns_root = _make_output_versions(tmp_path)
+    v002 = campaigns_root / "test_camp" / "episode-1" / "v002"
+    page = _FakePage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+
+    assert state["version_dropdown"].value == "v002"
+    assert state["star_button"].selected is False
+
+    state["star_button"].on_click(None)
+
+    on_disk = json.loads((v002 / "run_status.json").read_text(encoding="utf-8"))
+    assert on_disk["starred"] is True
+    assert on_disk["status"] == "partial"
+    assert state["star_button"].selected is True
+    assert state["version_dropdown"].value == "v002"
+    v002_option = next(
+        option for option in state["version_dropdown"].options if option.key == "v002"
+    )
+    assert v002_option.leading_icon == ft.Icons.STAR
+
+    state["star_button"].on_click(None)
+    on_disk = json.loads((v002 / "run_status.json").read_text(encoding="utf-8"))
+    assert on_disk["starred"] is False
+    assert state["star_button"].selected is False
+
+
+def test_output_page_clicking_star_replaces_frozen_dropdown_options(tmp_path):
+    import flet as ft
+
+    campaigns_root = _make_output_versions(tmp_path)
+    v002 = campaigns_root / "test_camp" / "episode-1" / "v002"
+    page = _FakePage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+
+    frozen_options = list(state["version_dropdown"].options)
+    for option in frozen_options:
+        object.__setattr__(option, "_frozen", True)
+
+    state["star_button"].on_click(None)
+
+    on_disk = json.loads((v002 / "run_status.json").read_text(encoding="utf-8"))
+    assert on_disk["starred"] is True
+    assert state["star_button"].selected is True
+    assert state["version_dropdown"].value == "v002"
+    v002_option = next(
+        option for option in state["version_dropdown"].options if option.key == "v002"
+    )
+    assert v002_option.leading_icon == ft.Icons.STAR
+    assert v002_option is not frozen_options[-1]
+
+
+def test_output_page_hides_star_and_note_for_working(tmp_path):
+    import flet as ft
+
+    campaigns_root = _make_output_versions(tmp_path)
+    working = campaigns_root / "test_camp" / "episode-1" / "working"
+    working.mkdir()
+    (working / "01_raw_text.json").write_text("{}", encoding="utf-8")
+    (working / "run_status.json").write_text(
+        json.dumps({"status": "ok", "checkpoints": [], "failed": [], "errors": []}),
+        encoding="utf-8",
+    )
+
+    page = _FakePage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+
+    assert state["star_button"].visible is True
+    handler = state["version_dropdown"].on_select or state["version_dropdown"].on_change
+    handler(
+        type(
+            "VersionSelectEvent",
+            (),
+            {
+                "data": "working",
+                "control": type("VersionControl", (), {"value": "working"})(),
+            },
+        )()
+    )
+
+    assert state["version_dropdown"].value == "working"
+    assert state["star_button"].visible is False
+    assert state["version_description_field"].visible is False
+    working_status = json.loads((working / "run_status.json").read_text(encoding="utf-8"))
+    assert "starred" not in working_status
+
+
+def test_output_page_description_blur_saves_note(tmp_path):
+    import flet as ft
+
+    campaigns_root = _make_output_versions(tmp_path)
+    v002 = campaigns_root / "test_camp" / "episode-1" / "v002"
+    page = _FakePage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+
+    state["version_description_field"].value = "  swapped to vignette  "
+    state["version_description_field"].on_blur(None)
+
+    on_disk = json.loads((v002 / "run_status.json").read_text(encoding="utf-8"))
+    assert on_disk["description"] == "swapped to vignette"
+    assert on_disk["status"] == "partial"
+    assert state["version_description_field"].value == "swapped to vignette"
+
+    state["version_description_field"].value = "kept panel mode"
+    state["version_description_field"].on_submit(None)
+    on_disk = json.loads((v002 / "run_status.json").read_text(encoding="utf-8"))
+    assert on_disk["description"] == "kept panel mode"

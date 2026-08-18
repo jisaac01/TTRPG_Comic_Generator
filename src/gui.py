@@ -42,7 +42,12 @@ from pipeline_events import (
 from image_generator import ImageGenerator
 from image_stitcher import stitch_panel_images
 from prompt_templates import DEFAULT_PROMPTS_DIR
-from repository_service import WORKING_DIR_NAME, CampaignPrompts, RepositoryService
+from repository_service import (
+    VERSION_PATTERN,
+    WORKING_DIR_NAME,
+    CampaignPrompts,
+    RepositoryService,
+)
 from run_controller import RunController
 from scraper import configure_playwright_runtime, normalize_recap_version, playwright_browser_executable
 from settings_service import SettingsService
@@ -981,6 +986,17 @@ def build_output_page(
     )
     episode_dropdown = _ft.Dropdown(label="Episode", options=[], width=320)
     version_dropdown = _ft.Dropdown(label="Version", options=[], width=140)
+    star_button = _ft.IconButton(
+        icon=_ft.Icons.STAR_BORDER,
+        selected_icon=_ft.Icons.STAR,
+        selected=False,
+        tooltip="Star this version",
+    )
+    version_description_field = _ft.TextField(
+        label="Note",
+        hint_text="What sets this version apart",
+        width=280,
+    )
     loading_ring = _ft.ProgressRing(width=14, height=14, stroke_width=2, visible=False)
     loading_text = _ft.Text("Reloading...", size=12, visible=False)
 
@@ -1107,21 +1123,51 @@ def build_output_page(
             episode_dropdown.options.append(_ft.dropdown.Option(ep.slug))
         episode_dropdown.value = episodes[-1].slug if episodes else None
 
-    def _refresh_versions() -> None:
+    def _refresh_versions(*, keep_selection: bool = False) -> None:
         campaign = campaign_dropdown.value or ""
         episode_slug = episode_dropdown.value or ""
+        selected = version_dropdown.value
         versions = services.repository.list_versions(campaign, episode_slug)
         options: list[Any] = []
         if services.repository.has_working(campaign, episode_slug):
             options.append(
                 _ft.dropdown.Option(WORKING_DIR_NAME, f"{WORKING_DIR_NAME} (editable)")
             )
-        options.extend(_ft.dropdown.Option(v.version) for v in versions)
-        version_dropdown.options = options
-        # Default to the latest historical version (what the last run produced).
-        version_dropdown.value = versions[-1].version if versions else (
-            WORKING_DIR_NAME if options else None
+        options.extend(
+            _ft.dropdown.Option(
+                v.version,
+                leading_icon=_ft.Icons.STAR if v.starred else None,
+            )
+            for v in versions
         )
+        version_dropdown.options = options
+        option_keys = {option.key for option in options}
+        if keep_selection and selected in option_keys:
+            version_dropdown.value = selected
+        else:
+            # Default to the latest historical version (what the last run produced).
+            version_dropdown.value = versions[-1].version if versions else (
+                WORKING_DIR_NAME if options else None
+            )
+
+    def _selected_version_info() -> Any:
+        campaign = campaign_dropdown.value or ""
+        episode_slug = episode_dropdown.value or ""
+        version = version_dropdown.value or ""
+        if not (campaign and episode_slug and VERSION_PATTERN.fullmatch(version)):
+            return None
+        for info in services.repository.list_versions(campaign, episode_slug):
+            if info.version == version:
+                return info
+        return None
+
+    def _sync_version_meta_controls() -> None:
+        info = _selected_version_info()
+        historical = info is not None
+        star_button.visible = historical
+        version_description_field.visible = historical
+        star_button.selected = bool(info.starred) if info else False
+        version_description_field.value = info.description if info else ""
 
     def _legacy_episode_run_config(campaign: str, episode_slug: str) -> dict[str, Any]:
         episode_dir = services.repository.campaigns_root / campaign / episode_slug
@@ -1586,6 +1632,7 @@ def build_output_page(
 
     def _refresh_all() -> None:
         _refresh_versions()
+        _sync_version_meta_controls()
         status_value = _set_run_status()
         _sync_settings_controls()
         _set_episode_settings_text()
@@ -1633,6 +1680,7 @@ def build_output_page(
         _set_loading(True)
         page.update()
         try:
+            _sync_version_meta_controls()
             status_value = _set_run_status()
             _refresh_file_list(status_value)
             _load_selected_file()
@@ -1643,6 +1691,47 @@ def build_output_page(
     _bind_dropdown_handler(campaign_dropdown, on_campaign_changed)
     _bind_dropdown_handler(episode_dropdown, on_episode_changed)
     _bind_dropdown_handler(version_dropdown, on_version_changed)
+
+    def on_star_click(_e: Any) -> None:
+        campaign = campaign_dropdown.value or ""
+        episode_slug = episode_dropdown.value or ""
+        version = version_dropdown.value or ""
+        try:
+            services.repository.update_version_meta(
+                campaign,
+                episode_slug,
+                version,
+                starred=not bool(star_button.selected),
+            )
+        except (ValueError, FileNotFoundError, json.JSONDecodeError) as exc:
+            output_status_text.value = str(exc)
+            page.update()
+            return
+        _refresh_versions(keep_selection=True)
+        _sync_version_meta_controls()
+        page.update()
+
+    def on_description_save(_e: Any) -> None:
+        campaign = campaign_dropdown.value or ""
+        episode_slug = episode_dropdown.value or ""
+        version = version_dropdown.value or ""
+        try:
+            updated = services.repository.update_version_meta(
+                campaign,
+                episode_slug,
+                version,
+                description=version_description_field.value or "",
+            )
+        except (ValueError, FileNotFoundError, json.JSONDecodeError) as exc:
+            output_status_text.value = str(exc)
+            page.update()
+            return
+        version_description_field.value = updated.description
+        page.update()
+
+    star_button.on_click = on_star_click
+    version_description_field.on_blur = on_description_save
+    version_description_field.on_submit = on_description_save
 
     def on_open_version(_e: Any) -> None:
         version_dir = _selected_version_dir[0]
@@ -1761,7 +1850,19 @@ def build_output_page(
     container = _ft.Column(
         controls=[
             _ft.Text("Output", size=18, weight=_ft.FontWeight.W_600),
-            _ft.Row([campaign_dropdown, episode_dropdown, version_dropdown, loading_ring, loading_text], spacing=12),
+            _ft.Row(
+                [
+                    campaign_dropdown,
+                    episode_dropdown,
+                    version_dropdown,
+                    star_button,
+                    version_description_field,
+                    loading_ring,
+                    loading_text,
+                ],
+                spacing=12,
+                vertical_alignment=_ft.CrossAxisAlignment.CENTER,
+            ),
             _ft.Row(
                 controls=[
                     version_path_text,
@@ -1837,6 +1938,8 @@ def build_output_page(
         "campaign_dropdown": campaign_dropdown,
         "episode_dropdown": episode_dropdown,
         "version_dropdown": version_dropdown,
+        "star_button": star_button,
+        "version_description_field": version_description_field,
         "file_list": file_list,
         "preview": preview,
         "save_file_button": save_file_button,

@@ -47,6 +47,12 @@ class VersionInfo:
     checkpoints: list[str]
     failed: list[str]
     errors: list[str]
+    starred: bool = False
+    description: str = ""
+
+    @property
+    def label(self) -> str:
+        return f"★ {self.version}" if self.starred else self.version
 
 
 @dataclass(frozen=True)
@@ -150,18 +156,35 @@ class RepositoryService:
         versions: list[VersionInfo] = []
         for version_dir in version_dirs:
             status_data = self.run_status(campaign, episode_slug, version_dir.name) or {}
-            versions.append(
-                VersionInfo(
-                    version=version_dir.name,
-                    version_dir=version_dir,
-                    status=status_data.get("status"),
-                    created_at=status_data.get("created_at"),
-                    checkpoints=list(status_data.get("checkpoints", [])),
-                    failed=list(status_data.get("failed", [])),
-                    errors=list(status_data.get("errors", [])),
-                )
-            )
+            versions.append(self._version_info(version_dir, status_data))
         return versions
+
+    def update_version_meta(
+        self,
+        campaign: str,
+        episode_slug: str,
+        version: str,
+        *,
+        starred: bool | None = None,
+        description: str | None = None,
+    ) -> VersionInfo:
+        """Update favorite/note fields on a historical version's run_status.json."""
+        if not VERSION_PATTERN.fullmatch(version):
+            raise ValueError(
+                f"can only update metadata for historical versions, not {version!r}"
+            )
+        status_path = (
+            self.campaigns_root / campaign / episode_slug / version / RUN_STATUS_FILENAME
+        )
+        if not status_path.exists():
+            raise FileNotFoundError(f"run_status.json not found for {version}")
+        status = json.loads(status_path.read_text(encoding="utf-8"))
+        if starred is not None:
+            status["starred"] = bool(starred)
+        if description is not None:
+            status["description"] = description.strip()
+        status_path.write_text(json.dumps(status, indent=2) + "\n", encoding="utf-8")
+        return self._version_info(status_path.parent, status)
 
     def get_version_files(self, campaign: str, episode_slug: str, version: str) -> VersionFiles:
         # version may be a historical vNNN or the special WORKING_DIR_NAME label.
@@ -229,6 +252,20 @@ class RepositoryService:
         if not status_path.exists():
             return None
         return json.loads(status_path.read_text(encoding="utf-8"))
+
+    @staticmethod
+    def _version_info(version_dir: Path, status_data: dict[str, Any]) -> VersionInfo:
+        return VersionInfo(
+            version=version_dir.name,
+            version_dir=version_dir,
+            status=status_data.get("status"),
+            created_at=status_data.get("created_at"),
+            checkpoints=list(status_data.get("checkpoints", [])),
+            failed=list(status_data.get("failed", [])),
+            errors=list(status_data.get("errors", [])),
+            starred=bool(status_data.get("starred", False)),
+            description=str(status_data.get("description") or ""),
+        )
 
     @staticmethod
     def _path_if_exists(path: Path) -> Path | None:

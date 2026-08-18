@@ -21,7 +21,11 @@
 - [x] Add a "working copy" that is the version we'll be passing into the next pass
 - [ ] Unify prompt audit capture (`render_and_capture` chokepoint; drop per-stage prepare I/O) — see [PLAN_prompt_audit.md](PLAN_prompt_audit.md)
 - [ ] allowing edits in the output tab
-- [ ] warning when the templates are out of date, updating the style template to allow a splash of color, having the stylist style characters, showing the entities bible somewhere for editing, adding functionality to easily regenerate the episode entities, rerun a particular version, star versions as favorites, add a description to each run
+- [ ] warning when the templates are out of date, 
+- [ ] updating the brutalist style template to allow a splash of color, 
+- [ ] adding functionality to easily regenerate the episode entities, 
+- [x] star versions as favorites
+- [x] add a description to each run
 
 
 ---
