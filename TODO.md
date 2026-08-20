@@ -5,6 +5,9 @@
 - [x] Add some descriptors like age, hair style, height, skin color, to physical description prompt
 - [x] Fix bug where characters is blank
 - [x] Add a new pipeline mode: refresh just the current stage (e.g. entities)
+- [x] Add a "working copy" that is the version we'll be passing into the next pass
+- [x] star versions as favorites
+- [x] add a description to each run
 - [ ] Add a second pass for continuity and fun
 - [ ] First-run scriptwriter almost always fails held-item continuity (`held_items_before` / `held_items_after` missing or mismatched between panels). Runs land as Partial with red GUI errors even when the rest of the pipeline is fine. Repair the fields, loosen the validator, or stop treating these soft failures as a failed/partial run.
 - [ ] camera angle, panel lighting
@@ -18,14 +21,13 @@
 - [ ] Add a json/markdown mode to output everything in those formats
 - [ ] Add a warning when prompt templates are older than the defaults, out of date
 - [ ] Add "find and replace" function for fixing cascading errors through all version files
-- [x] Add a "working copy" that is the version we'll be passing into the next pass
 - [ ] Unify prompt audit capture (`render_and_capture` chokepoint; drop per-stage prepare I/O) — see [PLAN_prompt_audit.md](PLAN_prompt_audit.md)
 - [ ] allowing edits in the output tab
 - [ ] warning when the templates are out of date, 
 - [ ] updating the brutalist style template to allow a splash of color, 
 - [ ] adding functionality to easily regenerate the episode entities, 
-- [x] star versions as favorites
-- [x] add a description to each run
+- [ ] changing the version does not change the info displayed under the settings
+- [ ] more visibility into what stage is running
 
 
 ---
