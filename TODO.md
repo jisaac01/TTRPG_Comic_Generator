@@ -28,6 +28,8 @@
 - [ ] adding functionality to easily regenerate the episode entities, 
 - [ ] changing the version does not change the info displayed under the settings
 - [ ] more visibility into what stage is running
+- [ ] get rid of duplicate URLs inside campaign folders
+- [ ] why does the campaign level index have episode level stuff? 
 
 
 ---
