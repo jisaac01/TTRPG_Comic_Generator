@@ -195,6 +195,7 @@ RUN_CONFIG_KEYS = (
     "art_style",
     "skip_style",
     "generate_images",
+    "image_generation_model",
     "rerun_from",
     "stop_after",
 )
@@ -212,6 +213,7 @@ def run_config_snapshot(config: RunConfig) -> dict:
         "art_style": config.art_style,
         "skip_style": config.skip_style,
         "generate_images": config.generate_images,
+        "image_generation_model": config.image_generation_model,
         "rerun_from": config.rerun_from,
         "stop_after": config.stop_after,
     }

@@ -9,13 +9,12 @@ from pathlib import Path
 import keyring
 
 from app_paths import default_config_path
-from model_defaults import DEFAULT_MODEL
+from model_defaults import DEFAULT_IMAGE_GENERATION_MODEL, DEFAULT_MODEL
 
 
 KEYRING_SERVICE_NAME = "TTRPG_Comic_Generator"
 KEYRING_USERNAME = "gemini_api_key"
 DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434/v1"
-DEFAULT_IMAGE_GENERATION_MODEL = "gemini-2.5-flash-image"
 DEFAULT_CONFIG_PATH = default_config_path()
 
 

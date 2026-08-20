@@ -271,6 +271,11 @@ class RunController:
                 str(err) for err in output.get("error_details", status_blob["errors"])
             ]
 
+        if output is not None:
+            generations = output.get("image_generations")
+            if isinstance(generations, list) and generations:
+                status_blob["image_generations"] = generations
+
         status_json = json.dumps(status_blob, indent=2)
         run_status_path = version_dir / "run_status.json"
         run_status_path.write_text(status_json, encoding="utf-8")

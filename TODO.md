@@ -30,7 +30,9 @@
 - [ ] more visibility into what stage is running
 - [ ] get rid of duplicate URLs inside campaign folders
 - [ ] why does the campaign level index have episode level stuff? 
-- [ ] use Gemini API to discover image models
+- [x] use Gemini API to discover image models
+- [ ] bug: style setting reloads when changing the stage setting
+- [ ] add skip style option (same as the Run tab) to the Output page, should be allowed to rerun from prompt and have it pick up the naked script
 
 
 ---

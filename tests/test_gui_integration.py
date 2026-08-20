@@ -54,6 +54,9 @@ class _FakePage:
         self.session = _FakeSession()
         self.clipboard_text = ""
         self.window = _FakeWindow()
+        self._last_task_coro = None
+        self._task_args: tuple[object, ...] = ()
+        self._task_kwargs: dict[str, object] = {}
 
     def add(self, control: object) -> None:
         self.controls.append(control)
@@ -74,9 +77,15 @@ class _FakePage:
             setattr(self.dialog, "open", False)
         self.update_calls += 1
 
+    def run_task(self, coro_func: object, *args: object, **kwargs: object) -> None:
+        self._last_task_coro = coro_func
+        self._task_args = args
+        self._task_kwargs = kwargs
+
 
 class _FakeSettingsService:
-    def __init__(self) -> None:
+    def __init__(self, config_path: Path | None = None) -> None:
+        self.config_path = config_path
         self._gemini_api_key = ""
         self._ollama_base_url = "http://localhost:11434/v1"
         self._default_model = "gemini-3.1-flash-lite"
@@ -110,12 +119,16 @@ class _FakeSettingsService:
         return
 
 
-def _services(tmp_path: Path) -> AppServices:
+def _services(tmp_path: Path, settings: _FakeSettingsService | None = None) -> AppServices:
     return AppServices(
         repository=RepositoryService(tmp_path / "campaigns"),
-        settings=_FakeSettingsService(),  # type: ignore[arg-type]
+        settings=settings or _FakeSettingsService(config_path=tmp_path / "settings.json"),  # type: ignore[arg-type]
         run_controller=RunController(),
     )
+
+
+def _option_keys(dropdown: object) -> list[str]:
+    return [option.key for option in dropdown.options]
 
 
 def test_gui_main_layout_applies_window_size_via_page_window(tmp_path):
@@ -168,6 +181,115 @@ def test_gui_settings_button_click_opens_dialog(tmp_path):
 
     assert dialog.open is True
     assert page.dialog == dialog
+
+
+def test_gui_settings_uses_dropdowns_for_default_and_image_models(tmp_path):
+    import flet as ft
+
+    page = _FakePage()
+    controls = build_main_layout(page, _services(tmp_path))
+
+    default_dropdown = controls["default_model_dropdown"]
+    image_dropdown = controls["image_generation_model_dropdown"]
+
+    assert isinstance(default_dropdown, ft.Dropdown)
+    assert isinstance(image_dropdown, ft.Dropdown)
+    assert default_dropdown.value == "gemini-3.1-flash-lite"
+    assert image_dropdown.value == "gemini-2.5-flash-image"
+    assert "gemini-3.1-flash-lite" in _option_keys(default_dropdown)
+    assert "gemini-3.5-flash" in _option_keys(default_dropdown)
+    assert "gemini-2.5-pro" in _option_keys(default_dropdown)
+    assert "gemini-2.5-flash-image" in _option_keys(image_dropdown)
+    assert "gemini-3.1-flash-image" in _option_keys(image_dropdown)
+    assert "gemini-3.1-flash-lite-image" in _option_keys(image_dropdown)
+    assert "gemini-3-pro-image" in _option_keys(image_dropdown)
+    assert any("free" in option.text for option in default_dropdown.options)
+
+
+@pytest.mark.asyncio
+async def test_gui_fetches_gemini_models_on_startup_and_adds_them_to_dropdowns(tmp_path, monkeypatch):
+    def fake_fetch(_api_key: str, **_kwargs):
+        return (
+            ["gemini-3.1-flash-lite", "gemini-3.1-pro"],
+            ["gemini-2.5-flash-image", "gemini-3.1-flash-lite-image"],
+        )
+
+    monkeypatch.setattr("model_catalog.fetch_gemini_models", fake_fetch)
+
+    settings = _FakeSettingsService(config_path=tmp_path / "settings.json")
+    settings.set_gemini_api_key("secret-key")
+    page = _FakePage()
+    controls = build_main_layout(page, _services(tmp_path, settings))
+
+    assert page._last_task_coro is controls["fetch_models"]
+
+    await controls["fetch_models"]()
+
+    log_text = "\n".join(line.value for line in controls["event_log"].controls)
+    assert "Fetching Gemini models" in log_text
+    assert "gemini-3.1-pro" in _option_keys(controls["default_model_dropdown"])
+    assert "gemini-3.1-flash-lite-image" in _option_keys(controls["image_generation_model_dropdown"])
+    assert "gemini-3-pro-image" in _option_keys(controls["image_generation_model_dropdown"])
+    assert "Loaded" in log_text
+    assert "text" in log_text.lower()
+    assert "image" in log_text.lower()
+
+
+@pytest.mark.asyncio
+async def test_gui_startup_status_warns_when_selected_models_are_deprecated(tmp_path, monkeypatch):
+    def fake_fetch(_api_key: str, **_kwargs):
+        return (["gemini-3.1-pro"], ["gemini-3.1-flash-image"])
+
+    monkeypatch.setattr("model_catalog.fetch_gemini_models", fake_fetch)
+
+    settings = _FakeSettingsService(config_path=tmp_path / "settings.json")
+    settings.set_gemini_api_key("secret-key")
+    settings.set_default_model("gemini-3.1-flash-lite")
+    settings.set_image_generation_model("gemini-2.5-flash-image")
+    page = _FakePage()
+    controls = build_main_layout(page, _services(tmp_path, settings))
+    await controls["fetch_models"]()
+
+    status = controls["status_text"].value
+    warning = controls["settings_warning_text"].value
+    log_text = "\n".join(line.value for line in controls["event_log"].controls)
+    assert "gemini-3.1-flash-lite" in status
+    assert "gemini-2.5-flash-image" in status
+    assert "gemini-3.1-flash-lite" in warning
+    assert "gemini-2.5-flash-image" in warning
+    assert "gemini-3.1-flash-lite" in log_text
+    assert "gemini-2.5-flash-image" in log_text
+    assert any(
+        option.key == "gemini-3.1-flash-lite" and "deprecated" in option.text
+        for option in controls["default_model_dropdown"].options
+    )
+    assert any(
+        option.key == "gemini-2.5-flash-image" and "deprecated" in option.text
+        for option in controls["image_generation_model_dropdown"].options
+    )
+
+
+@pytest.mark.asyncio
+async def test_gui_save_settings_keeps_deprecated_model_and_shows_validation(tmp_path, monkeypatch):
+    def fake_fetch(_api_key: str, **_kwargs):
+        return (["gemini-3.1-pro"], ["gemini-3.1-flash-image"])
+
+    monkeypatch.setattr("model_catalog.fetch_gemini_models", fake_fetch)
+
+    settings = _FakeSettingsService(config_path=tmp_path / "settings.json")
+    settings.set_gemini_api_key("secret-key")
+    settings.set_default_model("gemini-3.1-flash-lite")
+    settings.set_image_generation_model("gemini-2.5-flash-image")
+    page = _FakePage()
+    controls = build_main_layout(page, _services(tmp_path, settings))
+    await controls["fetch_models"]()
+
+    controls["settings_save_button"].on_click(None)
+
+    assert settings.get_default_model() == "gemini-3.1-flash-lite"
+    assert settings.get_image_generation_model() == "gemini-2.5-flash-image"
+    assert "gemini-3.1-flash-lite" in controls["settings_warning_text"].value
+    assert "gemini-2.5-flash-image" in controls["status_text"].value
 
 
 def test_gui_event_log_receives_pipeline_events(tmp_path):
@@ -1252,6 +1374,16 @@ def test_output_page_generate_images_writes_into_selected_version(tmp_path, monk
 
     assert (version_dir / "images" / "v001" / "05_page_1.png").exists()
     assert (version_dir / "images" / "v001" / "05_page_2.png").exists()
+    status = json.loads((version_dir / "run_status.json").read_text(encoding="utf-8"))
+    assert status["run_config"]["image_generation_model"] == "gemini-2.5-flash-image"
+    assert status["image_generations"] == [
+        {
+            "model": "gemini-2.5-flash-image",
+            "images_dir": "images/v001",
+            "files": ["05_page_1.png", "05_page_2.png"],
+            "source": "generate_all",
+        }
+    ]
     assert (episode_dir / "v002").is_dir()
     labels = [control.label for control in state["file_list"].content.controls]
     assert "images/v001/05_page_1.png" in labels
@@ -1338,6 +1470,60 @@ def test_output_page_test_image_after_generate_all_adds_suffix(tmp_path, monkeyp
     assert (images_dir / "05_page_1.png").exists()
     assert (images_dir / "05_page_1_v1.png").exists()
     assert sorted(path.name for path in (version_dir / "images").iterdir()) == ["v001"]
+    status = json.loads((version_dir / "run_status.json").read_text(encoding="utf-8"))
+    assert [entry["model"] for entry in status["image_generations"]] == [
+        "gemini-2.5-flash-image",
+        "gemini-2.5-flash-image",
+    ]
+    assert [entry["source"] for entry in status["image_generations"]] == [
+        "generate_all",
+        "test_image",
+    ]
+    assert status["image_generations"][1]["files"] == ["05_page_1_v1.png"]
+
+
+def test_output_page_test_image_records_a_second_model(tmp_path, monkeypatch):
+    import flet as ft
+
+    campaigns_root = _make_output_versions(tmp_path)
+    version_dir = campaigns_root / "test_camp" / "episode-1" / "v002"
+
+    class _TaskPage(_FakePage):
+        def run_task(self, task: object) -> None:
+            asyncio.run(task())
+
+    fake_generator = type(
+        "FakeGenerator",
+        (),
+        {
+            "generate_image": lambda self, prompt: f"img:{prompt}".encode(),
+            "save_image": lambda self, image_bytes, output_path: (
+                Path(output_path).parent.mkdir(parents=True, exist_ok=True),
+                Path(output_path).write_bytes(image_bytes),
+                Path(output_path),
+            )[-1],
+        },
+    )()
+    monkeypatch.setattr("gui.ImageGenerator", lambda model: fake_generator)
+
+    page = _TaskPage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+
+    state["generate_images_button"].on_click(None)
+    services.settings.set_image_generation_model("gemini-3.1-flash-image")
+    state["file_list"].value = "04_page_1_prompt.txt"
+    state["file_list"].on_change(
+        type("Event", (), {"control": type("Control", (), {"value": "04_page_1_prompt.txt"})()})()
+    )
+    state["test_image_button"].on_click(None)
+
+    status = json.loads((version_dir / "run_status.json").read_text(encoding="utf-8"))
+    assert [entry["model"] for entry in status["image_generations"]] == [
+        "gemini-2.5-flash-image",
+        "gemini-3.1-flash-image",
+    ]
+    assert status["run_config"]["image_generation_model"] == "gemini-3.1-flash-image"
 
 
 def test_output_page_prompt_selection_enables_single_image_generation(tmp_path):

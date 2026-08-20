@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import os
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -22,7 +23,13 @@ from art_styles import (
     parse_style_id,
     style_id,
 )
-from model_defaults import DEFAULT_MODEL
+from model_catalog import (
+    deprecated_model_warnings,
+    load_catalog,
+    option_label,
+    refresh_model_catalog,
+    save_catalog,
+)
 from pipeline_config import (
     STAGE_ORDER,
     AspectRatio,
@@ -42,6 +49,7 @@ from pipeline_events import (
 from image_generator import (
     IMAGES_SUBDIR_NAME,
     ImageGenerator,
+    append_image_generation_record,
     generate_prompt_images,
     latest_images_dir,
     list_panel_images,
@@ -94,6 +102,38 @@ def create_services(campaigns_root: Path | None = None) -> AppServices:
         settings=SettingsService(),
         run_controller=RunController(),
     )
+
+
+def _models_catalog_path(settings: Any) -> Path | None:
+    config_path = getattr(settings, "config_path", None)
+    if not config_path:
+        return None
+    return Path(config_path).with_name("models.json")
+
+
+def _resolve_gemini_api_key(settings: Any) -> str | None:
+    from llm_client import _load_local_env_once
+
+    _load_local_env_once()
+    apply = getattr(settings, "apply_to_environment", None)
+    if callable(apply):
+        apply()
+    key = settings.get_gemini_api_key() or os.environ.get("GEMINI_API_KEY")
+    if key is None:
+        return None
+    stripped = str(key).strip()
+    return stripped or None
+
+
+def _model_dropdown_options(
+    models: list[str],
+    selected: str,
+    live: list[str] | None,
+) -> list[Any]:
+    values = list(models)
+    if selected and selected not in values:
+        values.append(selected)
+    return [ft.dropdown.Option(model, option_label(model, live)) for model in values]
 
 
 def _playwright_preflight_warnings() -> list[str]:
@@ -1571,7 +1611,7 @@ def build_output_page(
         return _read_settings_from_controls().get("generation_mode") == "panel"
 
     def _generate_images_for_prompts(
-        prompt_paths: list[Path], *, stitch: bool, new_folder: bool
+        prompt_paths: list[Path], *, stitch: bool, new_folder: bool, source: str
     ):
         version_dir = _selected_version_dir[0]
         if version_dir is None:
@@ -1580,7 +1620,7 @@ def build_output_page(
             raise ValueError("No prompt files available to generate images")
         settings = _read_settings_from_controls()
         model = services.settings.get_image_generation_model()
-        return generate_prompt_images(
+        result = generate_prompt_images(
             version_dir,
             prompt_paths,
             model=model,
@@ -1589,6 +1629,15 @@ def build_output_page(
             generator=ImageGenerator(model=model),
             new_folder=new_folder,
         )
+        if result.generated_paths:
+            append_image_generation_record(
+                version_dir,
+                model=model,
+                images_dir=result.images_dir,
+                files=result.generated_paths,
+                source=source,
+            )
+        return result
 
     def _stitch_panel_images_for_page(page_number: int, images_dir: Path) -> Path:
         panel_paths = [
@@ -1630,7 +1679,10 @@ def build_output_page(
         try:
             result = await asyncio.to_thread(
                 lambda: _generate_images_for_prompts(
-                    [prompt_path], stitch=_should_stitch(), new_folder=False
+                    [prompt_path],
+                    stitch=_should_stitch(),
+                    new_folder=False,
+                    source="regenerate_selected",
                 )
             )
             _refresh_all()
@@ -1704,6 +1756,7 @@ def build_output_page(
                     _prompt_paths_for_version(version_dir),
                     stitch=_should_stitch(),
                     new_folder=True,
+                    source="generate_all",
                 )
             )
             _refresh_all()
@@ -1734,7 +1787,10 @@ def build_output_page(
             prompt_path = _resolve_test_prompt(version_dir)
             result = await asyncio.to_thread(
                 lambda: _generate_images_for_prompts(
-                    [prompt_path], stitch=_should_stitch(), new_folder=False
+                    [prompt_path],
+                    stitch=_should_stitch(),
+                    new_folder=False,
+                    source="test_image",
                 )
             )
             _refresh_all()
@@ -2242,45 +2298,170 @@ def build_main_layout(page: Any, services: AppServices) -> dict[str, Any]:
         can_reveal_password=True,
         expand=True,
     )
-    default_model_input = ft.TextField(
+
+    catalog_path = _models_catalog_path(services.settings)
+    model_catalog = load_catalog(catalog_path)
+    if catalog_path is not None and not catalog_path.exists():
+        save_catalog(catalog_path, model_catalog)
+    selected_text_model = services.settings.get_default_model()
+    selected_image_model = services.settings.get_image_generation_model()
+
+    default_model_dropdown = ft.Dropdown(
         label="Default Model",
-        value=services.settings.get_default_model(),
-        expand=True,
+        value=selected_text_model,
+        options=_model_dropdown_options(
+            model_catalog.text_models,
+            selected_text_model,
+            model_catalog.live_text_models,
+        ),
+        width=600,
+        enable_filter=True,
+        menu_height=420,
     )
-    image_generation_model_input = ft.Dropdown(
+    image_generation_model_dropdown = ft.Dropdown(
         label="Image Generation Model",
-        value=services.settings.get_image_generation_model(),
-        options=[
-            ft.dropdown.Option("gemini-2.5-flash-image", "gemini-2.5-flash-image"),
-            ft.dropdown.Option("gemini-3.1-flash-image", "gemini-3.1-flash-image"),
-            ft.dropdown.Option("gemini-3-pro-image", "gemini-3-pro-image"),
-        ],
-        width=420,
+        value=selected_image_model,
+        options=_model_dropdown_options(
+            model_catalog.image_models,
+            selected_image_model,
+            model_catalog.live_image_models,
+        ),
+        width=600,
+        enable_filter=True,
+        menu_height=420,
+    )
+    settings_warning_text = ft.Text(
+        "",
+        color=ft.Colors.AMBER_900,
+        size=12,
+        visible=False,
+        selectable=True,
     )
 
     status_text = ft.Text("Ready", size=12)
 
+    def _apply_catalog_to_dropdowns() -> None:
+        text_value = default_model_dropdown.value or services.settings.get_default_model()
+        image_value = (
+            image_generation_model_dropdown.value
+            or services.settings.get_image_generation_model()
+        )
+        default_model_dropdown.options = _model_dropdown_options(
+            model_catalog.text_models,
+            text_value,
+            model_catalog.live_text_models,
+        )
+        image_generation_model_dropdown.options = _model_dropdown_options(
+            model_catalog.image_models,
+            image_value,
+            model_catalog.live_image_models,
+        )
+        default_model_dropdown.value = text_value
+        image_generation_model_dropdown.value = image_value
+
+    def _apply_model_warnings() -> list[str]:
+        warnings = deprecated_model_warnings(
+            text_model=default_model_dropdown.value or "",
+            image_model=image_generation_model_dropdown.value or "",
+            catalog=model_catalog,
+        )
+        settings_warning_text.value = "\n".join(warnings)
+        settings_warning_text.visible = bool(warnings)
+        return warnings
+
+    startup_model_warnings = _apply_model_warnings()
+    if startup_model_warnings:
+        status_text.value = "Warning: " + " ".join(startup_model_warnings)
+
+    def on_model_selection_changed(_event: Any) -> None:
+        _apply_model_warnings()
+        page.update()
+
+    _bind_dropdown_handler(default_model_dropdown, on_model_selection_changed)
+    _bind_dropdown_handler(image_generation_model_dropdown, on_model_selection_changed)
+
+    async def fetch_models() -> None:
+        nonlocal model_catalog
+        api_key = (gemini_key_input.value or "").strip() or _resolve_gemini_api_key(
+            services.settings
+        )
+        if not api_key:
+            append_log_line(
+                event_log, "Settings", "No Gemini API key; using local model list", ft
+            )
+            status_text.value = "No Gemini API key; using local model list"
+            page.update()
+            return
+        append_log_line(event_log, "Settings", "Fetching Gemini models...", ft)
+        status_text.value = "Fetching Gemini models..."
+        page.update()
+        model_catalog = await asyncio.to_thread(
+            refresh_model_catalog, catalog_path, api_key
+        )
+        _apply_catalog_to_dropdowns()
+        warnings = _apply_model_warnings()
+        if model_catalog.fetch_error:
+            message = f"Could not refresh Gemini models: {model_catalog.fetch_error}"
+            status_text.value = message
+            append_log_line(event_log, "Settings", message, ft)
+        else:
+            text_n = len(model_catalog.live_text_models or [])
+            image_n = len(model_catalog.live_image_models or [])
+            message = (
+                f"Loaded {text_n} text and {image_n} image models from Gemini "
+                f"({len(model_catalog.text_models)} text / "
+                f"{len(model_catalog.image_models)} image known locally)."
+            )
+            append_log_line(event_log, "Settings", message, ft)
+            if warnings:
+                status_text.value = "Warning: " + " ".join(warnings)
+                for warning in warnings:
+                    append_log_line(event_log, "Settings", warning, ft)
+            else:
+                status_text.value = message
+        page.update()
+
     def on_save_settings(_event: Any) -> None:
         if gemini_key_input.value:
             services.settings.set_gemini_api_key(gemini_key_input.value)
-        services.settings.set_default_model(default_model_input.value or "")
-        services.settings.set_image_generation_model(image_generation_model_input.value or "gemini-2.5-flash-image")
+        services.settings.set_default_model(default_model_dropdown.value or "")
+        services.settings.set_image_generation_model(
+            image_generation_model_dropdown.value or ""
+        )
         services.settings.apply_to_environment()
-        status_text.value = "Settings saved"
+        warnings = _apply_model_warnings()
+        if warnings:
+            status_text.value = "Warning: " + " ".join(warnings)
+        else:
+            status_text.value = "Settings saved"
         append_log_line(event_log, "Settings", "Saved settings", ft)
+        for warning in warnings:
+            append_log_line(event_log, "Settings", warning, ft)
         page.update()
+        run_task = getattr(page, "run_task", None)
+        if callable(run_task) and (
+            (gemini_key_input.value or "").strip()
+            or _resolve_gemini_api_key(services.settings)
+        ):
+            run_task(fetch_models)
 
+    settings_save_button = ft.FilledButton("Save", on_click=on_save_settings)
     settings_dialog = ft.AlertDialog(
         modal=False,
         title=ft.Text("Settings"),
         content=ft.Column(
-            controls=[gemini_key_input, default_model_input, image_generation_model_input],
+            controls=[
+                gemini_key_input,
+                default_model_dropdown,
+                image_generation_model_dropdown,
+                settings_warning_text,
+            ],
             tight=True,
-            width=520,
+            width=640,
         ),
         actions=[
             ft.TextButton("Close", on_click=lambda _e: close_settings_dialog(page, settings_dialog)),
-            ft.FilledButton("Save", on_click=on_save_settings),
+            settings_save_button,
         ],
         actions_alignment=ft.MainAxisAlignment.END,
     )
@@ -2389,6 +2570,11 @@ def build_main_layout(page: Any, services: AppServices) -> dict[str, Any]:
 
     page.add(app_content)
     append_log_line(event_log, "System", "GUI initialized", ft)
+    for warning in startup_model_warnings:
+        append_log_line(event_log, "Settings", warning, ft)
+    run_task = getattr(page, "run_task", None)
+    if callable(run_task) and _resolve_gemini_api_key(services.settings):
+        run_task(fetch_models)
     page.update()
 
     return {
@@ -2402,12 +2588,18 @@ def build_main_layout(page: Any, services: AppServices) -> dict[str, Any]:
         "event_log": event_log,
         "settings_button": settings_button,
         "settings_dialog": settings_dialog,
+        "settings_save_button": settings_save_button,
+        "settings_warning_text": settings_warning_text,
+        "default_model_dropdown": default_model_dropdown,
+        "image_generation_model_dropdown": image_generation_model_dropdown,
         "status_text": status_text,
+        "fetch_models": fetch_models,
     }
 
 
 def main(page: Any) -> None:
     services = create_services()
+    services.settings.apply_to_environment()
     build_main_layout(page, services)
 
 

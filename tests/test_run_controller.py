@@ -324,6 +324,57 @@ async def test_run_controller_forwards_image_generation_config(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_run_controller_persists_image_generation_records(tmp_path):
+    version_dir = tmp_path / "dreadmarsh" / "ep-1" / "v001"
+    version_dir.mkdir(parents=True)
+
+    class _ImageRunPipeline:
+        def __init__(self, **_: object) -> None:
+            return
+
+        async def run(self) -> dict[str, object]:
+            return {
+                "version": "v001",
+                "version_dir": str(version_dir),
+                "errors": [],
+                "run_config": {
+                    "generate_images": True,
+                    "image_generation_model": "gemini-3.1-flash-image",
+                },
+                "image_generations": [
+                    {
+                        "model": "gemini-3.1-flash-image",
+                        "images_dir": "images/v001",
+                        "files": ["05_page_1.png"],
+                        "source": "pipeline",
+                    }
+                ],
+            }
+
+    controller = RunController(pipeline_factory=_ImageRunPipeline)
+    config = RunConfig(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        generate_images=True,
+        image_generation_model="gemini-3.1-flash-image",
+    )
+
+    result = await controller.launch_run(config, lambda _event: None)
+
+    status = json.loads((Path(result.version_dir) / "run_status.json").read_text(encoding="utf-8"))
+    assert status["run_config"]["image_generation_model"] == "gemini-3.1-flash-image"
+    assert status["image_generations"] == [
+        {
+            "model": "gemini-3.1-flash-image",
+            "images_dir": "images/v001",
+            "files": ["05_page_1.png"],
+            "source": "pipeline",
+        }
+    ]
+
+
+@pytest.mark.asyncio
 async def test_run_controller_forwards_stop_after_config(tmp_path):
     captured: dict[str, object] = {}
 

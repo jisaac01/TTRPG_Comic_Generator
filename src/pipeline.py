@@ -727,6 +727,7 @@ class ComicPipeline:
             "art_style": self.art_style,
             "skip_style": self.skip_style,
             "generate_images": self.generate_images,
+            "image_generation_model": self.image_generation_model,
             "rerun_from": self._effective_rerun_from or self.rerun_from,
             "stop_after": self.stop_after,
         }
@@ -1664,6 +1665,22 @@ class ComicPipeline:
 
             errors.extend(image_generation_errors)
 
+        image_generations: list[dict[str, object]] = []
+        if image_generation_paths:
+            first_image = Path(image_generation_paths[0])
+            try:
+                relative_dir = first_image.parent.relative_to(version_dir).as_posix()
+            except ValueError:
+                relative_dir = first_image.parent.as_posix()
+            image_generations.append(
+                {
+                    "model": self.image_generation_model,
+                    "images_dir": relative_dir,
+                    "files": [Path(path).name for path in image_generation_paths],
+                    "source": "pipeline",
+                }
+            )
+
         # Determine final status
         checkpoints_created = []
         if entities_path.exists():
@@ -1721,6 +1738,7 @@ class ComicPipeline:
                 "prompt": page_prompt,
             } if page_prompt is not None else None,
             "images": image_generation_paths,
+            "image_generations": image_generations,
             "errors": errors,
             "error_details": error_details,
             "version": version_name,

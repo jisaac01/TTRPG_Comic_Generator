@@ -96,6 +96,19 @@ def test_run_config_snapshot_includes_vignette() -> None:
     assert snap["vignette"] is True
 
 
+def test_run_config_snapshot_includes_image_generation_model() -> None:
+    snap = run_config_snapshot(
+        RunConfig(
+            url="https://example.test/story",
+            campaign="dreadmarsh",
+            generate_images=True,
+            image_generation_model="gemini-3.1-flash-image",
+        )
+    )
+    assert snap["generate_images"] is True
+    assert snap["image_generation_model"] == "gemini-3.1-flash-image"
+
+
 def test_effective_rerun_from_bumps_when_generation_mode_changes() -> None:
     prev = run_config_snapshot(
         RunConfig(url="https://example.test/story", campaign="dreadmarsh")

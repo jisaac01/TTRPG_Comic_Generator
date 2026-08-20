@@ -2114,6 +2114,15 @@ async def test_image_generation_stage_runs_when_enabled(tmp_path):
     assert (version_dir / "images" / "v001" / "05_page_1.png").exists()
     fake_generator.generate_image.assert_called_once_with(_PAGE_PROMPT)
     mock_image_generator.assert_called_once_with(model="gemini-2.5-flash-image")
+    assert result["run_config"]["image_generation_model"] == "gemini-2.5-flash-image"
+    assert result["image_generations"] == [
+        {
+            "model": "gemini-2.5-flash-image",
+            "images_dir": "images/v001",
+            "files": ["05_page_1.png"],
+            "source": "pipeline",
+        }
+    ]
 
 
 @pytest.mark.asyncio

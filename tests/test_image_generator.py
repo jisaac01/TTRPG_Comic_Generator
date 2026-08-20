@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -12,6 +13,7 @@ sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
 from image_generator import (
     ImageGenerator,
+    append_image_generation_record,
     generate_prompt_images,
     latest_images_dir,
     next_images_dir,
@@ -287,3 +289,71 @@ def test_stitch_images_dir_uses_canonical_panel_files_not_regen_suffixes(
     stitch_images_dir(images_dir)
 
     assert received == [["05_page_1_panel_1.png", "05_page_1_panel_2.png"]]
+
+
+def test_append_image_generation_record_writes_model_and_keeps_prior_generations(tmp_path: Path) -> None:
+    version_dir = tmp_path / "v001"
+    version_dir.mkdir()
+    status_path = version_dir / "run_status.json"
+    status_path.write_text(
+        json.dumps({"status": "ok", "run_config": {"generate_images": False}}),
+        encoding="utf-8",
+    )
+    first_dir = version_dir / "images" / "v001"
+    first_dir.mkdir(parents=True)
+    first_file = first_dir / "05_page_1.png"
+    first_file.write_bytes(b"one")
+    second_dir = version_dir / "images" / "v002"
+    second_dir.mkdir(parents=True)
+    second_file = second_dir / "05_page_1.png"
+    second_file.write_bytes(b"two")
+
+    append_image_generation_record(
+        version_dir,
+        model="gemini-3.1-flash-image",
+        images_dir=first_dir,
+        files=[first_file],
+        source="generate_all",
+    )
+    append_image_generation_record(
+        version_dir,
+        model="gemini-2.5-flash-image",
+        images_dir=second_dir,
+        files=[second_file],
+        source="test_image",
+    )
+
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    assert status["run_config"]["image_generation_model"] == "gemini-2.5-flash-image"
+    assert status["image_generations"] == [
+        {
+            "model": "gemini-3.1-flash-image",
+            "images_dir": "images/v001",
+            "files": ["05_page_1.png"],
+            "source": "generate_all",
+        },
+        {
+            "model": "gemini-2.5-flash-image",
+            "images_dir": "images/v002",
+            "files": ["05_page_1.png"],
+            "source": "test_image",
+        },
+    ]
+
+
+def test_append_image_generation_record_requires_run_status(tmp_path: Path) -> None:
+    version_dir = tmp_path / "v001"
+    version_dir.mkdir()
+    images_dir = version_dir / "images" / "v001"
+    images_dir.mkdir(parents=True)
+    image_path = images_dir / "05_page_1.png"
+    image_path.write_bytes(b"img")
+
+    with pytest.raises(FileNotFoundError, match="run_status.json"):
+        append_image_generation_record(
+            version_dir,
+            model="gemini-3.1-flash-image",
+            images_dir=images_dir,
+            files=[image_path],
+            source="generate_all",
+        )

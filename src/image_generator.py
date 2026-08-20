@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -227,3 +228,50 @@ def generate_prompt_images(
         stitched_paths=stitched_paths,
         errors=errors,
     )
+
+
+def append_image_generation_record(
+    version_dir: Path,
+    *,
+    model: str,
+    images_dir: Path,
+    files: list[Path],
+    source: str,
+) -> dict:
+    """Append an image-generation record to the version's run_status.json."""
+    status_path = version_dir / "run_status.json"
+    if not status_path.exists():
+        raise FileNotFoundError(f"run_status.json not found in {version_dir}")
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    if not isinstance(status, dict):
+        raise ValueError(f"run_status.json must be a JSON object: {status_path}")
+
+    generations = status.get("image_generations")
+    if generations is None:
+        generations = []
+    elif not isinstance(generations, list):
+        raise ValueError(f"image_generations must be a list: {status_path}")
+
+    try:
+        relative_dir = images_dir.relative_to(version_dir).as_posix()
+    except ValueError:
+        relative_dir = images_dir.as_posix()
+
+    generations.append(
+        {
+            "model": model,
+            "images_dir": relative_dir,
+            "files": [path.name for path in files],
+            "source": source,
+        }
+    )
+    status["image_generations"] = generations
+
+    run_config = status.get("run_config")
+    if not isinstance(run_config, dict):
+        run_config = {}
+        status["run_config"] = run_config
+    run_config["image_generation_model"] = model
+
+    status_path.write_text(json.dumps(status, indent=2) + "\n", encoding="utf-8")
+    return status
