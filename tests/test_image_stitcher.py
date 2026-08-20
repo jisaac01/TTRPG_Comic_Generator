@@ -34,7 +34,7 @@ def test_stitch_panel_images_creates_a_page_image(tmp_path: Path) -> None:
     assert page.getpixel((24, 24)) == (255, 0, 0)
 
 
-def test_stitch_panel_images_versions_existing_output(tmp_path: Path) -> None:
+def test_stitch_panel_images_overwrites_existing_output(tmp_path: Path) -> None:
     first = tmp_path / "panel_1.png"
     second = tmp_path / "panel_2.png"
     output_path = tmp_path / "06_page_1.png"
@@ -45,9 +45,10 @@ def test_stitch_panel_images_versions_existing_output(tmp_path: Path) -> None:
 
     stitch_panel_images([first, second], output_path)
 
-    assert output_path.exists()
-    assert (tmp_path / "06_page_1_v1.png").exists()
-    assert (tmp_path / "06_page_1_v1.png").read_bytes() == b"old-output"
+    page = Image.open(output_path).convert("RGB")
+    assert page.size[0] > 0
+    assert page.size[1] > 0
+    assert list(tmp_path.glob("06_page_1*.png")) == [output_path]
 
 
 def test_grid_size_prefers_landscape_layout_for_six_panels() -> None:

@@ -1134,6 +1134,7 @@ def test_output_page_exposes_generation_controls(tmp_path):
 
     assert state["generate_images_button"] is not None
     assert state["generate_selected_image_button"] is not None
+    assert state["test_image_button"] is not None
     assert state["stitch_images_button"] is not None
 
 
@@ -1162,6 +1163,9 @@ def test_output_page_action_buttons_disable_when_started(tmp_path):
 
     state["generate_images_button"].on_click(None)
     assert state["generate_images_button"].disabled is True
+
+    state["test_image_button"].on_click(None)
+    assert state["test_image_button"].disabled is True
 
     state["generate_selected_image_button"].visible = True
     state["generate_selected_image_button"].on_click(None)
@@ -1195,8 +1199,130 @@ def test_output_page_regenerating_panel_prompt_uses_panel_output_path(tmp_path, 
 
     state["generate_selected_image_button"].on_click(None)
 
-    assert (version_dir / "05_page_1_panel_1.png").exists()
+    assert (version_dir / "images" / "v001" / "05_page_1_panel_1.png").exists()
     assert stitched.exists() is False
+
+
+def test_output_page_generate_images_writes_into_selected_version(tmp_path, monkeypatch):
+    import flet as ft
+
+    campaigns_root = _make_output_versions(tmp_path)
+    episode_dir = campaigns_root / "test_camp" / "episode-1"
+    version_dir = episode_dir / "v002"
+    (version_dir / "04_page_2_prompt.txt").write_text("page two", encoding="utf-8")
+
+    class _TaskPage(_FakePage):
+        def run_task(self, task: object) -> None:
+            asyncio.run(task())
+
+    fake_generator = type(
+        "FakeGenerator",
+        (),
+        {
+            "generate_image": lambda self, prompt: f"img:{prompt}".encode(),
+            "save_image": lambda self, image_bytes, output_path: (
+                Path(output_path).parent.mkdir(parents=True, exist_ok=True),
+                Path(output_path).write_bytes(image_bytes),
+                Path(output_path),
+            )[-1],
+        },
+    )()
+    monkeypatch.setattr("gui.ImageGenerator", lambda model: fake_generator)
+
+    page = _TaskPage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+
+    state["generate_images_button"].on_click(None)
+
+    assert (version_dir / "images" / "v001" / "05_page_1.png").exists()
+    assert (version_dir / "images" / "v001" / "05_page_2.png").exists()
+    assert (episode_dir / "v002").is_dir()
+    labels = [control.label for control in state["file_list"].content.controls]
+    assert "images/v001/05_page_1.png" in labels
+    version_names = {path.name for path in episode_dir.iterdir() if path.is_dir()}
+    assert version_names == {"v001", "v002"}
+
+
+def test_output_page_test_image_generates_selected_prompt(tmp_path, monkeypatch):
+    import flet as ft
+
+    campaigns_root = _make_output_versions(tmp_path)
+    version_dir = campaigns_root / "test_camp" / "episode-1" / "v002"
+    (version_dir / "04_page_2_prompt.txt").write_text("page two", encoding="utf-8")
+
+    class _TaskPage(_FakePage):
+        def run_task(self, task: object) -> None:
+            asyncio.run(task())
+
+    fake_generator = type(
+        "FakeGenerator",
+        (),
+        {
+            "generate_image": lambda self, prompt: f"img:{prompt}".encode(),
+            "save_image": lambda self, image_bytes, output_path: (
+                Path(output_path).parent.mkdir(parents=True, exist_ok=True),
+                Path(output_path).write_bytes(image_bytes),
+                Path(output_path),
+            )[-1],
+        },
+    )()
+    monkeypatch.setattr("gui.ImageGenerator", lambda model: fake_generator)
+
+    page = _TaskPage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+
+    state["file_list"].value = "04_page_2_prompt.txt"
+    state["file_list"].on_change(
+        type("Event", (), {"control": type("Control", (), {"value": "04_page_2_prompt.txt"})()})()
+    )
+    state["test_image_button"].on_click(None)
+
+    image_path = version_dir / "images" / "v001" / "05_page_2.png"
+    assert image_path.exists()
+    assert image_path.read_bytes() == b"img:page two"
+
+
+def test_output_page_test_image_after_generate_all_adds_suffix(tmp_path, monkeypatch):
+    import flet as ft
+
+    campaigns_root = _make_output_versions(tmp_path)
+    version_dir = campaigns_root / "test_camp" / "episode-1" / "v002"
+
+    class _TaskPage(_FakePage):
+        def run_task(self, task: object) -> None:
+            asyncio.run(task())
+
+    fake_generator = type(
+        "FakeGenerator",
+        (),
+        {
+            "generate_image": lambda self, prompt: f"img:{prompt}".encode(),
+            "save_image": lambda self, image_bytes, output_path: (
+                Path(output_path).parent.mkdir(parents=True, exist_ok=True),
+                Path(output_path).write_bytes(image_bytes),
+                Path(output_path),
+            )[-1],
+        },
+    )()
+    monkeypatch.setattr("gui.ImageGenerator", lambda model: fake_generator)
+
+    page = _TaskPage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+
+    state["generate_images_button"].on_click(None)
+    state["file_list"].value = "04_page_1_prompt.txt"
+    state["file_list"].on_change(
+        type("Event", (), {"control": type("Control", (), {"value": "04_page_1_prompt.txt"})()})()
+    )
+    state["test_image_button"].on_click(None)
+
+    images_dir = version_dir / "images" / "v001"
+    assert (images_dir / "05_page_1.png").exists()
+    assert (images_dir / "05_page_1_v1.png").exists()
+    assert sorted(path.name for path in (version_dir / "images").iterdir()) == ["v001"]
 
 
 def test_output_page_prompt_selection_enables_single_image_generation(tmp_path):

@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
-import re
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -39,7 +38,15 @@ from pipeline_events import (
     RunCompleted,
     PipelineEventUnion,
 )
-from image_generator import ImageGenerator
+from image_generator import (
+    IMAGES_SUBDIR_NAME,
+    ImageGenerator,
+    generate_prompt_images,
+    latest_images_dir,
+    list_panel_images,
+    panel_image_sort_key,
+    prompt_sort_key,
+)
 from image_stitcher import stitch_panel_images
 from prompt_templates import DEFAULT_PROMPTS_DIR
 from repository_service import (
@@ -919,6 +926,12 @@ def build_prompt_page(
 
 
 def _format_preview(path: Path) -> str:
+    if path.suffix.lower() in {".png", ".jpg", ".jpeg", ".gif", ".webp"}:
+        try:
+            size = path.stat().st_size
+        except OSError as exc:
+            return f"Unable to read file: {exc}"
+        return f"{path.name} ({size} bytes)"
     try:
         text = path.read_text(encoding="utf-8")
     except OSError as exc:
@@ -1016,6 +1029,7 @@ def build_output_page(
     quick_rerun_gif = _ft.Image(src=LOADING_GIF_URL, width=20, height=20, visible=False)
     quick_rerun_text = _ft.Text("Running...", size=12, visible=False)
     generate_images_button = _ft.OutlinedButton("Generate Images")
+    test_image_button = _ft.OutlinedButton("Test Image")
     stitch_images_button = _ft.OutlinedButton("Stitch")
     generate_selected_image_button = _ft.IconButton(
         icon=_ft.Icons.REFRESH,
@@ -1410,6 +1424,10 @@ def build_output_page(
                 if p.is_file() and p not in files
             )
             files.extend(extra)
+            images_root = version_dir / IMAGES_SUBDIR_NAME
+            if images_root.is_dir():
+                for folder in sorted(p for p in images_root.iterdir() if p.is_dir()):
+                    files.extend(sorted(p for p in folder.iterdir() if p.is_file()))
         return files
 
     def _is_working_selected() -> bool:
@@ -1460,7 +1478,10 @@ def build_output_page(
             return
 
         for path in _list_version_files(version_dir):
-            key = path.name
+            try:
+                key = path.relative_to(version_dir).as_posix()
+            except ValueError:
+                key = path.name
             _selected_files[key] = path
             rows.controls.append(_ft.Radio(value=key, label=key))
 
@@ -1542,12 +1563,42 @@ def build_output_page(
         path = _selected_files.get(selected)
         return path if path and path.name.startswith("04_page_") and path.name.endswith("_prompt.txt") else None
 
-    def _stitch_panel_images_for_page(page_number: int, version_dir: Path) -> Path:
-        panel_paths = sorted(version_dir.glob(f"05_page_{page_number}_panel_*.png"))
+    def _prompt_paths_for_version(version_dir: Path) -> list[Path]:
+        return sorted(version_dir.glob("04_page_*_prompt.txt"), key=prompt_sort_key)
+
+    def _should_stitch() -> bool:
+        return _read_settings_from_controls().get("generation_mode") == "panel"
+
+    def _generate_images_for_prompts(
+        prompt_paths: list[Path], *, stitch: bool, new_folder: bool
+    ):
+        version_dir = _selected_version_dir[0]
+        if version_dir is None:
+            raise ValueError("Select a version before generating images")
+        if not prompt_paths:
+            raise ValueError("No prompt files available to generate images")
+        settings = _read_settings_from_controls()
+        model = services.settings.get_image_generation_model()
+        return generate_prompt_images(
+            version_dir,
+            prompt_paths,
+            model=model,
+            aspect_ratio=str(settings["aspect_ratio"]),
+            stitch=stitch,
+            generator=ImageGenerator(model=model),
+            new_folder=new_folder,
+        )
+
+    def _stitch_panel_images_for_page(page_number: int, images_dir: Path) -> Path:
+        panel_paths = [
+            path
+            for path in list_panel_images(images_dir)
+            if panel_image_sort_key(path)[0] == page_number
+        ]
         if not panel_paths:
             raise ValueError("No panel images available to stitch")
 
-        output_path = version_dir / f"06_page_{page_number}.png"
+        output_path = images_dir / f"06_page_{page_number}.png"
         settings = _read_settings_from_controls()
         return stitch_panel_images(
             panel_paths,
@@ -1555,29 +1606,14 @@ def build_output_page(
             aspect_ratio=str(settings["aspect_ratio"]),
         )
 
-    def _generate_prompt_image(prompt_path: Path) -> Path:
-        version_dir = _selected_version_dir[0]
-        if version_dir is None:
-            raise ValueError("Select a version before generating images")
-
-        match = re.search(r"04_page_(\d+)(?:_panel_(\d+))?_prompt\.txt$", prompt_path.name)
-        if match is None:
-            raise ValueError("Prompt file name is not a page prompt")
-
-        page_number = match.group(1)
-        panel_number = match.group(2)
-        output_path = (
-            version_dir / f"05_page_{page_number}_panel_{panel_number}.png"
-            if panel_number is not None
-            else version_dir / f"05_page_{page_number}.png"
-        )
-        generator = ImageGenerator(model=services.settings.get_image_generation_model())
-        generator.save_image(generator.generate_image(prompt_path.read_text(encoding="utf-8")), output_path)
-
-        if panel_number is not None:
-            stitched_path = _stitch_panel_images_for_page(int(page_number), version_dir)
-            return stitched_path if stitched_path.exists() else output_path
-        return output_path
+    def _resolve_test_prompt(version_dir: Path) -> Path:
+        prompt_path = _selected_prompt_path()
+        if prompt_path is not None:
+            return prompt_path
+        prompts = _prompt_paths_for_version(version_dir)
+        if not prompts:
+            raise ValueError("No prompt files available to generate a test image")
+        return prompts[0]
 
     async def _run_generate_selected_image() -> None:
         prompt_path = _selected_prompt_path()
@@ -1591,8 +1627,17 @@ def build_output_page(
         output_status_text.value = "Generating image..."
         page.update()
         try:
-            output_path = await asyncio.to_thread(_generate_prompt_image, prompt_path)
-            output_status_text.value = f"Generated {output_path.name}"
+            result = await asyncio.to_thread(
+                lambda: _generate_images_for_prompts(
+                    [prompt_path], stitch=_should_stitch(), new_folder=False
+                )
+            )
+            _refresh_all()
+            output_status_text.value = (
+                f"Generated {result.generated_paths[0].name}"
+                if result.generated_paths
+                else "Image generation finished"
+            )
         except Exception as exc:
             output_status_text.value = f"Image generation failed: {exc}"
         finally:
@@ -1611,14 +1656,18 @@ def build_output_page(
         output_status_text.value = "Stitching panel images..."
         page.update()
         try:
-            panel_paths = sorted(version_dir.glob("05_page_*_panel_*.png"))
+            images_dir = latest_images_dir(version_dir)
+            if images_dir is None:
+                raise ValueError("No panel images available to stitch")
+
+            panel_paths = list_panel_images(images_dir)
             if not panel_paths:
                 raise ValueError("No panel images available to stitch")
 
-            page_numbers = sorted({int(re.search(r"05_page_(\d+)_panel_\d+\.png$", path.name).group(1)) for path in panel_paths})
+            page_numbers = sorted({panel_image_sort_key(path)[0] for path in panel_paths})
             stitched_paths: list[Path] = []
             for page_number in page_numbers:
-                stitched_paths.append(_stitch_panel_images_for_page(page_number, version_dir))
+                stitched_paths.append(_stitch_panel_images_for_page(page_number, images_dir))
 
             output_status_text.value = f"Stitched {len(stitched_paths)} page image(s)"
             _refresh_all()
@@ -1649,22 +1698,54 @@ def build_output_page(
         output_status_text.value = "Generating images..."
         page.update()
         try:
-            config = _build_rerun_config(campaign, episode_slug, "prompt", generate_images=True)
-            final_status: list[str] = []
-
-            def _on_event(event: PipelineEventUnion) -> None:
-                if isinstance(event, RunCompleted):
-                    final_status.append(event.status)
-                _refresh_all()
-                page.update()
-
-            await services.run_controller.launch_run(config, _on_event)
-            _refresh_all()
-            output_status_text.value = (
-                f"Generated images for {version_dir.name}: "
-                f"{final_status[0] if final_status else 'done'}"
+            result = await asyncio.to_thread(
+                lambda: _generate_images_for_prompts(
+                    _prompt_paths_for_version(version_dir),
+                    stitch=_should_stitch(),
+                    new_folder=True,
+                )
             )
+            _refresh_all()
+            relative = result.images_dir.relative_to(version_dir).as_posix()
+            output_status_text.value = (
+                f"Generated {len(result.generated_paths)} image(s) in {relative}"
+            )
+            if result.errors:
+                output_status_text.value += f" ({len(result.errors)} error(s))"
         except (RuntimeError, ValueError) as exc:
+            output_status_text.value = f"Image generation failed: {exc}"
+        finally:
+            _set_output_busy_state(False)
+            page.update()
+
+    async def _run_generate_test_image() -> None:
+        version_dir = _selected_version_dir[0]
+        if version_dir is None or not version_dir.exists():
+            _set_output_busy_state(False)
+            output_status_text.value = "Select a version before generating a test image"
+            page.update()
+            return
+
+        _set_output_busy_state(True)
+        output_status_text.value = "Generating test image..."
+        page.update()
+        try:
+            prompt_path = _resolve_test_prompt(version_dir)
+            result = await asyncio.to_thread(
+                lambda: _generate_images_for_prompts(
+                    [prompt_path], stitch=_should_stitch(), new_folder=False
+                )
+            )
+            _refresh_all()
+            relative = result.images_dir.relative_to(version_dir).as_posix()
+            output_status_text.value = (
+                f"Generated test image {result.generated_paths[0].name} in {relative}"
+                if result.generated_paths
+                else f"Test image finished in {relative}"
+            )
+            if result.errors:
+                output_status_text.value += f" ({result.errors[0]})"
+        except Exception as exc:
             output_status_text.value = f"Image generation failed: {exc}"
         finally:
             _set_output_busy_state(False)
@@ -1803,6 +1884,7 @@ def build_output_page(
     def _set_output_busy_state(busy: bool) -> None:
         quick_rerun_button.disabled = busy
         generate_images_button.disabled = busy
+        test_image_button.disabled = busy
         stitch_images_button.disabled = busy
         generate_selected_image_button.disabled = busy
 
@@ -1886,6 +1968,12 @@ def build_output_page(
         page.update()
         page.run_task(_run_generate_all_images)
 
+    def on_test_image_click(_e: Any) -> None:
+        _set_output_busy_state(True)
+        output_status_text.value = ""
+        page.update()
+        page.run_task(_run_generate_test_image)
+
     def on_stitch_images_click(_e: Any) -> None:
         _set_output_busy_state(True)
         output_status_text.value = ""
@@ -1895,6 +1983,7 @@ def build_output_page(
     quick_rerun_button.on_click = on_quick_rerun_click
     generate_selected_image_button.on_click = on_generate_selected_image_click
     generate_images_button.on_click = on_generate_images_click
+    test_image_button.on_click = on_test_image_click
     stitch_images_button.on_click = on_stitch_images_click
 
     _refresh_campaign_options()
@@ -1950,6 +2039,7 @@ def build_output_page(
                                         _ft.Text("Files", size=13, weight=_ft.FontWeight.W_500),
                                         generate_selected_image_button,
                                         generate_images_button,
+                                        test_image_button,
                                         stitch_images_button,
                                     ],
                                     spacing=6,
@@ -2014,6 +2104,7 @@ def build_output_page(
         "rerun_only_stage_checkbox": rerun_only_stage_checkbox,
         "quick_rerun_button": quick_rerun_button,
         "generate_images_button": generate_images_button,
+        "test_image_button": test_image_button,
         "generate_selected_image_button": generate_selected_image_button,
         "stitch_images_button": stitch_images_button,
         "panel_count_field": panel_count_field,

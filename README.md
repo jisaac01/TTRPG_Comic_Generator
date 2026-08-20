@@ -228,8 +228,8 @@ The pipeline supports two image-prompt strategies:
 
 | Mode | CLI / config value | Prompt output | Image output |
 |---|---|---|---|
-| **Page by Page** (default) | `page` | One prompt per page (`04_page_N_prompt.txt`) | One image per page (`05_page_N.png`) |
-| **Panel by Panel** | `panel` | One prompt per panel (`04_page_N_panel_M_prompt.txt`) | One image per panel (`05_page_N_panel_M.png`), then stitched into a page (`06_page_N.png`) |
+| **Page by Page** (default) | `page` | One prompt per page (`04_page_N_prompt.txt`) | One image per page (`images/v00N/05_page_N.png`) |
+| **Panel by Panel** | `panel` | One prompt per panel (`04_page_N_panel_M_prompt.txt`) | One image per panel (`images/v00N/05_page_N_panel_M.png`), then stitched into a page (`images/v00N/06_page_N.png`) |
 
 In **panel** mode:
 
@@ -246,15 +246,15 @@ Vignette is independent of page vs panel layout. When on (`--vignette`, or **Vig
 
 ### Image generation
 
-When `generate_images` is enabled (via the GUI **Generate images** checkbox or **Generate Images** on the Output tab), the pipeline automatically:
+When `generate_images` is enabled (via the GUI **Generate images** checkbox), the pipeline automatically:
 
 1. Sends each `04_page_*_prompt.txt` file to the configured Gemini image model.
-2. Saves the result as `05_page_*.png` (or `05_page_*_panel_*.png` in panel mode).
-3. In panel mode, stitches panel images into `06_page_*.png`.
+2. Saves the result under `images/v00N/` as `05_page_*.png` (or `05_page_*_panel_*.png` in panel mode).
+3. In panel mode, stitches panel images into `images/v00N/06_page_*.png`.
 
-Image generation always uses Gemini via the OpenAI-compatible image API (`client.images.generate`). Configure the model in GUI Settings (default: `gemini-2.5-flash-image`). Prior versions of generated images are rotated to `_v1`, `_v2`, etc. when regenerated.
+Image generation always uses Gemini via the OpenAI-compatible image API (`client.images.generate`). Configure the model in GUI Settings (default: `gemini-2.5-flash-image`). **Generate Images** (and pipeline `generate_images`) writes a new empty `images/v00N/` folder; missing files mean those pages failed. **Test Image** and regenerating a selected prompt write into the latest folder: the first file is `05_page_N.png`, further tries are `05_page_N_v1.png`, `_v2`, and so on (the original is left in place).
 
-You can also generate images outside a full pipeline run from the Output tab: select a prompt file to regenerate a single image, use **Generate Images** to process all prompts in a version, or **Stitch** to rebuild composite pages from existing panel PNGs.
+From the Output tab, **Generate Images**, **Test Image**, and regenerating a selected prompt all write into the selected version (they do not create a new pipeline version). **Test Image** sends one prompt (the selected file, or the first prompt if none is selected). **Stitch** rebuilds composite pages from the canonical panel PNGs in the latest `images/v00N/` folder (`_vN` retries are not stitched).
 
 ### Stage responsibilities
 
@@ -316,9 +316,9 @@ src/prompts/art_direction/          # bundled art style library (in repo)
         03_5_styled_script_page_001.json        # per-page styled script checkpoints
         04_page_1_prompt.txt                    # page mode: one prompt per page
         04_page_1_panel_1_prompt.txt          # panel mode: one prompt per panel
-        05_page_1.png                           # generated page image (page mode)
-        05_page_1_panel_1.png                   # generated panel image (panel mode)
-        06_page_1.png                           # stitched page image (panel mode)
+        images/v001/05_page_1.png               # generated page image (page mode)
+        images/v001/05_page_1_panel_1.png       # generated panel image (panel mode)
+        images/v001/06_page_1.png               # stitched page image (panel mode)
         run_status.json                         # run outcome, settings (incl. art_style), errors
         art_direction_template.json             # snapshot of the style used for this version
         prompts/                                # interpolated prompts sent to models
@@ -424,7 +424,7 @@ from image_generator import ImageGenerator
 import os
 ep = Path(os.environ['EP'])  # export EP=... first, or hardcode the app-data path
 prompt = ep / '04_page_1_prompt.txt'
-out = ep / '05_page_1.png'
+out = ep / 'images' / 'v001' / '05_page_1.png'
 gen = ImageGenerator(model='gemini-2.5-flash-image')
 gen.save_image(gen.generate_image(prompt.read_text()), out)
 "
@@ -438,8 +438,9 @@ import os
 from pathlib import Path
 from image_stitcher import stitch_panel_images
 version = Path(os.environ['EP'])  # export EP=... to app-data episode version
-panels = sorted(version.glob('05_page_1_panel_*.png'))
-stitch_panel_images(panels, version / '06_page_1.png', aspect_ratio='3:2')
+images = version / 'images' / 'v001'
+panels = sorted(images.glob('05_page_1_panel_*.png'))
+stitch_panel_images(panels, images / '06_page_1.png', aspect_ratio='3:2')
 "
 ```
 
@@ -465,9 +466,9 @@ pytest
 | `03_5_styled_script_page_NNN.json` | Script checkpoint with art-direction-infused panel descriptions |
 | `04_page_N_prompt.txt` | Composite image prompt for one multi-panel page (page mode) |
 | `04_page_N_panel_M_prompt.txt` | Image prompt for a single panel (panel mode) |
-| `05_page_N.png` | Generated page image (page mode) |
-| `05_page_N_panel_M.png` | Generated panel image (panel mode) |
-| `06_page_N.png` | Stitched composite page image (panel mode) |
+| `images/v00N/05_page_N.png` | Generated page image (page mode); each generate gets a new folder |
+| `images/v00N/05_page_N_panel_M.png` | Generated panel image (panel mode) |
+| `images/v00N/06_page_N.png` | Stitched composite page image (panel mode) |
 | `run_status.json` | Run outcome, errors, and persisted run settings |
 | `episode_meta.json` | Episode URL, display slug, creation timestamp |
 | `<campaigns-root>/index.json` | Global campaign+URL → episode folder lookup |

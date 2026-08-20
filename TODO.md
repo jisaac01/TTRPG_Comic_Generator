@@ -30,6 +30,7 @@
 - [ ] more visibility into what stage is running
 - [ ] get rid of duplicate URLs inside campaign folders
 - [ ] why does the campaign level index have episode level stuff? 
+- [ ] use Gemini API to discover image models
 
 
 ---

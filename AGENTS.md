@@ -95,8 +95,8 @@ Only phases invalidated by `--rerun-from` or changed run settings are recomputed
 | 4 Script | `scriptwriter.py` | `03_script_page_*.json` (panel mode also writes per-panel checkpoints) |
 | 4.5 Style | `style_integrator.py` | `03_5_styled_script_page_*.json` |
 | 5 Prompt | `prompter.py` | `04_page_*_prompt.txt` or `04_page_*_panel_*_prompt.txt` |
-| 6 Images | `image_generator.py` | `05_*.png` (optional; requires `GEMINI_API_KEY`) |
-| 7 Stitch | `image_stitcher.py` | `06_page_*.png` (panel mode only) |
+| 6 Images | `image_generator.py` | `images/v00N/05_*.png` (optional; requires `GEMINI_API_KEY`) |
+| 7 Stitch | `image_stitcher.py` | `images/v00N/06_page_*.png` (panel mode only) |
 
 **Generation modes** (`pipeline_config.GenerationMode`):
 

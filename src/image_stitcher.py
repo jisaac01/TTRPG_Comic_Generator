@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import math
-import re
 from pathlib import Path
 
 from PIL import Image
@@ -39,29 +38,6 @@ def _grid_size(panel_count: int, aspect_ratio: str = "3:2") -> tuple[int, int]:
     return best_cols, best_rows
 
 
-def _rotate_existing_output(output_path: Path) -> None:
-    base_name = output_path.stem
-    suffix = output_path.suffix
-    versioned_files = sorted(
-        output_path.parent.glob(f"{base_name}_v*{suffix}"),
-        key=lambda path: _version_number(path.name, base_name, suffix),
-    )
-
-    for candidate in reversed(versioned_files):
-        version = _version_number(candidate.name, base_name, suffix)
-        if version is None:
-            continue
-        candidate.replace(candidate.with_name(f"{base_name}_v{version + 1}{suffix}"))
-
-    if output_path.exists():
-        output_path.replace(output_path.with_name(f"{base_name}_v1{suffix}"))
-
-
-def _version_number(filename: str, base_name: str, suffix: str) -> int | None:
-    match = re.fullmatch(rf"{re.escape(base_name)}_v(\d+)" + re.escape(suffix), filename)
-    return int(match.group(1)) if match else None
-
-
 def stitch_panel_images(
     image_paths: list[Path],
     output_path: Path,
@@ -82,8 +58,6 @@ def stitch_panel_images(
         page_height = frame_height * rows + gutter * (rows + 1)
 
         page = Image.new("RGB", (page_width, page_height), bg_color)
-
-        _rotate_existing_output(output_path)
 
         for index, image in enumerate(images):
             row = index // cols

@@ -19,7 +19,15 @@ from entities import (
     write_entities_bible,
     write_episode_entities,
 )
-from image_generator import ImageGenerator
+from image_generator import (
+    IMAGES_SUBDIR_NAME,
+    ImageGenerator,
+    generate_prompt_images,
+    latest_images_dir,
+    list_panel_images,
+    panel_image_sort_key,
+    prompt_sort_key,
+)
 from image_stitcher import stitch_panel_images
 from model_defaults import DEFAULT_MODEL
 from pipeline_config import (
@@ -210,7 +218,7 @@ def _ensure_working_dir(episode_dir: Path) -> Path:
             _copy_tree_contents(
                 latest,
                 working,
-                exclude_names=frozenset({PROMPTS_SUBDIR_NAME}),
+                exclude_names=frozenset({PROMPTS_SUBDIR_NAME, IMAGES_SUBDIR_NAME}),
             )
     return working
 
@@ -244,17 +252,18 @@ def _sync_version_to_working(version_dir: Path, working_dir: Path) -> None:
     written for reproducibility. It is not an episode edit surface and is not
     mirrored into working. Campaign-level templates remain the source for the
     next run. Existing ``working/prompts`` (if any) is left untouched.
+
+    ``version/images/`` is per-version generated art and is not cloned forward.
     """
     working_dir.mkdir(parents=True, exist_ok=True)
-    prompts_prefix = PROMPTS_SUBDIR_NAME + "/"
+    skip_prefixes = (PROMPTS_SUBDIR_NAME + "/", IMAGES_SUBDIR_NAME + "/")
+    skip_names = {PROMPTS_SUBDIR_NAME, IMAGES_SUBDIR_NAME}
     for path in version_dir.rglob("*"):
         if not path.is_file():
             continue
         relative = path.relative_to(version_dir)
         relative_posix = relative.as_posix()
-        if relative_posix == PROMPTS_SUBDIR_NAME or relative_posix.startswith(
-            prompts_prefix
-        ):
+        if relative_posix in skip_names or relative_posix.startswith(skip_prefixes):
             continue
         _mirror_path_to_working(path, version_dir, working_dir)
 
@@ -744,60 +753,50 @@ class ComicPipeline:
 
     def _run_image_generation_stage(self, version_dir: Path) -> tuple[list[str], list[str]]:
         """Generate PNG images from each saved page prompt file."""
-        prompt_paths = sorted(version_dir.glob("04_page_*_prompt.txt"))
+        prompt_paths = sorted(version_dir.glob("04_page_*_prompt.txt"), key=prompt_sort_key)
         if not prompt_paths:
             return [], []
 
-        generator = ImageGenerator(model=self.image_generation_model)
-        generated_paths: list[str] = []
-        errors: list[str] = []
-
-        for prompt_path in prompt_paths:
-            page_number_match = re.search(r"04_page_(\d+)(?:_panel_(\d+))?_prompt\.txt$", prompt_path.name)
-            if page_number_match is None:
-                errors.append(f"image_generation: unable to determine page number for {prompt_path.name}")
-                continue
-
-            page_number = page_number_match.group(1)
-            panel_number = page_number_match.group(2)
-            output_path = version_dir / (
-                f"05_page_{page_number}_panel_{panel_number}.png"
-                if panel_number is not None
-                else f"05_page_{page_number}.png"
-            )
-            try:
-                prompt_text = prompt_path.read_text(encoding="utf-8")
-                image_bytes = generator.generate_image(prompt_text)
-                generator.save_image(image_bytes, output_path)
-                generated_paths.append(str(output_path))
-            except Exception as exc:
-                errors.append(f"image_generation: page {page_number}: {exc}")
-                self._emit(
-                    PhaseWarning(
-                        phase="image_generation",
-                        message=f"Image generation failed for page {page_number}",
-                        warning=str(exc),
-                    )
+        result = generate_prompt_images(
+            version_dir,
+            prompt_paths,
+            model=self.image_generation_model,
+            aspect_ratio=self.aspect_ratio,
+            stitch=False,
+            generator=ImageGenerator(model=self.image_generation_model),
+        )
+        for err in result.errors:
+            self._emit(
+                PhaseWarning(
+                    phase="image_generation",
+                    message="Image generation failed",
+                    warning=err,
                 )
-
-        return generated_paths, errors
+            )
+        return [str(path) for path in result.generated_paths], result.errors
 
     def _run_stitching_stage(self, version_dir: Path) -> tuple[list[str], list[str]]:
         """Stitch generated panel images into final page PNGs for panel-mode output."""
         if self.generation_mode != "panel":
             return [], []
 
-        panel_paths = sorted(version_dir.glob("05_page_*_panel_*.png"))
+        images_dir = latest_images_dir(version_dir)
+        if images_dir is None:
+            return [], []
+
+        panel_paths = list_panel_images(images_dir)
         if not panel_paths:
             return [], []
 
         stitched_paths: list[str] = []
         errors: list[str] = []
 
-        pages = sorted({int(re.search(r"05_page_(\d+)_panel_\d+\.png$", path.name).group(1)) for path in panel_paths})
+        pages = sorted({panel_image_sort_key(path)[0] for path in panel_paths})
         for page_number in pages:
-            page_paths = sorted(version_dir.glob(f"05_page_{page_number}_panel_*.png"))
-            output_path = version_dir / f"06_page_{page_number}.png"
+            page_paths = [
+                path for path in panel_paths if panel_image_sort_key(path)[0] == page_number
+            ]
+            output_path = images_dir / f"06_page_{page_number}.png"
             try:
                 stitch_panel_images(
                     page_paths,

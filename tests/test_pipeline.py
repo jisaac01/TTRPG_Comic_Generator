@@ -2111,7 +2111,7 @@ async def test_image_generation_stage_runs_when_enabled(tmp_path):
         result = await pipeline.run()
 
     version_dir = _version_dir_from_result(result)
-    assert (version_dir / "05_page_1.png").exists()
+    assert (version_dir / "images" / "v001" / "05_page_1.png").exists()
     fake_generator.generate_image.assert_called_once_with(_PAGE_PROMPT)
     mock_image_generator.assert_called_once_with(model="gemini-2.5-flash-image")
 
@@ -2150,10 +2150,11 @@ async def test_panel_image_generation_stitches_final_page(tmp_path):
         result = await pipeline.run()
 
     version_dir = _version_dir_from_result(result)
-    assert (version_dir / "05_page_1_panel_1.png").exists()
-    assert (version_dir / "05_page_1_panel_2.png").exists()
+    images_dir = version_dir / "images" / "v001"
+    assert (images_dir / "05_page_1_panel_1.png").exists()
+    assert (images_dir / "05_page_1_panel_2.png").exists()
     mock_stitch.assert_called_once()
-    assert mock_stitch.call_args.args[1] == version_dir / "06_page_1.png"
+    assert mock_stitch.call_args.args[1] == images_dir / "06_page_1.png"
 
 
 @pytest.mark.asyncio
