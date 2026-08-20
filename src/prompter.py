@@ -10,6 +10,7 @@ from art_styles import (
     default_art_direction_template_path,
 )
 from entities import Character, WorldStateCheckpoint, format_character_details
+from pipeline_config import format_aspect_ratio_for_prompt
 from prompt_templates import (
     PAGE_PROMPT_TEMPLATE_FILENAME,
     render_prompt_template,
@@ -311,7 +312,7 @@ def generate_page_prompt(
         output_goal=_format_output_goal(generation_mode),
         page_elements_instruction=_format_page_elements_instruction(title, page_number, generation_mode),
         panel_count=script.panel_count,
-        aspect_ratio=aspect_ratio,
+        aspect_ratio=format_aspect_ratio_for_prompt(aspect_ratio),
         panel_block=panel_block,
     )
 

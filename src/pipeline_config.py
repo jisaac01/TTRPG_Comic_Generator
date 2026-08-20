@@ -18,6 +18,20 @@ RecapVersion = Literal["short", "standard", "alternate", "long"]
 AspectRatio = Literal["1:1", "4:3", "3:2"]
 GenerationMode = Literal["page", "panel"]
 
+ASPECT_RATIO_NAMES: dict[str, str] = {
+    "1:1": "Square",
+    "4:3": "Vertical",
+    "3:2": "Horizontal",
+}
+
+
+def aspect_ratio_display_label(aspect_ratio: str) -> str:
+    return f"{aspect_ratio} — {ASPECT_RATIO_NAMES[aspect_ratio]}"
+
+
+def format_aspect_ratio_for_prompt(aspect_ratio: str) -> str:
+    return f"{aspect_ratio} {ASPECT_RATIO_NAMES[aspect_ratio].lower()}"
+
 CAMPAIGNS_ROOT = default_campaigns_root()
 
 

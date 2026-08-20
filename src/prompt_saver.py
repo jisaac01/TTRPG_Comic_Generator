@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from entities import WorldStateCheckpoint
+from pipeline_config import format_aspect_ratio_for_prompt
 from prompt_templates import (
     ENTITIES_CONTINUITY_SYSTEM_PROMPT_FILENAME,
     ENTITIES_CONTINUITY_USER_PROMPT_FILENAME,
@@ -379,7 +380,7 @@ def prepare_page_prompt_template(
         output_goal=output_goal,
         page_elements_instruction=page_elements_instruction,
         panel_count=script.panel_count,
-        aspect_ratio=aspect_ratio,
+        aspect_ratio=format_aspect_ratio_for_prompt(aspect_ratio),
         panel_block=panel_block,
     )
 

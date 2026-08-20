@@ -175,6 +175,19 @@ def test_run_page_campaign_dropdown_populated() -> None:
     assert option_keys == ["flail", "kingmaker"]
 
 
+def test_run_page_aspect_ratio_dropdown_uses_orientation_names() -> None:
+    page = _FakePage()
+    event_log = ft.ListView()
+    _container, state = build_run_page(_services(), page, event_log, ft)
+
+    dropdown = state["aspect_ratio_dropdown"]
+    labels = {o.key: o.text for o in dropdown.options}
+    assert labels["1:1"] == "1:1 — Square"
+    assert labels["4:3"] == "4:3 — Vertical"
+    assert labels["3:2"] == "3:2 — Horizontal"
+    assert dropdown.value == "3:2"
+
+
 def test_run_page_exposes_generation_mode_selector() -> None:
     page = _FakePage()
     event_log = ft.ListView()

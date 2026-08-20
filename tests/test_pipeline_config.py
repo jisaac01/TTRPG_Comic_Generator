@@ -7,11 +7,25 @@ sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
 from pipeline_config import (
     RunConfig,
+    aspect_ratio_display_label,
     effective_rerun_from,
+    format_aspect_ratio_for_prompt,
     run_config_snapshot,
     setting_field_enabled,
     should_copy_prompt_artifacts,
 )
+
+
+def test_aspect_ratio_display_labels_use_orientation_names() -> None:
+    assert aspect_ratio_display_label("1:1") == "1:1 — Square"
+    assert aspect_ratio_display_label("4:3") == "4:3 — Vertical"
+    assert aspect_ratio_display_label("3:2") == "3:2 — Horizontal"
+
+
+def test_format_aspect_ratio_for_prompt_includes_orientation_words() -> None:
+    assert format_aspect_ratio_for_prompt("1:1") == "1:1 square"
+    assert format_aspect_ratio_for_prompt("4:3") == "4:3 vertical"
+    assert format_aspect_ratio_for_prompt("3:2") == "3:2 horizontal"
 
 
 def test_run_config_defaults_generate_images_off_and_uses_current_schema() -> None:

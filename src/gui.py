@@ -28,6 +28,7 @@ from pipeline_config import (
     AspectRatio,
     RecapVersion,
     RunConfig,
+    aspect_ratio_display_label,
     required_rerun_for_config_diff,
     setting_field_enabled,
 )
@@ -201,9 +202,9 @@ def build_run_page(
         label="Aspect ratio",
         value="3:2",
         options=[
-            _ft.dropdown.Option("1:1", "1:1 — Square"),
-            _ft.dropdown.Option("4:3", "4:3 — Vertical / Portrait"),
-            _ft.dropdown.Option("3:2", "3:2 — Standard comic page"),
+            _ft.dropdown.Option("1:1", aspect_ratio_display_label("1:1")),
+            _ft.dropdown.Option("4:3", aspect_ratio_display_label("4:3")),
+            _ft.dropdown.Option("3:2", aspect_ratio_display_label("3:2")),
         ],
         width=180,
     )
@@ -1086,9 +1087,9 @@ def build_output_page(
         label="Aspect ratio",
         value="3:2",
         options=[
-            _ft.dropdown.Option("1:1", "1:1 — Square"),
-            _ft.dropdown.Option("4:3", "4:3 — Vertical / Portrait"),
-            _ft.dropdown.Option("3:2", "3:2 — Standard comic page"),
+            _ft.dropdown.Option("1:1", aspect_ratio_display_label("1:1")),
+            _ft.dropdown.Option("4:3", aspect_ratio_display_label("4:3")),
+            _ft.dropdown.Option("3:2", aspect_ratio_display_label("3:2")),
         ],
         width=200,
     )

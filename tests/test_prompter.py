@@ -218,6 +218,37 @@ def test_generate_page_prompt_contains_interpolated_fields(tmp_path):
     assert "Del:\nA druid in mossy robes" in prompt_text
     assert "Vendetta:\nA wary vampire scout" in prompt_text
     assert "Offscreen NPC" not in prompt_text
+    assert "Target aspect ratio: 3:2 horizontal." in prompt_text
+
+
+def test_generate_page_prompt_includes_aspect_ratio_orientation_words(tmp_path):
+    entities_path, script_path, template_path = _write_inputs(tmp_path)
+
+    horizontal = prompter.generate_page_prompt(
+        script_checkpoint_path=script_path,
+        entities_checkpoint_path=entities_path,
+        art_style_template_path=template_path,
+        output_path=tmp_path / "04_page_1_prompt.txt",
+        aspect_ratio="3:2",
+    )
+    vertical = prompter.generate_page_prompt(
+        script_checkpoint_path=script_path,
+        entities_checkpoint_path=entities_path,
+        art_style_template_path=template_path,
+        output_path=tmp_path / "04_page_2_prompt.txt",
+        aspect_ratio="4:3",
+    )
+    square = prompter.generate_page_prompt(
+        script_checkpoint_path=script_path,
+        entities_checkpoint_path=entities_path,
+        art_style_template_path=template_path,
+        output_path=tmp_path / "04_page_3_prompt.txt",
+        aspect_ratio="1:1",
+    )
+
+    assert "Target aspect ratio: 3:2 horizontal." in horizontal
+    assert "Target aspect ratio: 4:3 vertical." in vertical
+    assert "Target aspect ratio: 1:1 square." in square
 
 
 def test_generate_page_prompt_includes_character_matched_by_short_name(tmp_path):
