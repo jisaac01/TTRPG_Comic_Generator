@@ -186,7 +186,9 @@ def test_generate_prompt_images_new_folder_leaves_failed_pages_missing(tmp_path:
     latest = version_dir / "images" / "v002"
     assert result.images_dir == latest
     assert (latest / "05_page_1.png").read_bytes() == b"img:one"
-    assert result.errors
+    assert result.errors == [
+        "image_generation: page 2: No image data returned from image generation response"
+    ]
     png_names = sorted(path.name for path in latest.glob("*.png"))
     assert png_names == ["05_page_1.png"]
 
@@ -331,13 +333,51 @@ def test_append_image_generation_record_writes_model_and_keeps_prior_generations
             "images_dir": "images/v001",
             "files": ["05_page_1.png"],
             "source": "generate_all",
+            "errors": [],
         },
         {
             "model": "gemini-2.5-flash-image",
             "images_dir": "images/v002",
             "files": ["05_page_1.png"],
             "source": "test_image",
+            "errors": [],
         },
+    ]
+
+
+def test_append_image_generation_record_writes_errors_when_no_files(tmp_path: Path) -> None:
+    version_dir = tmp_path / "v001"
+    version_dir.mkdir()
+    status_path = version_dir / "run_status.json"
+    status_path.write_text(
+        json.dumps({"status": "ok", "run_config": {"generate_images": False}}),
+        encoding="utf-8",
+    )
+    images_dir = version_dir / "images" / "v001"
+    images_dir.mkdir(parents=True)
+    errors = [
+        "image_generation: page 1: model gemini-3.1-flash-lite-image is not found",
+    ]
+
+    append_image_generation_record(
+        version_dir,
+        model="gemini-3.1-flash-lite-image",
+        images_dir=images_dir,
+        files=[],
+        source="generate_all",
+        errors=errors,
+    )
+
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    assert status["run_config"]["image_generation_model"] == "gemini-3.1-flash-lite-image"
+    assert status["image_generations"] == [
+        {
+            "model": "gemini-3.1-flash-lite-image",
+            "images_dir": "images/v001",
+            "files": [],
+            "source": "generate_all",
+            "errors": errors,
+        }
     ]
 
 

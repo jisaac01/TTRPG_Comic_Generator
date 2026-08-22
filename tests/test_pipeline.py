@@ -2121,6 +2121,7 @@ async def test_image_generation_stage_runs_when_enabled(tmp_path):
             "images_dir": "images/v001",
             "files": ["05_page_1.png"],
             "source": "pipeline",
+            "errors": [],
         }
     ]
 

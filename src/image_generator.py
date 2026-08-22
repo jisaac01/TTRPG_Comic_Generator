@@ -237,6 +237,7 @@ def append_image_generation_record(
     images_dir: Path,
     files: list[Path],
     source: str,
+    errors: list[str] | None = None,
 ) -> dict:
     """Append an image-generation record to the version's run_status.json."""
     status_path = version_dir / "run_status.json"
@@ -263,6 +264,7 @@ def append_image_generation_record(
             "images_dir": relative_dir,
             "files": [path.name for path in files],
             "source": source,
+            "errors": list(errors or []),
         }
     )
     status["image_generations"] = generations

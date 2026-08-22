@@ -1382,6 +1382,7 @@ def test_output_page_generate_images_writes_into_selected_version(tmp_path, monk
             "images_dir": "images/v001",
             "files": ["05_page_1.png", "05_page_2.png"],
             "source": "generate_all",
+            "errors": [],
         }
     ]
     assert (episode_dir / "v002").is_dir()
@@ -1389,6 +1390,54 @@ def test_output_page_generate_images_writes_into_selected_version(tmp_path, monk
     assert "images/v001/05_page_1.png" in labels
     version_names = {path.name for path in episode_dir.iterdir() if path.is_dir()}
     assert version_names == {"v001", "v002"}
+
+
+def test_output_page_generate_images_shows_and_records_errors(tmp_path, monkeypatch):
+    import flet as ft
+
+    campaigns_root = _make_output_versions(tmp_path)
+    version_dir = campaigns_root / "test_camp" / "episode-1" / "v002"
+    error_message = "model gemini-3.1-flash-lite-image is not found"
+
+    class _TaskPage(_FakePage):
+        def run_task(self, task: object) -> None:
+            asyncio.run(task())
+
+    class _FailingGenerator:
+        def generate_image(self, prompt: str) -> bytes:
+            raise RuntimeError(error_message)
+
+        def save_image(self, image_bytes: bytes, output_path: Path) -> Path:
+            return Path(output_path)
+
+    monkeypatch.setattr("gui.ImageGenerator", lambda model: _FailingGenerator())
+
+    page = _TaskPage()
+    event_log = ft.ListView()
+    services = _prompt_services(campaigns_root)
+    services.settings.set_image_generation_model("gemini-3.1-flash-lite-image")
+    _view, state = build_output_page(services, page, ft, event_log)
+
+    state["generate_images_button"].on_click(None)
+
+    status_text = state["output_status_text"].value
+    assert "Generated 0 image(s) in images/v001" in status_text
+    assert error_message in status_text
+    assert "1 error(s)" in status_text
+
+    status = json.loads((version_dir / "run_status.json").read_text(encoding="utf-8"))
+    assert status["image_generations"] == [
+        {
+            "model": "gemini-3.1-flash-lite-image",
+            "images_dir": "images/v001",
+            "files": [],
+            "source": "generate_all",
+            "errors": [f"image_generation: page 1: {error_message}"],
+        }
+    ]
+    log_text = "\n".join(line.value for line in event_log.controls)
+    assert error_message in log_text
+    assert "Images" in log_text
 
 
 def test_output_page_test_image_generates_selected_prompt(tmp_path, monkeypatch):

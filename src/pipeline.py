@@ -1678,6 +1678,7 @@ class ComicPipeline:
                     "images_dir": relative_dir,
                     "files": [Path(path).name for path in image_generation_paths],
                     "source": "pipeline",
+                    "errors": image_generation_errors,
                 }
             )
 

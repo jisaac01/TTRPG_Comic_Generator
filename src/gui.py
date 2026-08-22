@@ -1149,7 +1149,7 @@ def build_output_page(
         width=240,
     )
     version_path_text = _ft.Text("", size=11, selectable=True)
-    output_status_text = _ft.Text("", size=12)
+    output_status_text = _ft.Text("", size=12, selectable=True)
 
     _DEFAULT_RUN_CONFIG: dict[str, Any] = {
         "panel_count": 6,
@@ -1629,15 +1629,25 @@ def build_output_page(
             generator=ImageGenerator(model=model),
             new_folder=new_folder,
         )
-        if result.generated_paths:
-            append_image_generation_record(
-                version_dir,
-                model=model,
-                images_dir=result.images_dir,
-                files=result.generated_paths,
-                source=source,
-            )
+        append_image_generation_record(
+            version_dir,
+            model=model,
+            images_dir=result.images_dir,
+            files=result.generated_paths,
+            source=source,
+            errors=result.errors,
+        )
         return result
+
+    def _report_image_generation_result(result, success_message: str) -> None:
+        output_status_text.value = success_message
+        if result.errors:
+            output_status_text.value += f" ({len(result.errors)} error(s))\n" + "\n".join(
+                result.errors
+            )
+            if event_log is not None:
+                for err in result.errors:
+                    append_log_line(event_log, "Images", err, _ft)
 
     def _stitch_panel_images_for_page(page_number: int, images_dir: Path) -> Path:
         panel_paths = [
@@ -1686,10 +1696,13 @@ def build_output_page(
                 )
             )
             _refresh_all()
-            output_status_text.value = (
-                f"Generated {result.generated_paths[0].name}"
-                if result.generated_paths
-                else "Image generation finished"
+            _report_image_generation_result(
+                result,
+                (
+                    f"Generated {result.generated_paths[0].name}"
+                    if result.generated_paths
+                    else "Image generation finished"
+                ),
             )
         except Exception as exc:
             output_status_text.value = f"Image generation failed: {exc}"
@@ -1761,11 +1774,10 @@ def build_output_page(
             )
             _refresh_all()
             relative = result.images_dir.relative_to(version_dir).as_posix()
-            output_status_text.value = (
-                f"Generated {len(result.generated_paths)} image(s) in {relative}"
+            _report_image_generation_result(
+                result,
+                f"Generated {len(result.generated_paths)} image(s) in {relative}",
             )
-            if result.errors:
-                output_status_text.value += f" ({len(result.errors)} error(s))"
         except (RuntimeError, ValueError) as exc:
             output_status_text.value = f"Image generation failed: {exc}"
         finally:
@@ -1795,13 +1807,14 @@ def build_output_page(
             )
             _refresh_all()
             relative = result.images_dir.relative_to(version_dir).as_posix()
-            output_status_text.value = (
-                f"Generated test image {result.generated_paths[0].name} in {relative}"
-                if result.generated_paths
-                else f"Test image finished in {relative}"
+            _report_image_generation_result(
+                result,
+                (
+                    f"Generated test image {result.generated_paths[0].name} in {relative}"
+                    if result.generated_paths
+                    else f"Test image finished in {relative}"
+                ),
             )
-            if result.errors:
-                output_status_text.value += f" ({result.errors[0]})"
         except Exception as exc:
             output_status_text.value = f"Image generation failed: {exc}"
         finally:
