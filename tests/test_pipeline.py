@@ -2113,7 +2113,10 @@ async def test_image_generation_stage_runs_when_enabled(tmp_path):
     version_dir = _version_dir_from_result(result)
     assert (version_dir / "images" / "v001" / "05_page_1.png").exists()
     fake_generator.generate_image.assert_called_once_with(_PAGE_PROMPT)
-    mock_image_generator.assert_called_once_with(model="gemini-2.5-flash-image")
+    mock_image_generator.assert_called_once_with(
+        model="gemini-2.5-flash-image",
+        aspect_ratio="3:2",
+    )
     assert result["run_config"]["image_generation_model"] == "gemini-2.5-flash-image"
     assert result["image_generations"] == [
         {

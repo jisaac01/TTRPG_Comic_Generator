@@ -252,7 +252,7 @@ When `generate_images` is enabled (via the GUI **Generate images** checkbox), th
 2. Saves the result under `images/v00N/` as `05_page_*.png` (or `05_page_*_panel_*.png` in panel mode).
 3. In panel mode, stitches panel images into `images/v00N/06_page_*.png`.
 
-Image generation always uses Gemini via the OpenAI-compatible image API (`client.images.generate`). Configure the model in GUI Settings (default: `gemini-2.5-flash-image`). **Generate Images** (and pipeline `generate_images`) writes a new empty `images/v00N/` folder; missing files mean those pages failed. **Test Image** and regenerating a selected prompt write into the latest folder: the first file is `05_page_N.png`, further tries are `05_page_N_v1.png`, `_v2`, and so on (the original is left in place).
+Image generation always uses Gemini native `generateContent` (Nano Banana models such as `gemini-3.1-flash-lite-image`). Configure the model in GUI Settings (default: `gemini-2.5-flash-image`). **Generate Images** (and pipeline `generate_images`) writes a new empty `images/v00N/` folder; missing files mean those pages failed. **Test Image** and regenerating a selected prompt write into the latest folder: the first file is `05_page_N.png`, further tries are `05_page_N_v1.png`, `_v2`, and so on (the original is left in place).
 
 From the Output tab, **Generate Images**, **Test Image**, and regenerating a selected prompt all write into the selected version (they do not create a new pipeline version). **Test Image** sends one prompt (the selected file, or the first prompt if none is selected). **Stitch** rebuilds composite pages from the canonical panel PNGs in the latest `images/v00N/` folder (`_vN` retries are not stitched).
 

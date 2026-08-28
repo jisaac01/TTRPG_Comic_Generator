@@ -4,7 +4,6 @@ import base64
 import json
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -20,26 +19,34 @@ from image_generator import (
 )
 
 
-def test_image_generator_generates_and_saves_image_bytes(tmp_path) -> None:
-    fake_payload = base64.b64encode(b"fake-image-bytes").decode("ascii")
-    fake_client = SimpleNamespace(
-        images=SimpleNamespace(
-            generate=MagicMock(
-                return_value=SimpleNamespace(data=[SimpleNamespace(b64_json=fake_payload)])
-            )
-        )
+def _generate_content_payload(image_bytes: bytes, *, extra_parts: list[dict] | None = None) -> dict:
+    parts = list(extra_parts or [])
+    parts.append(
+        {
+            "inlineData": {
+                "mimeType": "image/png",
+                "data": base64.b64encode(image_bytes).decode("ascii"),
+            }
+        }
     )
-    client_factory = MagicMock(return_value=fake_client)
+    return {"candidates": [{"content": {"parts": parts}}]}
 
-    generator = ImageGenerator("gemini-2.5-flash-image", client_factory=client_factory)
+
+def test_image_generator_generates_and_saves_image_bytes(tmp_path) -> None:
+    request_fn = MagicMock(return_value=_generate_content_payload(b"fake-image-bytes"))
+    generator = ImageGenerator(
+        "gemini-3.1-flash-lite-image",
+        aspect_ratio="3:2",
+        request_fn=request_fn,
+    )
 
     image_bytes = generator.generate_image("A glowing dragon over a castle")
 
     assert image_bytes == b"fake-image-bytes"
-    client_factory.assert_called_once_with("gemini-2.5-flash-image")
-    fake_client.images.generate.assert_called_once_with(
-        model="gemini-2.5-flash-image",
-        prompt="A glowing dragon over a castle",
+    request_fn.assert_called_once_with(
+        "gemini-3.1-flash-lite-image",
+        "A glowing dragon over a castle",
+        "3:2",
     )
 
     output_path = tmp_path / "generated" / "page_001.png"
@@ -49,14 +56,100 @@ def test_image_generator_generates_and_saves_image_bytes(tmp_path) -> None:
     assert output_path.read_bytes() == b"fake-image-bytes"
 
 
-def test_image_generator_raises_when_response_has_no_image_payload() -> None:
-    fake_client = SimpleNamespace(
-        images=SimpleNamespace(generate=MagicMock(return_value=SimpleNamespace(data=[])))
-    )
-    generator = ImageGenerator("gemini-2.5-flash-image", client_factory=lambda _: fake_client)
+def test_image_generator_posts_generate_content_not_predict(monkeypatch) -> None:
+    captured: dict[str, object] = {}
 
-    with pytest.raises(ValueError, match="No image data returned"):
+    class FakeResponse:
+        def read(self) -> bytes:
+            return json.dumps(_generate_content_payload(b"png-bytes")).encode("utf-8")
+
+        def __enter__(self) -> FakeResponse:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+    def fake_urlopen(request, timeout=0):
+        captured["url"] = request.full_url
+        captured["method"] = request.get_method()
+        captured["body"] = json.loads(request.data.decode("utf-8"))
+        captured["timeout"] = timeout
+        captured["api_key"] = request.get_header("X-goog-api-key") or request.get_header(
+            "x-goog-api-key"
+        )
+        return FakeResponse()
+
+    monkeypatch.setenv("GEMINI_API_KEY", "secret-key")
+    monkeypatch.setattr("image_generator.urllib.request.urlopen", fake_urlopen)
+
+    generator = ImageGenerator("gemini-3.1-flash-lite-image", aspect_ratio="3:2")
+    image_bytes = generator.generate_image("a marsh at dusk")
+
+    assert image_bytes == b"png-bytes"
+    assert captured["method"] == "POST"
+    assert captured["api_key"] == "secret-key"
+    assert "models/gemini-3.1-flash-lite-image:generateContent" in str(captured["url"])
+    assert "openai" not in str(captured["url"])
+    body = captured["body"]
+    assert isinstance(body, dict)
+    assert body["contents"][0]["parts"][0]["text"] == "a marsh at dusk"
+    assert body["generationConfig"]["responseModalities"] == ["TEXT", "IMAGE"]
+    assert body["generationConfig"]["imageConfig"]["aspectRatio"] == "3:2"
+
+
+def test_image_generator_uses_the_last_inline_image_part() -> None:
+    thought = base64.b64encode(b"thought").decode("ascii")
+    request_fn = MagicMock(
+        return_value=_generate_content_payload(
+            b"final-image",
+            extra_parts=[
+                {"text": "sketching layout"},
+                {"inlineData": {"mimeType": "image/png", "data": thought}},
+            ],
+        )
+    )
+    generator = ImageGenerator("gemini-3.1-flash-lite-image", request_fn=request_fn)
+
+    assert generator.generate_image("panel one") == b"final-image"
+
+
+def test_image_generator_raises_when_response_has_no_image_payload() -> None:
+    generator = ImageGenerator(
+        "gemini-3.1-flash-lite-image",
+        request_fn=lambda *_args: {"candidates": [{"content": {"parts": [{"text": "nope"}]}}]},
+    )
+
+    with pytest.raises(ValueError, match="No image payload returned"):
         generator.generate_image("A blank scene")
+
+
+def test_image_generator_includes_http_error_body(monkeypatch) -> None:
+    class FakeHTTPError(OSError):
+        def __init__(self) -> None:
+            super().__init__("HTTP Error 404")
+            self.code = 404
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "error": {
+                        "code": 404,
+                        "message": "models/gemini-3.1-flash-lite-image is not found for API version v1main, or is not supported for predict.",
+                    }
+                }
+            ).encode("utf-8")
+
+    def fake_urlopen(request, timeout=0):
+        raise FakeHTTPError()
+
+    monkeypatch.setenv("GEMINI_API_KEY", "secret-key")
+    monkeypatch.setattr("image_generator.urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("image_generator.urllib.error.HTTPError", FakeHTTPError)
+
+    generator = ImageGenerator("gemini-3.1-flash-lite-image")
+    with pytest.raises(OSError, match="generateContent") as exc_info:
+        generator.generate_image("a marsh at dusk")
+    assert "404" in str(exc_info.value)
 
 
 def test_save_image_overwrites_the_given_path(tmp_path: Path) -> None:

@@ -116,7 +116,7 @@ Scene count for the story architect = `panel_count × total_pages`.
 - **Working directory**: `working/` is the mutable clone source for the next run. Do not treat historical `vNNN` as the edit surface for iteration.
 - **Checkpoint skip logic**: within a version, skip a phase if its output files already exist (unless invalidated by rerun).
 - **Prompt artifacts**: interpolated prompts are saved under `<version>/prompts/` for reproducibility only (audit trail for that run). They are not cloned into the next version and not mirrored into `working/`. Editable prompt templates live at **campaign root** (bootstrapped from system defaults); the Prompts GUI edits those.
-- **Image generation** always uses Gemini via `ImageGenerator` and `build_openai_client`, regardless of which backend handles text stages.
+- **Image generation** always uses Gemini native `generateContent` via `ImageGenerator`, regardless of which backend handles text stages. Do not call the OpenAI-compatible `images.generate` / Imagen `predict` endpoint for Nano Banana models.
 
 ## Testing conventions
 

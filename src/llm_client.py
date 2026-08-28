@@ -68,22 +68,26 @@ def _is_gemini(model: str) -> bool:
     return model.startswith("gemini-")
 
 
+def require_gemini_api_key() -> str:
+    """Load local env once and return GEMINI_API_KEY, or fail clearly."""
+    _load_local_env_once()
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        raise EnvironmentError(
+            "GEMINI_API_KEY environment variable is not set. "
+            "Set it before using a Gemini model."
+        )
+    return api_key
+
+
 def build_openai_client(model: str):
     """Return a raw openai.OpenAI client configured for the given model."""
     from openai import OpenAI
 
-    _load_local_env_once()
-
     if _is_gemini(model):
-        api_key = os.environ.get("GEMINI_API_KEY")
-        if not api_key:
-            raise EnvironmentError(
-                "GEMINI_API_KEY environment variable is not set. "
-                "Set it before using a Gemini model."
-            )
         return OpenAI(
             base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-            api_key=api_key,
+            api_key=require_gemini_api_key(),
         )
 
     base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")

@@ -1,26 +1,28 @@
-"""Utilities for generating and saving images with Gemini/OpenAI-compatible image models."""
+"""Utilities for generating and saving images with Gemini native image models."""
 
 from __future__ import annotations
 
 import base64
 import json
 import re
+import urllib.error
+import urllib.parse
+import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Protocol
+from typing import Callable
 
 from image_stitcher import stitch_panel_images
-from llm_client import build_openai_client
+from llm_client import require_gemini_api_key
 
 IMAGES_SUBDIR_NAME = "images"
+GEMINI_GENERATE_CONTENT_URL = (
+    "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+)
+IMAGE_GENERATE_TIMEOUT_SECONDS = 180
 _PROMPT_NAME_RE = re.compile(r"04_page_(\d+)(?:_panel_(\d+))?_prompt\.txt$")
 _PANEL_IMAGE_RE = re.compile(r"05_page_(\d+)_panel_(\d+)\.png$")
 _VERSION_DIR_RE = re.compile(r"v\d{3}")
-
-
-class _ImageClient(Protocol):
-    def generate(self, *, model: str, prompt: str) -> object:
-        ...
 
 
 @dataclass
@@ -31,29 +33,87 @@ class GenerateImagesResult:
     errors: list[str] = field(default_factory=list)
 
 
+def _inline_image_b64(part: dict) -> str | None:
+    inline = part.get("inlineData") or part.get("inline_data") or {}
+    if not isinstance(inline, dict):
+        return None
+    mime = str(inline.get("mimeType") or inline.get("mime_type") or "")
+    data = inline.get("data")
+    if data and (not mime or mime.startswith("image/")):
+        return str(data)
+    return None
+
+
+def _image_bytes_from_generate_content(payload: dict) -> bytes:
+    candidates = payload.get("candidates") or []
+    parts: list[dict] = []
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            continue
+        content = candidate.get("content") or {}
+        if isinstance(content, dict):
+            parts.extend(content.get("parts") or [])
+    images = [b64 for part in parts if isinstance(part, dict) and (b64 := _inline_image_b64(part))]
+    if not images:
+        raise ValueError("No image payload returned from image generation response")
+    return base64.b64decode(images[-1])
+
+
+def request_gemini_generate_content(
+    model: str,
+    prompt: str,
+    aspect_ratio: str,
+    *,
+    urlopen: Callable[..., object] | None = None,
+) -> dict:
+    api_key = require_gemini_api_key()
+    url = GEMINI_GENERATE_CONTENT_URL.format(model=urllib.parse.quote(model, safe=".-_"))
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "responseModalities": ["TEXT", "IMAGE"],
+            "imageConfig": {"aspectRatio": aspect_ratio},
+        },
+    }
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "x-goog-api-key": api_key,
+        },
+    )
+    opener = urlopen or urllib.request.urlopen
+    try:
+        with opener(request, timeout=IMAGE_GENERATE_TIMEOUT_SECONDS) as response:
+            body = response.read().decode("utf-8")
+    except urllib.error.HTTPError as exc:
+        error_body = exc.read().decode("utf-8", errors="replace")
+        raise OSError(
+            f"Gemini generateContent failed ({exc.code}) for {model}: {error_body}"
+        ) from exc
+    parsed = json.loads(body)
+    if not isinstance(parsed, dict):
+        raise ValueError("Gemini generateContent returned a non-object JSON payload")
+    return parsed
+
+
 class ImageGenerator:
     def __init__(
         self,
         model: str,
-        client_factory: Callable[[str], object] = build_openai_client,
+        *,
+        aspect_ratio: str = "3:2",
+        request_fn: Callable[[str, str, str], dict] | None = None,
     ) -> None:
         self.model = model
-        self._client_factory = client_factory
+        self.aspect_ratio = aspect_ratio
+        self._request_fn = request_fn or request_gemini_generate_content
 
     def generate_image(self, prompt: str) -> bytes:
-        client = self._client_factory(self.model)
-        response = client.images.generate(model=self.model, prompt=prompt)
-
-        data_items = getattr(response, "data", None) or []
-        if not data_items:
-            raise ValueError("No image data returned from image generation response")
-
-        first_item = data_items[0]
-        b64_json = getattr(first_item, "b64_json", None)
-        if not b64_json:
-            raise ValueError("No image payload returned from image generation response")
-
-        return base64.b64decode(b64_json)
+        payload = self._request_fn(self.model, prompt, self.aspect_ratio)
+        return _image_bytes_from_generate_content(payload)
 
     def save_image(self, image_bytes: bytes, output_path: Path) -> Path:
         output_path = Path(output_path)
@@ -189,7 +249,9 @@ def generate_prompt_images(
     else:
         images_dir = latest_images_dir(version_dir) or next_images_dir(version_dir)
 
-    image_generator = generator or ImageGenerator(model=model)
+    image_generator = generator or ImageGenerator(model=model, aspect_ratio=aspect_ratio)
+    if isinstance(image_generator, ImageGenerator):
+        image_generator.aspect_ratio = aspect_ratio
     generated_paths: list[Path] = []
     errors: list[str] = []
 

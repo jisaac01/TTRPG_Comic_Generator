@@ -764,7 +764,10 @@ class ComicPipeline:
             model=self.image_generation_model,
             aspect_ratio=self.aspect_ratio,
             stitch=False,
-            generator=ImageGenerator(model=self.image_generation_model),
+            generator=ImageGenerator(
+                model=self.image_generation_model,
+                aspect_ratio=self.aspect_ratio,
+            ),
         )
         for err in result.errors:
             self._emit(
