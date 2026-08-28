@@ -1,0 +1,24 @@
+Maintaining visual consistency and context with Gemini and related image APIs involves a combination of all three concepts you mentioned: caching, reference images, and passing previous outputs.
+
+Here is how to structure a pipeline for maximum consistency.
+
+### 1. Anchoring Character Consistency (Sending Character Models)
+
+The most effective way to keep a specific character consistent across different scenes, poses, and outfits is to send reference images alongside your prompt.
+
+* **How it works:** You upload a clean reference image (or multiple angles) of your character and pass it into the model as a reference parameter. The model uses this to lock in the facial structure, coloring, and general appearance while executing your text prompt for the new action or environment.
+* **Multi-image arrays:** Feeding a model three or four angles of the same character gives it more to work with and produces a noticeably tighter identity lock than a single reference photo. Depending on the API you're routing through, you might be able to pass an array of references; for example, some multi-image blending models built on Gemini 3 Pro allow up to 14 reference images per request.
+
+### 2. The Sliding Window Technique (Sending Previous Images)
+
+When generating a sequence of images where the visual narrative needs to flow smoothly from one frame to the next—such as multi-panel comic book pages—you should send previous images back in.
+
+* **File API:** Use the File API to upload the outputs from your previous generation and pass their `file_uri` into your next prompt.
+* **Sliding Window:** Instead of loading the entire generation history, use a "sliding window" of the last 1 to 3 images. This gives the model enough visual context to match the immediate lighting, style, and environment without creating massive payload overhead.
+
+### 3. Context Caching for World-Building (Using a Cache)
+
+If you are passing heavy text context—like overarching campaign settings, session recaps, or extensive system instructions to govern the art style—Context Caching is critical for both speed and cost reduction.
+
+* **Explicit Caching:** You can upload your heavy text context and system instructions once, create an explicit cache, and reference that cache ID for all subsequent sequential image generation calls. This guarantees lower costs on the cached tokens.
+* **Implicit Caching:** If you are running a fast, automated pipeline, Gemini also uses implicit caching by default. If your sequential requests share a large common prefix (like the same story context at the top of every prompt), the API automatically discounts and speeds up those requests.

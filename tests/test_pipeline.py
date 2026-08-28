@@ -2125,8 +2125,48 @@ async def test_image_generation_stage_runs_when_enabled(tmp_path):
             "files": ["05_page_1.png"],
             "source": "pipeline",
             "errors": [],
+            "character_ref_slugs": [],
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_image_generation_attaches_character_reference_images(tmp_path):
+    fake_generator = MagicMock()
+    fake_generator.generate_image.return_value = b"png-bytes"
+    fake_generator.save_image.side_effect = (
+        lambda image_bytes, output_path: Path(output_path).write_bytes(image_bytes) or Path(output_path)
+    )
+    characters_dir = tmp_path / "dreadmarsh" / "characters"
+    characters_dir.mkdir(parents=True)
+    (characters_dir / "Del.png").write_bytes(b"del-portrait")
+
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=2,
+        total_pages=1,
+        generate_images=True,
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
+        patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
+        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT),
+        patch("pipeline.ImageGenerator", return_value=fake_generator),
+    ):
+        result = await pipeline.run()
+
+    fake_generator.generate_image.assert_called_once()
+    _args, kwargs = fake_generator.generate_image.call_args
+    refs = kwargs["reference_images"]
+    assert [ref.name for ref in refs] == ["Del"]
+    assert refs[0].data == b"del-portrait"
+    assert result["image_generations"][0]["character_ref_slugs"] == ["Del"]
 
 
 @pytest.mark.asyncio

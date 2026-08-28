@@ -11,6 +11,7 @@ from model_catalog import (
     classify_gemini_models,
     deprecated_model_warnings,
     fetch_gemini_models,
+    input_image_cap,
     load_catalog,
     merge_catalog,
     model_is_deprecated,
@@ -308,3 +309,13 @@ def test_load_missing_catalog_uses_seed(tmp_path):
 
     assert catalog.text_models == seed_catalog().text_models
     assert catalog.image_models == seed_catalog().image_models
+
+
+def test_input_image_cap_uses_character_resemblance_limits() -> None:
+    assert input_image_cap("gemini-2.5-flash-image") == 3
+    assert input_image_cap("gemini-3.1-flash-lite-image") == 4
+    assert input_image_cap("gemini-3.1-flash-image") == 4
+    assert input_image_cap("gemini-3-pro-image") == 5
+    assert input_image_cap("gemini-3.1-flash-image-preview") == 4
+    assert input_image_cap("gemini-unknown-image") == 3
+    assert input_image_cap("gemini-test") == 3

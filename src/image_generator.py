@@ -10,8 +10,9 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Sequence
 
+from character_refs import select_character_reference_images
 from image_stitcher import stitch_panel_images
 from llm_client import require_gemini_api_key
 
@@ -25,12 +26,25 @@ _PANEL_IMAGE_RE = re.compile(r"05_page_(\d+)_panel_(\d+)\.png$")
 _VERSION_DIR_RE = re.compile(r"v\d{3}")
 
 
+CHARACTER_REF_CONSISTENCY_PREFIX = (
+    "Use the attached character reference images to keep these characters visually consistent.\n\n"
+)
+
+
+@dataclass(frozen=True)
+class ReferenceImage:
+    name: str
+    data: bytes
+    mime_type: str = "image/png"
+
+
 @dataclass
 class GenerateImagesResult:
     images_dir: Path
     generated_paths: list[Path] = field(default_factory=list)
     stitched_paths: list[Path] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    character_ref_slugs: list[str] = field(default_factory=list)
 
 
 def _inline_image_b64(part: dict) -> str | None:
@@ -59,17 +73,38 @@ def _image_bytes_from_generate_content(payload: dict) -> bytes:
     return base64.b64decode(images[-1])
 
 
+def _generate_content_parts(
+    prompt: str, reference_images: Sequence[ReferenceImage] | None
+) -> list[dict]:
+    if not reference_images:
+        return [{"text": prompt}]
+    parts: list[dict] = []
+    for reference in reference_images:
+        parts.append({"text": f"Character reference for {reference.name}:"})
+        parts.append(
+            {
+                "inlineData": {
+                    "mimeType": reference.mime_type,
+                    "data": base64.b64encode(reference.data).decode("ascii"),
+                }
+            }
+        )
+    parts.append({"text": CHARACTER_REF_CONSISTENCY_PREFIX + prompt})
+    return parts
+
+
 def request_gemini_generate_content(
     model: str,
     prompt: str,
     aspect_ratio: str,
+    reference_images: Sequence[ReferenceImage] | None = None,
     *,
     urlopen: Callable[..., object] | None = None,
 ) -> dict:
     api_key = require_gemini_api_key()
     url = GEMINI_GENERATE_CONTENT_URL.format(model=urllib.parse.quote(model, safe=".-_"))
     payload = {
-        "contents": [{"parts": [{"text": prompt}]}],
+        "contents": [{"parts": _generate_content_parts(prompt, reference_images)}],
         "generationConfig": {
             "responseModalities": ["TEXT", "IMAGE"],
             "imageConfig": {"aspectRatio": aspect_ratio},
@@ -105,14 +140,26 @@ class ImageGenerator:
         model: str,
         *,
         aspect_ratio: str = "3:2",
-        request_fn: Callable[[str, str, str], dict] | None = None,
+        request_fn: Callable[..., dict] | None = None,
     ) -> None:
         self.model = model
         self.aspect_ratio = aspect_ratio
         self._request_fn = request_fn or request_gemini_generate_content
 
-    def generate_image(self, prompt: str) -> bytes:
-        payload = self._request_fn(self.model, prompt, self.aspect_ratio)
+    def generate_image(
+        self,
+        prompt: str,
+        reference_images: Sequence[ReferenceImage] | None = None,
+    ) -> bytes:
+        if reference_images:
+            payload = self._request_fn(
+                self.model,
+                prompt,
+                self.aspect_ratio,
+                reference_images=reference_images,
+            )
+        else:
+            payload = self._request_fn(self.model, prompt, self.aspect_ratio)
         return _image_bytes_from_generate_content(payload)
 
     def save_image(self, image_bytes: bytes, output_path: Path) -> Path:
@@ -240,6 +287,7 @@ def generate_prompt_images(
     stitch: bool = False,
     generator: ImageGenerator | None = None,
     new_folder: bool = True,
+    campaign_root: Path | None = None,
 ) -> GenerateImagesResult:
     if not prompt_paths:
         raise ValueError("No prompt files available to generate images")
@@ -254,6 +302,8 @@ def generate_prompt_images(
         image_generator.aspect_ratio = aspect_ratio
     generated_paths: list[Path] = []
     errors: list[str] = []
+    character_ref_slugs: list[str] = []
+    seen_slugs: set[str] = set()
 
     for prompt_path in sorted(prompt_paths, key=prompt_sort_key):
         filename = prompt_image_filename(prompt_path.name)
@@ -264,6 +314,7 @@ def generate_prompt_images(
             continue
         match = _PROMPT_NAME_RE.fullmatch(prompt_path.name)
         page_number = match.group(1) if match else prompt_path.name
+        panel_number = int(match.group(2)) if match and match.group(2) else None
         output_path = (
             images_dir / filename
             if new_folder
@@ -271,9 +322,31 @@ def generate_prompt_images(
         )
         try:
             prompt_text = prompt_path.read_text(encoding="utf-8")
-            image_bytes = image_generator.generate_image(prompt_text)
+            refs = []
+            if campaign_root is not None and match is not None:
+                refs = select_character_reference_images(
+                    campaign_root=campaign_root,
+                    version_dir=version_dir,
+                    page_number=int(match.group(1)),
+                    panel_number=panel_number,
+                    model=model,
+                )
+            reference_images = [
+                ReferenceImage(name=ref.name, data=ref.path.read_bytes(), mime_type=ref.mime_type)
+                for ref in refs
+            ]
+            if reference_images:
+                image_bytes = image_generator.generate_image(
+                    prompt_text, reference_images=reference_images
+                )
+            else:
+                image_bytes = image_generator.generate_image(prompt_text)
             image_generator.save_image(image_bytes, output_path)
             generated_paths.append(output_path)
+            for ref in refs:
+                if ref.slug not in seen_slugs:
+                    seen_slugs.add(ref.slug)
+                    character_ref_slugs.append(ref.slug)
         except Exception as exc:
             errors.append(f"image_generation: page {page_number}: {exc}")
 
@@ -289,6 +362,7 @@ def generate_prompt_images(
         generated_paths=generated_paths,
         stitched_paths=stitched_paths,
         errors=errors,
+        character_ref_slugs=character_ref_slugs,
     )
 
 
@@ -300,6 +374,7 @@ def append_image_generation_record(
     files: list[Path],
     source: str,
     errors: list[str] | None = None,
+    character_ref_slugs: list[str] | None = None,
 ) -> dict:
     """Append an image-generation record to the version's run_status.json."""
     status_path = version_dir / "run_status.json"
@@ -327,6 +402,7 @@ def append_image_generation_record(
             "files": [path.name for path in files],
             "source": source,
             "errors": list(errors or []),
+            "character_ref_slugs": list(character_ref_slugs or []),
         }
     )
     status["image_generations"] = generations

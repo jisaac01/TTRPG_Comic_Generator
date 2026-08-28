@@ -33,7 +33,13 @@
 - [x] use Gemini API to discover image models
 - [ ] bug: style setting reloads when changing the stage setting
 - [ ] add skip style option (same as the Run tab) to the Output page, should be allowed to rerun from prompt and have it pick up the naked script
-
+- [ ] Clean up user facing errors eg 2026-08-28 12:11:43 [Images] image_generation: page 1: Gemini generateContent failed (503) for gemini-3.1-flash-image: {
+  "error": {
+    "code": 503,
+    "message": "This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.",
+    "status": "UNAVAILABLE"
+  }
+}
 
 ---
 

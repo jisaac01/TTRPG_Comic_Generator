@@ -752,11 +752,13 @@ class ComicPipeline:
             )
         )
 
-    def _run_image_generation_stage(self, version_dir: Path) -> tuple[list[str], list[str]]:
+    def _run_image_generation_stage(
+        self, version_dir: Path
+    ) -> tuple[list[str], list[str], list[str]]:
         """Generate PNG images from each saved page prompt file."""
         prompt_paths = sorted(version_dir.glob("04_page_*_prompt.txt"), key=prompt_sort_key)
         if not prompt_paths:
-            return [], []
+            return [], [], []
 
         result = generate_prompt_images(
             version_dir,
@@ -768,6 +770,7 @@ class ComicPipeline:
                 model=self.image_generation_model,
                 aspect_ratio=self.aspect_ratio,
             ),
+            campaign_root=self.campaigns_root / self.campaign,
         )
         for err in result.errors:
             self._emit(
@@ -777,7 +780,11 @@ class ComicPipeline:
                     warning=err,
                 )
             )
-        return [str(path) for path in result.generated_paths], result.errors
+        return (
+            [str(path) for path in result.generated_paths],
+            result.errors,
+            result.character_ref_slugs,
+        )
 
     def _run_stitching_stage(self, version_dir: Path) -> tuple[list[str], list[str]]:
         """Stitch generated panel images into final page PNGs for panel-mode output."""
@@ -1618,6 +1625,7 @@ class ComicPipeline:
 
         image_generation_paths: list[str] = []
         image_generation_errors: list[str] = []
+        image_character_ref_slugs: list[str] = []
         # Image generation is beyond the ordered text stages; only when not stopping early.
         if self.generate_images and self.stop_after is None:
             self._emit(
@@ -1628,7 +1636,9 @@ class ComicPipeline:
                 )
             )
             try:
-                image_generation_paths, image_generation_errors = self._run_image_generation_stage(version_dir)
+                image_generation_paths, image_generation_errors, image_character_ref_slugs = (
+                    self._run_image_generation_stage(version_dir)
+                )
                 if image_generation_paths:
                     self._emit(
                         PhaseCompleted(
@@ -1682,6 +1692,7 @@ class ComicPipeline:
                     "files": [Path(path).name for path in image_generation_paths],
                     "source": "pipeline",
                     "errors": image_generation_errors,
+                    "character_ref_slugs": image_character_ref_slugs,
                 }
             )
 

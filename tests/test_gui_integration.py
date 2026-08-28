@@ -1383,6 +1383,7 @@ def test_output_page_generate_images_writes_into_selected_version(tmp_path, monk
             "files": ["05_page_1.png", "05_page_2.png"],
             "source": "generate_all",
             "errors": [],
+            "character_ref_slugs": [],
         }
     ]
     assert (episode_dir / "v002").is_dir()
@@ -1390,6 +1391,96 @@ def test_output_page_generate_images_writes_into_selected_version(tmp_path, monk
     assert "images/v001/05_page_1.png" in labels
     version_names = {path.name for path in episode_dir.iterdir() if path.is_dir()}
     assert version_names == {"v001", "v002"}
+
+
+def test_output_page_generate_images_attaches_campaign_character_refs(tmp_path, monkeypatch):
+    import flet as ft
+
+    from entities import Character, WorldStateCheckpoint
+    from scriptwriter import Page, Panel, ScriptCheckpoint
+
+    campaigns_root = _make_output_versions(tmp_path)
+    campaign_root = campaigns_root / "test_camp"
+    version_dir = campaign_root / "episode-1" / "v002"
+    characters_dir = campaign_root / "characters"
+    characters_dir.mkdir()
+    (characters_dir / "Del.png").write_bytes(b"del-portrait")
+    world = WorldStateCheckpoint(
+        url="https://example.com/story",
+        model="test",
+        player_characters=[Character(name="Del", description="A druid")],
+        npcs=[],
+        locations=[],
+        beats=[],
+        analyzed_at="2026-01-01T00:00:00+00:00",
+    )
+    script = ScriptCheckpoint(
+        url="https://example.com/story",
+        model="test",
+        panel_count=1,
+        total_pages=1,
+        pages=[
+            Page(
+                page_number=1,
+                panel_count=1,
+                panels=[
+                    Panel(
+                        index=1,
+                        page_number=1,
+                        panel_scale="medium",
+                        panel_shape="standard",
+                        setting="A marsh",
+                        visual_action="Del raises a torch.",
+                        characters=["Del"],
+                    )
+                ],
+            )
+        ],
+        scripted_at="2026-01-01T00:00:00+00:00",
+    )
+    (version_dir / "02_5_episode_entities.json").write_text(
+        json.dumps(world.model_dump(mode="json")),
+        encoding="utf-8",
+    )
+    (version_dir / "03_script_page_001.json").write_text(
+        json.dumps(script.model_dump(mode="json")),
+        encoding="utf-8",
+    )
+
+    class _TaskPage(_FakePage):
+        def run_task(self, task: object) -> None:
+            asyncio.run(task())
+
+    class _CapturingGenerator:
+        def __init__(self) -> None:
+            self.reference_images: list[object] = []
+
+        def generate_image(self, prompt: str, reference_images=None) -> bytes:
+            self.reference_images.append(reference_images)
+            return f"img:{prompt}".encode()
+
+        def save_image(self, image_bytes: bytes, output_path: Path) -> Path:
+            output_path = Path(output_path)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_bytes(image_bytes)
+            return output_path
+
+    fake_generator = _CapturingGenerator()
+    monkeypatch.setattr("gui.ImageGenerator", lambda model: fake_generator)
+
+    page = _TaskPage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+
+    state["generate_images_button"].on_click(None)
+
+    assert fake_generator.reference_images
+    first_refs = fake_generator.reference_images[0]
+    assert first_refs is not None
+    assert [ref.name for ref in first_refs] == ["Del"]
+    assert first_refs[0].data == b"del-portrait"
+    status = json.loads((version_dir / "run_status.json").read_text(encoding="utf-8"))
+    assert status["image_generations"][0]["character_ref_slugs"] == ["Del"]
 
 
 def test_output_page_generate_images_shows_and_records_errors(tmp_path, monkeypatch):
@@ -1433,6 +1524,7 @@ def test_output_page_generate_images_shows_and_records_errors(tmp_path, monkeypa
             "files": [],
             "source": "generate_all",
             "errors": [f"image_generation: page 1: {error_message}"],
+            "character_ref_slugs": [],
         }
     ]
     log_text = "\n".join(line.value for line in event_log.controls)

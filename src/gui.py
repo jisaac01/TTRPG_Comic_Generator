@@ -1620,6 +1620,10 @@ def build_output_page(
             raise ValueError("No prompt files available to generate images")
         settings = _read_settings_from_controls()
         model = services.settings.get_image_generation_model()
+        campaign = campaign_dropdown.value
+        campaign_root = (
+            services.repository.campaigns_root / campaign if campaign else None
+        )
         result = generate_prompt_images(
             version_dir,
             prompt_paths,
@@ -1628,6 +1632,7 @@ def build_output_page(
             stitch=stitch,
             generator=ImageGenerator(model=model),
             new_folder=new_folder,
+            campaign_root=campaign_root,
         )
         append_image_generation_record(
             version_dir,
@@ -1636,6 +1641,7 @@ def build_output_page(
             files=result.generated_paths,
             source=source,
             errors=result.errors,
+            character_ref_slugs=result.character_ref_slugs,
         )
         return result
 

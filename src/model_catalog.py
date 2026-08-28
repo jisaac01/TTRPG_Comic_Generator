@@ -94,6 +94,25 @@ def pricing_for(model_id: str) -> ModelPricing | None:
     return None
 
 
+# Longest prefixes first so lite-image wins over image, etc.
+_INPUT_IMAGE_CAPS: dict[str, int] = {
+    "gemini-3.1-flash-lite-image": 4,
+    "gemini-3.1-flash-image": 4,
+    "gemini-3-pro-image": 5,
+    "gemini-2.5-flash-image": 3,
+}
+_INPUT_IMAGE_CAP_PREFIXES = tuple(sorted(_INPUT_IMAGE_CAPS, key=len, reverse=True))
+DEFAULT_INPUT_IMAGE_CAP = 3
+
+
+def input_image_cap(model_id: str) -> int:
+    """Max character-reference images to attach for this image model."""
+    for prefix in _INPUT_IMAGE_CAP_PREFIXES:
+        if model_id == prefix or model_id.startswith(prefix + "-"):
+            return _INPUT_IMAGE_CAPS[prefix]
+    return DEFAULT_INPUT_IMAGE_CAP
+
+
 def _should_keep_listed_model(model_id: str) -> bool:
     if _is_image_model_id(model_id):
         return model_id.startswith("gemini-")

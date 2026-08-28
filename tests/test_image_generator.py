@@ -12,6 +12,7 @@ sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
 from image_generator import (
     ImageGenerator,
+    ReferenceImage,
     append_image_generation_record,
     generate_prompt_images,
     latest_images_dir,
@@ -95,6 +96,54 @@ def test_image_generator_posts_generate_content_not_predict(monkeypatch) -> None
     assert body["contents"][0]["parts"][0]["text"] == "a marsh at dusk"
     assert body["generationConfig"]["responseModalities"] == ["TEXT", "IMAGE"]
     assert body["generationConfig"]["imageConfig"]["aspectRatio"] == "3:2"
+    assert len(body["contents"][0]["parts"]) == 1
+
+
+def test_image_generator_posts_character_reference_images_before_prompt(
+    monkeypatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        def read(self) -> bytes:
+            return json.dumps(_generate_content_payload(b"png-bytes")).encode("utf-8")
+
+        def __enter__(self) -> FakeResponse:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+    def fake_urlopen(request, timeout=0):
+        captured["body"] = json.loads(request.data.decode("utf-8"))
+        return FakeResponse()
+
+    monkeypatch.setenv("GEMINI_API_KEY", "secret-key")
+    monkeypatch.setattr("image_generator.urllib.request.urlopen", fake_urlopen)
+
+    generator = ImageGenerator("gemini-2.5-flash-image", aspect_ratio="3:2")
+    del_png = b"del-bytes"
+    maisie_png = b"maisie-bytes"
+    generator.generate_image(
+        "a marsh at dusk",
+        reference_images=[
+            ReferenceImage(name="Del", data=del_png),
+            ReferenceImage(name="Maisie Fae", data=maisie_png),
+        ],
+    )
+
+    body = captured["body"]
+    assert isinstance(body, dict)
+    parts = body["contents"][0]["parts"]
+    assert parts[0] == {"text": "Character reference for Del:"}
+    assert parts[1]["inlineData"]["mimeType"] == "image/png"
+    assert parts[1]["inlineData"]["data"] == base64.b64encode(del_png).decode("ascii")
+    assert parts[2] == {"text": "Character reference for Maisie Fae:"}
+    assert parts[3]["inlineData"]["data"] == base64.b64encode(maisie_png).decode("ascii")
+    assert parts[4]["text"].startswith(
+        "Use the attached character reference images to keep these characters visually consistent."
+    )
+    assert parts[4]["text"].endswith("a marsh at dusk")
 
 
 def test_image_generator_uses_the_last_inline_image_part() -> None:
@@ -179,9 +228,11 @@ def test_next_images_dir_creates_incrementing_version_folders(tmp_path: Path) ->
 class _FakeGenerator:
     def __init__(self) -> None:
         self.prompts: list[str] = []
+        self.reference_images: list[object] = []
 
-    def generate_image(self, prompt: str) -> bytes:
+    def generate_image(self, prompt: str, reference_images=None) -> bytes:
         self.prompts.append(prompt)
+        self.reference_images.append(reference_images)
         return f"img:{prompt}".encode()
 
     def save_image(self, image_bytes: bytes, output_path: Path) -> Path:
@@ -210,6 +261,8 @@ def test_generate_prompt_images_writes_into_a_new_images_folder(tmp_path: Path) 
     assert result.generated_paths == [image_path]
     assert image_path.read_bytes() == b"img:a marsh at dusk"
     assert generator.prompts == ["a marsh at dusk"]
+    assert generator.reference_images == [None]
+    assert result.character_ref_slugs == []
 
 
 def test_generate_prompt_images_second_run_uses_the_next_folder(tmp_path: Path) -> None:
@@ -267,10 +320,10 @@ def test_generate_prompt_images_new_folder_leaves_failed_pages_missing(tmp_path:
     )
 
     class _FailPageTwo(_FakeGenerator):
-        def generate_image(self, prompt: str) -> bytes:
+        def generate_image(self, prompt: str, reference_images=None) -> bytes:
             if prompt == "two":
                 raise ValueError("No image data returned from image generation response")
-            return super().generate_image(prompt)
+            return super().generate_image(prompt, reference_images=reference_images)
 
     result = generate_prompt_images(
         version_dir, [page_one, page_two], model="gemini-test", generator=_FailPageTwo()
@@ -386,6 +439,114 @@ def test_stitch_images_dir_uses_canonical_panel_files_not_regen_suffixes(
     assert received == [["05_page_1_panel_1.png", "05_page_1_panel_2.png"]]
 
 
+def _write_episode_entities(version_dir: Path, names: list[str]) -> None:
+    from entities import Character, WorldStateCheckpoint
+
+    version_dir.mkdir(parents=True, exist_ok=True)
+    world = WorldStateCheckpoint(
+        url="https://example.test/story",
+        model="test",
+        player_characters=[
+            Character(name=name, description=f"{name} desc") for name in names
+        ],
+        npcs=[],
+        locations=[],
+        beats=[],
+        analyzed_at="2026-01-01T00:00:00+00:00",
+    )
+    (version_dir / "02_5_episode_entities.json").write_text(
+        json.dumps(world.model_dump(mode="json")),
+        encoding="utf-8",
+    )
+
+
+def _write_page_script(
+    version_dir: Path,
+    *,
+    page_number: int,
+    visual_action: str,
+    names: list[str],
+) -> None:
+    from scriptwriter import Page, Panel, ScriptCheckpoint
+
+    version_dir.mkdir(parents=True, exist_ok=True)
+    script = ScriptCheckpoint(
+        url="https://example.test/story",
+        model="test",
+        panel_count=1,
+        total_pages=1,
+        pages=[
+            Page(
+                page_number=page_number,
+                panel_count=1,
+                panels=[
+                    Panel(
+                        index=1,
+                        page_number=page_number,
+                        panel_scale="medium",
+                        panel_shape="standard",
+                        setting="A hall",
+                        visual_action=visual_action,
+                        characters=names,
+                    )
+                ],
+            )
+        ],
+        scripted_at="2026-01-01T00:00:00+00:00",
+    )
+    (version_dir / f"03_script_page_{page_number:03d}.json").write_text(
+        json.dumps(script.model_dump(mode="json")),
+        encoding="utf-8",
+    )
+
+
+def test_generate_prompt_images_attaches_character_refs_from_campaign_folder(
+    tmp_path: Path,
+) -> None:
+    campaign_root = tmp_path / "dreadmarsh"
+    version_dir = campaign_root / "episode" / "v001"
+    characters_dir = campaign_root / "characters"
+    characters_dir.mkdir(parents=True)
+    (characters_dir / "Del.png").write_bytes(b"del-png")
+    (characters_dir / "Maisie_Fae.png").write_bytes(b"maisie-png")
+    _write_episode_entities(version_dir, ["Del", "Maisie Fae"])
+    _write_page_script(
+        version_dir,
+        page_number=1,
+        visual_action="Del Del Del. Maisie Fae.",
+        names=["Del", "Maisie Fae"],
+    )
+    _write_page_script(
+        version_dir,
+        page_number=2,
+        visual_action="Maisie Fae Maisie Fae Maisie Fae.",
+        names=["Maisie Fae"],
+    )
+    page_one = version_dir / "04_page_1_prompt.txt"
+    page_two = version_dir / "04_page_2_prompt.txt"
+    page_one.write_text("page one", encoding="utf-8")
+    page_two.write_text("page two", encoding="utf-8")
+    generator = _FakeGenerator()
+
+    result = generate_prompt_images(
+        version_dir,
+        [page_one, page_two],
+        model="gemini-2.5-flash-image",
+        generator=generator,
+        campaign_root=campaign_root,
+    )
+
+    assert generator.prompts == ["page one", "page two"]
+    first_refs = generator.reference_images[0]
+    second_refs = generator.reference_images[1]
+    assert first_refs is not None
+    assert [ref.name for ref in first_refs] == ["Del", "Maisie Fae"]
+    assert [ref.data for ref in first_refs] == [b"del-png", b"maisie-png"]
+    assert second_refs is not None
+    assert [ref.name for ref in second_refs] == ["Maisie Fae"]
+    assert result.character_ref_slugs == ["Del", "Maisie_Fae"]
+
+
 def test_append_image_generation_record_writes_model_and_keeps_prior_generations(tmp_path: Path) -> None:
     version_dir = tmp_path / "v001"
     version_dir.mkdir()
@@ -416,6 +577,7 @@ def test_append_image_generation_record_writes_model_and_keeps_prior_generations
         images_dir=second_dir,
         files=[second_file],
         source="test_image",
+        character_ref_slugs=["Del"],
     )
 
     status = json.loads(status_path.read_text(encoding="utf-8"))
@@ -427,6 +589,7 @@ def test_append_image_generation_record_writes_model_and_keeps_prior_generations
             "files": ["05_page_1.png"],
             "source": "generate_all",
             "errors": [],
+            "character_ref_slugs": [],
         },
         {
             "model": "gemini-2.5-flash-image",
@@ -434,6 +597,7 @@ def test_append_image_generation_record_writes_model_and_keeps_prior_generations
             "files": ["05_page_1.png"],
             "source": "test_image",
             "errors": [],
+            "character_ref_slugs": ["Del"],
         },
     ]
 
@@ -470,6 +634,7 @@ def test_append_image_generation_record_writes_errors_when_no_files(tmp_path: Pa
             "files": [],
             "source": "generate_all",
             "errors": errors,
+            "character_ref_slugs": [],
         }
     ]
 
