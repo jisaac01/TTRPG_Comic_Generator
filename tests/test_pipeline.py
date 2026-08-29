@@ -2166,6 +2166,7 @@ async def test_image_generation_attaches_character_reference_images(tmp_path):
     refs = kwargs["reference_images"]
     assert [ref.name for ref in refs] == ["Del"]
     assert refs[0].data == b"del-portrait"
+    assert refs[0].mime_type == "image/png"
     assert result["image_generations"][0]["character_ref_slugs"] == ["Del"]
 
 

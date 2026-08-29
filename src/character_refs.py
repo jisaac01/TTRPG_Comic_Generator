@@ -1,4 +1,4 @@
-"""Campaign character-reference PNGs attached to Gemini image requests."""
+"""Campaign character-reference images attached to Gemini image requests."""
 
 from __future__ import annotations
 
@@ -13,6 +13,24 @@ from scriptwriter import Panel, ScriptCheckpoint
 
 CHARACTERS_DIRNAME = "characters"
 PNG_SUFFIX = ".png"
+# Gemini generateContent native image MIME types:
+# https://ai.google.dev/gemini-api/docs/vision#supported-image-formats
+IMAGE_SUFFIX_MIME = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".heic": "image/heic",
+    ".heif": "image/heif",
+}
+_SUFFIX_PREFERENCE = {
+    ".png": 0,
+    ".jpeg": 1,
+    ".jpg": 2,
+    ".webp": 3,
+    ".heic": 4,
+    ".heif": 5,
+}
 
 
 @dataclass(frozen=True)
@@ -20,11 +38,22 @@ class CharacterReference:
     name: str
     slug: str
     path: Path
-    mime_type: str = "image/png"
+
+    @property
+    def mime_type(self) -> str:
+        return mime_type_for_image(self.path)
 
 
 def character_filename(name: str) -> str:
     return f"{name.strip().replace(' ', '_')}{PNG_SUFFIX}"
+
+
+def mime_type_for_image(path: Path) -> str:
+    suffix = Path(path).suffix.lower()
+    mime = IMAGE_SUFFIX_MIME.get(suffix)
+    if mime is None:
+        raise ValueError(f"Unsupported character reference image format: {path}")
+    return mime
 
 
 def scan_character_library(campaign_root: Path) -> dict[str, Path]:
@@ -32,11 +61,15 @@ def scan_character_library(campaign_root: Path) -> dict[str, Path]:
     if not folder.is_dir():
         return {}
     library: dict[str, Path] = {}
-    for path in sorted(folder.iterdir()):
-        if not path.is_file() or path.suffix.lower() != PNG_SUFFIX:
+    for path in folder.iterdir():
+        if not path.is_file():
+            continue
+        suffix = path.suffix.lower()
+        if suffix not in IMAGE_SUFFIX_MIME:
             continue
         key = path.stem.casefold()
-        if key not in library:
+        existing = library.get(key)
+        if existing is None or _SUFFIX_PREFERENCE[suffix] < _SUFFIX_PREFERENCE[existing.suffix.lower()]:
             library[key] = path
     return library
 

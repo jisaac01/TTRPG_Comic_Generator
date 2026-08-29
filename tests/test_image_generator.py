@@ -146,6 +146,43 @@ def test_image_generator_posts_character_reference_images_before_prompt(
     assert parts[4]["text"].endswith("a marsh at dusk")
 
 
+def test_image_generator_posts_jpeg_character_reference_mime_type(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        def read(self) -> bytes:
+            return json.dumps(_generate_content_payload(b"png-bytes")).encode("utf-8")
+
+        def __enter__(self) -> FakeResponse:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+    def fake_urlopen(request, timeout=0):
+        captured["body"] = json.loads(request.data.decode("utf-8"))
+        return FakeResponse()
+
+    monkeypatch.setenv("GEMINI_API_KEY", "secret-key")
+    monkeypatch.setattr("image_generator.urllib.request.urlopen", fake_urlopen)
+
+    generator = ImageGenerator("gemini-2.5-flash-image", aspect_ratio="3:2")
+    jpeg_bytes = b"\xff\xd8jpeg-bytes"
+    generator.generate_image(
+        "a marsh at dusk",
+        reference_images=[
+            ReferenceImage(name="Del", data=jpeg_bytes, mime_type="image/jpeg"),
+        ],
+    )
+
+    body = captured["body"]
+    assert isinstance(body, dict)
+    parts = body["contents"][0]["parts"]
+    assert parts[0] == {"text": "Character reference for Del:"}
+    assert parts[1]["inlineData"]["mimeType"] == "image/jpeg"
+    assert parts[1]["inlineData"]["data"] == base64.b64encode(jpeg_bytes).decode("ascii")
+
+
 def test_image_generator_uses_the_last_inline_image_part() -> None:
     thought = base64.b64encode(b"thought").decode("ascii")
     request_fn = MagicMock(
@@ -542,9 +579,43 @@ def test_generate_prompt_images_attaches_character_refs_from_campaign_folder(
     assert first_refs is not None
     assert [ref.name for ref in first_refs] == ["Del", "Maisie Fae"]
     assert [ref.data for ref in first_refs] == [b"del-png", b"maisie-png"]
+    assert [ref.mime_type for ref in first_refs] == ["image/png", "image/png"]
     assert second_refs is not None
     assert [ref.name for ref in second_refs] == ["Maisie Fae"]
     assert result.character_ref_slugs == ["Del", "Maisie_Fae"]
+
+
+def test_generate_prompt_images_attaches_jpeg_character_ref(tmp_path: Path) -> None:
+    campaign_root = tmp_path / "dreadmarsh"
+    version_dir = campaign_root / "episode" / "v001"
+    characters_dir = campaign_root / "characters"
+    characters_dir.mkdir(parents=True)
+    (characters_dir / "Del.jpg").write_bytes(b"del-jpeg")
+    _write_episode_entities(version_dir, ["Del"])
+    _write_page_script(
+        version_dir,
+        page_number=1,
+        visual_action="Del raises a torch.",
+        names=["Del"],
+    )
+    prompt = version_dir / "04_page_1_prompt.txt"
+    prompt.write_text("page one", encoding="utf-8")
+    generator = _FakeGenerator()
+
+    result = generate_prompt_images(
+        version_dir,
+        [prompt],
+        model="gemini-2.5-flash-image",
+        generator=generator,
+        campaign_root=campaign_root,
+    )
+
+    first_refs = generator.reference_images[0]
+    assert first_refs is not None
+    assert [ref.name for ref in first_refs] == ["Del"]
+    assert [ref.data for ref in first_refs] == [b"del-jpeg"]
+    assert [ref.mime_type for ref in first_refs] == ["image/jpeg"]
+    assert result.character_ref_slugs == ["Del"]
 
 
 def test_append_image_generation_record_writes_model_and_keeps_prior_generations(tmp_path: Path) -> None:

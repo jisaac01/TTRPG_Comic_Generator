@@ -254,7 +254,7 @@ When `generate_images` is enabled (via the GUI **Generate images** checkbox), th
 
 Image generation always uses Gemini native `generateContent` (Nano Banana models such as `gemini-3.1-flash-lite-image`). Configure the model in GUI Settings (default: `gemini-2.5-flash-image`). **Generate Images** (and pipeline `generate_images`) writes a new empty `images/v00N/` folder; missing files mean those pages failed. **Test Image** and regenerating a selected prompt write into the latest folder: the first file is `05_page_N.png`, further tries are `05_page_N_v1.png`, `_v2`, and so on (the original is left in place).
 
-If `<campaign>/characters/` contains PNGs named after episode characters (spaces become underscores, e.g. `Maisie_Fae.png`), those portraits are attached as Gemini reference images. Characters are ranked by how often they are named on that page (or panel), then truncated to the model's character-reference cap (3 for `gemini-2.5-flash-image`, 4 for `gemini-3.1-flash-image` / lite-image, 5 for `gemini-3-pro-image`). Missing folder or unmatched names are not an error — those prompts go out as text-only.
+If `<campaign>/characters/` contains images named after episode characters (spaces become underscores, e.g. `Maisie_Fae.png` or `Maisie_Fae.jpg`), those portraits are attached as Gemini reference images. Gemini-native formats are accepted as-is: PNG, JPEG, WebP, HEIC, and HEIF. Characters are ranked by how often they are named on that page (or panel), then truncated to the model's character-reference cap (3 for `gemini-2.5-flash-image`, 4 for `gemini-3.1-flash-image` / lite-image, 5 for `gemini-3-pro-image`). If more than one format exists for the same name, PNG wins. Missing folder or unmatched names are not an error — those prompts go out as text-only.
 
 From the Output tab, **Generate Images**, **Test Image**, and regenerating a selected prompt all write into the selected version (they do not create a new pipeline version). **Test Image** sends one prompt (the selected file, or the first prompt if none is selected). **Stitch** rebuilds composite pages from the canonical panel PNGs in the latest `images/v00N/` folder (`_vN` retries are not stitched).
 
@@ -290,9 +290,9 @@ src/prompts/art_direction/          # bundled art style library (in repo)
   dreadmarsh/
     art_direction/                  # optional campaign-local art styles
       brutalist.json
-    characters/                     # optional character reference PNGs for image gen
+    characters/                     # optional character reference images for image gen
       Tharivol.png                  # filename = character name, spaces → underscores
-      Maisie_Fae.png
+      Maisie_Fae.jpg                # PNG, JPEG, WebP, HEIC, HEIF (Gemini-native)
     story_architect_system.txt        # campaign-level story architect system prompt
     story_architect_user.txt          # campaign-level story architect user prompt
     story_architect_vignette_system.txt

@@ -8,6 +8,7 @@ sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
 from character_refs import (
     character_filename,
+    mime_type_for_image,
     scan_character_library,
     select_character_reference_images,
 )
@@ -103,22 +104,57 @@ def test_character_filename_replaces_spaces_with_underscores() -> None:
     assert character_filename("Maisie Fae") == "Maisie_Fae.png"
 
 
-def test_scan_character_library_reads_png_files_and_ignores_junk(tmp_path: Path) -> None:
+def test_mime_type_for_image_maps_gemini_native_suffixes() -> None:
+    assert mime_type_for_image(Path("Del.png")) == "image/png"
+    assert mime_type_for_image(Path("Del.JPG")) == "image/jpeg"
+    assert mime_type_for_image(Path("Del.jpeg")) == "image/jpeg"
+    assert mime_type_for_image(Path("Del.webp")) == "image/webp"
+    assert mime_type_for_image(Path("Del.heic")) == "image/heic"
+    assert mime_type_for_image(Path("Del.heif")) == "image/heif"
+
+
+def test_scan_character_library_reads_gemini_image_formats_and_ignores_junk(
+    tmp_path: Path,
+) -> None:
     campaign_root = tmp_path / "dreadmarsh"
     folder = campaign_root / "characters"
     folder.mkdir(parents=True)
     (folder / "Tharivol.png").write_bytes(b"thar")
-    (folder / "Maisie_Fae.png").write_bytes(b"maisie")
+    (folder / "Maisie_Fae.jpg").write_bytes(b"maisie-jpeg")
+    (folder / "Orion.jpeg").write_bytes(b"orion-jpeg")
+    (folder / "Vendetta.webp").write_bytes(b"vendetta-webp")
+    (folder / "Witch.heic").write_bytes(b"witch-heic")
+    (folder / "Del.HEIF").write_bytes(b"del-heif")
     (folder / "notes.txt").write_text("ignore", encoding="utf-8")
-    (folder / "Orion.jpg").write_bytes(b"jpeg")
-    (folder / "Vendetta").mkdir()
-    (folder / "Vendetta" / "01_front.png").write_bytes(b"nested")
+    (folder / "photo.gif").write_bytes(b"gif")
+    (folder / "Nested").mkdir()
+    (folder / "Nested" / "01_front.png").write_bytes(b"nested")
 
     library = scan_character_library(campaign_root)
 
-    assert set(library) == {"tharivol", "maisie_fae"}
-    assert library["tharivol"] == folder / "Tharivol.png"
-    assert library["maisie_fae"] == folder / "Maisie_Fae.png"
+    assert library == {
+        "tharivol": folder / "Tharivol.png",
+        "maisie_fae": folder / "Maisie_Fae.jpg",
+        "orion": folder / "Orion.jpeg",
+        "vendetta": folder / "Vendetta.webp",
+        "witch": folder / "Witch.heic",
+        "del": folder / "Del.HEIF",
+    }
+
+
+def test_scan_character_library_prefers_png_when_multiple_formats_exist(
+    tmp_path: Path,
+) -> None:
+    campaign_root = tmp_path / "dreadmarsh"
+    folder = campaign_root / "characters"
+    folder.mkdir(parents=True)
+    (folder / "Del.jpg").write_bytes(b"jpeg")
+    (folder / "Del.png").write_bytes(b"png")
+    (folder / "Del.webp").write_bytes(b"webp")
+
+    library = scan_character_library(campaign_root)
+
+    assert library == {"del": folder / "Del.png"}
 
 
 def test_scan_character_library_missing_folder_is_empty(tmp_path: Path) -> None:
@@ -152,6 +188,35 @@ def test_select_matches_name_and_alias_filenames(tmp_path: Path) -> None:
     assert [ref.slug for ref in selected] == ["Maisie_Faye"]
     assert selected[0].name == "Maisie Fae"
     assert selected[0].path == campaign_root / "characters" / "Maisie_Faye.png"
+    assert selected[0].mime_type == "image/png"
+
+
+def test_select_accepts_jpeg_character_reference(tmp_path: Path) -> None:
+    campaign_root = tmp_path / "dreadmarsh"
+    version_dir = campaign_root / "ep" / "v001"
+    folder = campaign_root / "characters"
+    folder.mkdir(parents=True)
+    jpeg_path = folder / "Del.jpg"
+    jpeg_path.write_bytes(b"del-jpeg")
+    _write_version(
+        version_dir,
+        world=_world(Character(name="Del", description="A druid")),
+        script=_script(_panel(visual_action="Del raises a torch.", characters=["Del"])),
+    )
+
+    selected = select_character_reference_images(
+        campaign_root=campaign_root,
+        version_dir=version_dir,
+        page_number=1,
+        panel_number=None,
+        model="gemini-2.5-flash-image",
+    )
+
+    assert len(selected) == 1
+    assert selected[0].name == "Del"
+    assert selected[0].slug == "Del"
+    assert selected[0].path == jpeg_path
+    assert selected[0].mime_type == "image/jpeg"
 
 
 def test_select_ranks_by_mention_count_and_truncates_to_model_cap(tmp_path: Path) -> None:
