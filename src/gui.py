@@ -8,6 +8,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -76,6 +77,11 @@ except ImportError:  # pragma: no cover - handled by smoke test skip path
 
 EVENT_LOG_LIMIT = 100
 LOADING_GIF_URL = "https://upload.wikimedia.org/wikipedia/commons/b/b1/Loading_icon.gif"
+_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+
+
+def _is_image_path(path: Path) -> bool:
+    return path.suffix.lower() in _IMAGE_SUFFIXES
 
 _STAGE_LABELS: list[tuple[str, str]] = [
     ("scrape", "Scrape"),
@@ -967,7 +973,7 @@ def build_prompt_page(
 
 
 def _format_preview(path: Path) -> str:
-    if path.suffix.lower() in {".png", ".jpg", ".jpeg", ".gif", ".webp"}:
+    if _is_image_path(path):
         try:
             size = path.stat().st_size
         except OSError as exc:
@@ -1004,6 +1010,112 @@ async def _set_clipboard(page: Any, text: str, _ft: Any) -> None:
     if clipboard_cls is None:
         raise RuntimeError("Clipboard is unavailable: no Flet Clipboard service")
     await clipboard_cls().set(text)
+
+
+async def _set_clipboard_image(
+    page: Any,
+    image_bytes: bytes,
+    _ft: Any,
+    *,
+    source_path: Path | None = None,
+) -> None:
+    """Copy image bytes to the system clipboard."""
+    setter = getattr(page, "set_clipboard_image", None)
+    if callable(setter):
+        result = setter(image_bytes)
+        if inspect.isawaitable(result):
+            await result
+        return
+
+    clipboard_cls = getattr(_ft, "Clipboard", None) if _ft is not None else None
+    if clipboard_cls is not None:
+        set_image = getattr(clipboard_cls(), "set_image", None)
+        if callable(set_image):
+            try:
+                result = set_image(image_bytes)
+                if inspect.isawaitable(result):
+                    await result
+                return
+            except Exception:
+                pass
+
+    await asyncio.to_thread(_copy_image_to_os_clipboard, image_bytes, source_path)
+
+
+def _png_bytes_for_clipboard(image_bytes: bytes, source_path: Path | None) -> bytes:
+    suffix = source_path.suffix.lower() if source_path is not None else ""
+    if suffix == ".png" or image_bytes[:8] == b"\x89PNG\r\n\x1a\n":
+        return image_bytes
+    from PIL import Image
+    import io
+
+    with Image.open(io.BytesIO(image_bytes)) as img:
+        buffer = io.BytesIO()
+        img.save(buffer, format="PNG")
+        return buffer.getvalue()
+
+
+def _macos_png_clipboard_script(posix_path: str) -> str:
+    return (
+        "set the clipboard to (read (POSIX file "
+        f"{json.dumps(posix_path)}) as «class PNGf»)"
+    )
+
+
+def _copy_image_to_os_clipboard(image_bytes: bytes, source_path: Path | None = None) -> None:
+    png_bytes = _png_bytes_for_clipboard(image_bytes, source_path)
+    handle, name = tempfile.mkstemp(suffix=".png")
+    os.close(handle)
+    tmp = Path(name)
+    try:
+        tmp.write_bytes(png_bytes)
+        if sys.platform == "darwin":
+            script = _macos_png_clipboard_script(str(tmp.resolve()))
+            completed = subprocess.run(
+                ["osascript", "-e", script],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            if completed.returncode != 0:
+                detail = (completed.stderr or completed.stdout or "").strip()
+                raise RuntimeError(
+                    f"Copying image to clipboard failed: {detail or completed.returncode}"
+                )
+            return
+        if sys.platform == "win32":
+            escaped = str(tmp.resolve()).replace("'", "''")
+            script = (
+                "Add-Type -AssemblyName System.Windows.Forms; "
+                "Add-Type -AssemblyName System.Drawing; "
+                f"$img = [System.Drawing.Image]::FromFile('{escaped}'); "
+                "[System.Windows.Forms.Clipboard]::SetImage($img); "
+                "$img.Dispose()"
+            )
+            subprocess.run(
+                ["powershell", "-STA", "-NoProfile", "-Command", script],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            return
+        try:
+            subprocess.run(
+                ["wl-copy", "--type", "image/png"],
+                input=png_bytes,
+                check=True,
+            )
+            return
+        except FileNotFoundError:
+            subprocess.run(
+                ["xclip", "-selection", "clipboard", "-t", "image/png"],
+                input=png_bytes,
+                check=True,
+            )
+            return
+        raise RuntimeError(f"Image clipboard is not supported on {sys.platform}")
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 def _extract_change_value(event: Any) -> str | None:
@@ -1092,6 +1204,12 @@ def build_output_page(
         expand=True,
         text_style=_ft.TextStyle(font_family="monospace", size=12),
     )
+    preview_image = _ft.Image(
+        src="",
+        fit=_ft.BoxFit.CONTAIN,
+        expand=True,
+        visible=False,
+    )
     _WORKING_EDIT_TOOLTIP = "Change to the working version to edit"
     save_file_button = _ft.OutlinedButton(
         "Save",
@@ -1179,18 +1297,32 @@ def build_output_page(
         else:
             campaign_dropdown.value = campaigns[0] if campaigns else None
 
-    def _refresh_episodes() -> None:
+    def _refresh_episodes(*, keep_selection: bool = False) -> None:
         campaign = campaign_dropdown.value or ""
+        current = episode_dropdown.value
         episodes = services.repository.list_episodes(campaign)
         _episodes_by_slug.clear()
         episode_dropdown.options = []
         for ep in episodes:
             _episodes_by_slug[ep.slug] = ep
-            episode_dropdown.options.append(_ft.dropdown.Option(ep.slug))
-        episode_dropdown.value = episodes[-1].slug if episodes else None
+            has_images = services.repository.episode_has_images(campaign, ep.slug)
+            episode_dropdown.options.append(
+                _ft.dropdown.Option(
+                    ep.slug,
+                    trailing_icon=_image_icon() if has_images else None,
+                )
+            )
+        slugs = {ep.slug for ep in episodes}
+        if keep_selection and current in slugs:
+            episode_dropdown.value = current
+        else:
+            episode_dropdown.value = episodes[-1].slug if episodes else None
 
     def _star_icon() -> Any:
         return _ft.Icon(_ft.Icons.STAR, color=_ft.Colors.GREEN_700)
+
+    def _image_icon() -> Any:
+        return _ft.Icon(_ft.Icons.IMAGE, color=_ft.Colors.BLUE_700)
 
     def _incomplete_run_icon(status: str | None) -> Any:
         if status == "partial":
@@ -1198,6 +1330,14 @@ def build_output_page(
         if status in {"failed", "cancelled"}:
             return _ft.Icon(_ft.Icons.ERROR, color=_ft.Colors.RED_700)
         return None
+
+    def _trailing_icons(*icons: Any) -> Any:
+        present = [icon for icon in icons if icon is not None]
+        if not present:
+            return None
+        if len(present) == 1:
+            return present[0]
+        return _ft.Row(controls=present, spacing=2, tight=True)
 
     def _refresh_versions(*, keep_selection: bool = False) -> None:
         campaign = campaign_dropdown.value or ""
@@ -1213,14 +1353,28 @@ def build_output_page(
                 _ft.dropdown.Option(
                     WORKING_DIR_NAME,
                     f"{WORKING_DIR_NAME} (editable)",
-                    trailing_icon=_incomplete_run_icon(working_status.get("status")),
+                    trailing_icon=_trailing_icons(
+                        _image_icon()
+                        if services.repository.version_has_images(
+                            campaign, episode_slug, WORKING_DIR_NAME
+                        )
+                        else None,
+                        _incomplete_run_icon(working_status.get("status")),
+                    ),
                 )
             )
         options.extend(
             _ft.dropdown.Option(
                 v.version,
                 leading_icon=_star_icon() if v.starred else None,
-                trailing_icon=_incomplete_run_icon(v.status),
+                trailing_icon=_trailing_icons(
+                    _image_icon()
+                    if services.repository.version_has_images(
+                        campaign, episode_slug, v.version
+                    )
+                    else None,
+                    _incomplete_run_icon(v.status),
+                ),
             )
             for v in versions
         )
@@ -1479,7 +1633,7 @@ def build_output_page(
         path = _selected_files.get(selected)
         if path is None:
             return False
-        if path.suffix.lower() in {".png", ".jpg", ".jpeg", ".gif", ".webp"}:
+        if _is_image_path(path):
             return False
         if not path.exists() and selected != "creative_direction.txt":
             return False
@@ -1497,7 +1651,9 @@ def build_output_page(
         save_file_button.tooltip = tooltip
         reload_file_button.tooltip = tooltip
 
-    def _refresh_file_list(status_value: str | None = None) -> None:
+    def _refresh_file_list(
+        status_value: str | None = None, select_file: str | None = None
+    ) -> None:
         _selected_files.clear()
         rows = file_list.content
         rows.controls.clear()
@@ -1540,36 +1696,56 @@ def build_output_page(
             )
         else:
             preferred_default = "run_status.json" if status_value == "failed" else "04_page_1_prompt.txt"
-        if preferred_default in _selected_files:
+        if select_file and select_file in _selected_files:
+            file_list.value = select_file
+        elif preferred_default in _selected_files:
             file_list.value = preferred_default
         elif rows.controls:
             file_list.value = rows.controls[0].value
         else:
             file_list.value = None
 
+    def _show_text_preview(text: str) -> None:
+        preview.value = text
+        preview.visible = True
+        preview_image.visible = False
+        preview_image.src = ""
+
+    def _show_image_preview(path: Path) -> None:
+        preview.value = ""
+        preview.visible = False
+        preview.read_only = True
+        preview_image.src = str(path)
+        preview_image.visible = True
+
     def _load_selected_file() -> None:
         selected = file_list.value
         if not selected:
-            preview.value = ""
+            _show_text_preview("")
             generate_selected_image_button.visible = False
             _update_preview_editability()
             return
         path = _selected_files.get(selected)
         if not path:
-            preview.value = ""
+            _show_text_preview("")
             generate_selected_image_button.visible = False
             _update_preview_editability()
             return
         if not path.exists():
             # Allow empty editor for working/creative_direction.txt before first save.
-            preview.value = ""
+            _show_text_preview("")
+            generate_selected_image_button.visible = False
+            _update_preview_editability()
+            return
+        if _is_image_path(path):
+            _show_image_preview(path)
             generate_selected_image_button.visible = False
             _update_preview_editability()
             return
         try:
-            preview.value = _format_preview(path)
+            _show_text_preview(_format_preview(path))
         except Exception as exc:
-            preview.value = f"Unable to render preview: {exc}"
+            _show_text_preview(f"Unable to render preview: {exc}")
         generate_selected_image_button.visible = path.name.startswith("04_page_") and path.name.endswith("_prompt.txt")
         _update_preview_editability()
 
@@ -1645,6 +1821,20 @@ def build_output_page(
         )
         return result
 
+    def _preview_key_for_generation(result: Any) -> str | None:
+        version_dir = _selected_version_dir[0]
+        if version_dir is None:
+            return None
+        stitched = getattr(result, "stitched_paths", None) or []
+        generated = getattr(result, "generated_paths", None) or []
+        path = stitched[0] if stitched else (generated[0] if generated else None)
+        if path is None:
+            return None
+        try:
+            return path.relative_to(version_dir).as_posix()
+        except ValueError:
+            return path.name
+
     def _report_image_generation_result(result, success_message: str) -> None:
         output_status_text.value = success_message
         if result.errors:
@@ -1701,7 +1891,7 @@ def build_output_page(
                     source="regenerate_selected",
                 )
             )
-            _refresh_all()
+            _refresh_all(select_file=_preview_key_for_generation(result))
             _report_image_generation_result(
                 result,
                 (
@@ -1778,7 +1968,7 @@ def build_output_page(
                     source="generate_all",
                 )
             )
-            _refresh_all()
+            _refresh_all(select_file=_preview_key_for_generation(result))
             relative = result.images_dir.relative_to(version_dir).as_posix()
             _report_image_generation_result(
                 result,
@@ -1811,7 +2001,7 @@ def build_output_page(
                     source="test_image",
                 )
             )
-            _refresh_all()
+            _refresh_all(select_file=_preview_key_for_generation(result))
             relative = result.images_dir.relative_to(version_dir).as_posix()
             _report_image_generation_result(
                 result,
@@ -1828,7 +2018,12 @@ def build_output_page(
             page.update()
 
     async def on_copy_content(_e: Any) -> None:
-        await _set_clipboard(page, preview.value or "", _ft)
+        selected = file_list.value or ""
+        path = _selected_files.get(selected)
+        if path is not None and _is_image_path(path) and path.exists():
+            await _set_clipboard_image(page, path.read_bytes(), _ft, source_path=path)
+        else:
+            await _set_clipboard(page, preview.value or "", _ft)
         page.update()
 
     copy_content_button.on_click = on_copy_content
@@ -1841,13 +2036,14 @@ def build_output_page(
     save_file_button.on_click = on_save_file
     reload_file_button.on_click = on_reload_file
 
-    def _refresh_all() -> None:
+    def _refresh_all(*, select_file: str | None = None) -> None:
+        _refresh_episodes(keep_selection=True)
         _refresh_versions()
         _sync_version_meta_controls()
         status_value = _set_run_status()
         _sync_settings_controls()
         _set_episode_settings_text()
-        _refresh_file_list(status_value)
+        _refresh_file_list(status_value, select_file=select_file)
         _load_selected_file()
 
         campaign = campaign_dropdown.value or ""
@@ -2143,6 +2339,7 @@ def build_output_page(
                                 alignment=_ft.MainAxisAlignment.END,
                             ),
                             preview,
+                            preview_image,
                         ],
                         expand=True,
                         spacing=4,
@@ -2166,6 +2363,7 @@ def build_output_page(
         "version_description_field": version_description_field,
         "file_list": file_list,
         "preview": preview,
+        "preview_image": preview_image,
         "save_file_button": save_file_button,
         "reload_file_button": reload_file_button,
         "on_save_file": on_save_file,

@@ -53,6 +53,7 @@ class _FakePage:
         self.update_calls = 0
         self.session = _FakeSession()
         self.clipboard_text = ""
+        self.clipboard_image = b""
         self.window = _FakeWindow()
         self._last_task_coro = None
         self._task_args: tuple[object, ...] = ()
@@ -66,6 +67,9 @@ class _FakePage:
 
     def set_clipboard(self, value: str) -> None:
         self.clipboard_text = value
+
+    def set_clipboard_image(self, value: bytes) -> None:
+        self.clipboard_image = value
 
     def show_dialog(self, dialog: object) -> None:
         self.dialog = dialog
@@ -945,6 +949,71 @@ def test_set_clipboard_uses_flet_clipboard_service_when_page_has_no_setter():
     assert _FakeClipboard.last_value == "via service"
     # Sanity: real flet still exposes Clipboard.
     assert hasattr(ft, "Clipboard")
+
+
+def test_set_clipboard_image_uses_page_setter_when_present():
+    from gui import _set_clipboard_image
+
+    page = _FakePage()
+    asyncio.run(_set_clipboard_image(page, b"png-bytes", None))
+    assert page.clipboard_image == b"png-bytes"
+
+
+def test_set_clipboard_image_uses_flet_clipboard_service_when_page_has_no_setter():
+    import flet as ft
+
+    from gui import _set_clipboard_image
+
+    class _PageWithoutSetter:
+        pass
+
+    class _FakeClipboard:
+        last_image: bytes | None = None
+
+        def set_image(self, value: bytes):
+            async def _set() -> None:
+                _FakeClipboard.last_image = value
+
+            return _set()
+
+    class _FakeFt:
+        Clipboard = _FakeClipboard
+
+    asyncio.run(_set_clipboard_image(_PageWithoutSetter(), b"png-bytes", _FakeFt()))
+    assert _FakeClipboard.last_image == b"png-bytes"
+    assert hasattr(ft.Clipboard, "set_image")
+
+
+def test_macos_png_clipboard_script_reads_file_as_png():
+    from gui import _macos_png_clipboard_script
+
+    script = _macos_png_clipboard_script("/tmp/comic page.png")
+    assert script.count("(") == script.count(")")
+    assert script == (
+        'set the clipboard to (read (POSIX file "/tmp/comic page.png") as «class PNGf»)'
+    )
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="macOS osascript clipboard")
+def test_copy_image_to_os_clipboard_succeeds_with_real_png():
+    import io
+    import subprocess
+
+    from PIL import Image
+
+    from gui import _copy_image_to_os_clipboard
+
+    buffer = io.BytesIO()
+    Image.new("RGB", (2, 2), (10, 20, 30)).save(buffer, format="PNG")
+    _copy_image_to_os_clipboard(buffer.getvalue())
+
+    info = subprocess.run(
+        ["osascript", "-e", "clipboard info"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert "PNGf" in info.stdout
 
 
 def test_format_preview_preserves_unicode_in_json(tmp_path):
@@ -2131,6 +2200,198 @@ def test_output_page_starred_failed_version_shows_star_and_error(tmp_path):
     assert options["v002"].leading_icon is None
     assert options["v002"].trailing_icon.icon == ft.Icons.WARNING
     assert options["v002"].trailing_icon.color == ft.Colors.AMBER_700
+
+
+def _add_version_image(
+    version_dir: Path, name: str = "05_page_1.png", data: bytes = b"fake-png"
+) -> Path:
+    path = version_dir / "images" / "v001" / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+    return path
+
+
+def _option_trailing_icons(option) -> list:
+    trailing = option.trailing_icon
+    if trailing is None:
+        return []
+    controls = getattr(trailing, "controls", None)
+    if controls is not None:
+        return [control.icon for control in controls]
+    return [trailing.icon]
+
+
+def _fake_image_generator(monkeypatch):
+    fake_generator = type(
+        "FakeGenerator",
+        (),
+        {
+            "generate_image": lambda self, prompt: f"img:{prompt}".encode(),
+            "save_image": lambda self, image_bytes, output_path: (
+                Path(output_path).parent.mkdir(parents=True, exist_ok=True),
+                Path(output_path).write_bytes(image_bytes),
+                Path(output_path),
+            )[-1],
+        },
+    )()
+    monkeypatch.setattr("gui.ImageGenerator", lambda model: fake_generator)
+    return fake_generator
+
+
+class _TaskPage(_FakePage):
+    def run_task(self, task: object) -> None:
+        asyncio.run(task())
+
+
+def test_output_page_selecting_image_shows_uneditable_image_preview(tmp_path):
+    import flet as ft
+
+    campaigns_root = _make_output_versions(tmp_path)
+    version_dir = campaigns_root / "test_camp" / "episode-1" / "v002"
+    image_path = _add_version_image(version_dir, data=b"comic-page-bytes")
+
+    page = _FakePage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+
+    _select_output_file(state, "images/v001/05_page_1.png")
+
+    assert state["preview"].visible is False
+    assert state["preview"].read_only is True
+    assert state["save_file_button"].disabled is True
+    assert state["reload_file_button"].disabled is True
+    assert state["preview_image"].visible is True
+    assert state["preview_image"].src == str(image_path)
+
+
+def test_output_page_copy_image_copies_image_bytes(tmp_path):
+    import flet as ft
+
+    campaigns_root = _make_output_versions(tmp_path)
+    version_dir = campaigns_root / "test_camp" / "episode-1" / "v002"
+    _add_version_image(version_dir, data=b"comic-page-bytes")
+
+    page = _FakePage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+
+    _select_output_file(state, "images/v001/05_page_1.png")
+    asyncio.run(state["on_copy_content"](None))
+
+    assert page.clipboard_image == b"comic-page-bytes"
+    assert page.clipboard_text == ""
+
+
+def test_output_page_selecting_text_after_image_restores_text_preview(tmp_path):
+    import flet as ft
+
+    campaigns_root = _make_output_versions(tmp_path)
+    version_dir = campaigns_root / "test_camp" / "episode-1" / "v002"
+    _add_version_image(version_dir)
+
+    page = _FakePage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+
+    _select_output_file(state, "images/v001/05_page_1.png")
+    _select_output_file(state, "04_page_1_prompt.txt")
+
+    assert state["preview"].visible is True
+    assert state["preview_image"].visible is False
+    assert state["preview"].value == "new prompt"
+
+
+def test_output_page_generate_images_shows_generated_image(tmp_path, monkeypatch):
+    import flet as ft
+
+    campaigns_root = _make_output_versions(tmp_path)
+    version_dir = campaigns_root / "test_camp" / "episode-1" / "v002"
+    _fake_image_generator(monkeypatch)
+
+    page = _TaskPage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+
+    state["generate_images_button"].on_click(None)
+
+    image_path = version_dir / "images" / "v001" / "05_page_1.png"
+    assert state["file_list"].value == "images/v001/05_page_1.png"
+    assert state["preview_image"].visible is True
+    assert state["preview"].visible is False
+    assert state["preview_image"].src == str(image_path)
+
+
+def test_output_page_test_image_shows_generated_image(tmp_path, monkeypatch):
+    import flet as ft
+
+    campaigns_root = _make_output_versions(tmp_path)
+    version_dir = campaigns_root / "test_camp" / "episode-1" / "v002"
+    (version_dir / "04_page_2_prompt.txt").write_text("page two", encoding="utf-8")
+    _fake_image_generator(monkeypatch)
+
+    page = _TaskPage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+
+    _select_output_file(state, "04_page_2_prompt.txt")
+    state["test_image_button"].on_click(None)
+
+    image_path = version_dir / "images" / "v001" / "05_page_2.png"
+    assert image_path.exists()
+    assert state["file_list"].value == "images/v001/05_page_2.png"
+    assert state["preview_image"].visible is True
+    assert state["preview"].visible is False
+    assert state["preview_image"].src == str(image_path)
+
+
+def test_output_page_episode_list_shows_image_icon_for_episodes_with_images(tmp_path):
+    import flet as ft
+
+    campaigns_root = _make_output_versions(tmp_path)
+    _add_version_image(campaigns_root / "test_camp" / "episode-1" / "v001")
+    other = campaigns_root / "test_camp" / "other-episode"
+    other.mkdir()
+    (other / "episode_meta.json").write_text(
+        json.dumps(
+            {
+                "slug": "other-episode",
+                "url": "https://example.com/other",
+                "title": "Other Episode",
+                "created_at": "2026-05-19T00:00:00Z",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (other / "v001").mkdir()
+    (other / "v001" / "run_status.json").write_text(
+        json.dumps({"status": "ok", "checkpoints": [], "failed": [], "errors": []}),
+        encoding="utf-8",
+    )
+
+    page = _FakePage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+
+    options = {option.key: option for option in state["episode_dropdown"].options}
+    assert options["episode-1"].trailing_icon.icon == ft.Icons.IMAGE
+    assert options["other-episode"].trailing_icon is None
+
+
+def test_output_page_version_list_shows_image_icon_next_to_status_icons(tmp_path):
+    import flet as ft
+
+    campaigns_root = _make_output_versions(tmp_path)
+    episode_dir = campaigns_root / "test_camp" / "episode-1"
+    _add_version_image(episode_dir / "v001")
+    _add_version_image(episode_dir / "v002")
+
+    page = _FakePage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+
+    options = {option.key: option for option in state["version_dropdown"].options}
+    assert _option_trailing_icons(options["v001"]) == [ft.Icons.IMAGE]
+    assert _option_trailing_icons(options["v002"]) == [ft.Icons.IMAGE, ft.Icons.WARNING]
 
 
 _WORKING_EDIT_TOOLTIP = "Change to the working version to edit"

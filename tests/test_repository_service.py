@@ -272,3 +272,55 @@ def test_update_version_meta_rejects_working_and_missing_status(tmp_path):
     # working/run_status.json must stay unstarred even if a caller tries.
     working_status = json.loads((working / "run_status.json").read_text(encoding="utf-8"))
     assert "starred" not in working_status
+
+
+def test_version_and_episode_has_images_detects_generated_pngs(tmp_path):
+    campaigns_root = tmp_path / "campaigns"
+    episode_dir = campaigns_root / "dreadmarsh" / "dreadmarsh-crossing"
+    _write_version(episode_dir / "v001")
+    _write_version(episode_dir / "v002")
+    (episode_dir / "episode_meta.json").write_text(
+        json.dumps(
+            {
+                "url": "https://example.test/story",
+                "slug": "dreadmarsh-crossing",
+                "title": "Dreadmarsh Crossing",
+                "created_at": "2026-05-04T00:00:00+00:00",
+            }
+        ),
+        encoding="utf-8",
+    )
+    other = campaigns_root / "dreadmarsh" / "other-episode"
+    other.mkdir()
+    (other / "episode_meta.json").write_text(
+        json.dumps(
+            {
+                "url": "https://example.test/other",
+                "slug": "other-episode",
+                "title": "Other",
+                "created_at": "2026-05-05T00:00:00+00:00",
+            }
+        ),
+        encoding="utf-8",
+    )
+    _write_version(other / "v001")
+
+    service = RepositoryService(campaigns_root)
+
+    assert service.version_has_images("dreadmarsh", "dreadmarsh-crossing", "v001") is False
+    assert service.episode_has_images("dreadmarsh", "dreadmarsh-crossing") is False
+    assert service.episode_has_images("dreadmarsh", "other-episode") is False
+
+    image_path = episode_dir / "v002" / "images" / "v001" / "05_page_1.png"
+    image_path.parent.mkdir(parents=True, exist_ok=True)
+    image_path.write_bytes(b"png-bytes")
+
+    assert service.version_has_images("dreadmarsh", "dreadmarsh-crossing", "v001") is False
+    assert service.version_has_images("dreadmarsh", "dreadmarsh-crossing", "v002") is True
+    assert service.episode_has_images("dreadmarsh", "dreadmarsh-crossing") is True
+    assert service.episode_has_images("dreadmarsh", "other-episode") is False
+
+    working_image = episode_dir / "working" / "images" / "v001" / "05_page_1.png"
+    working_image.parent.mkdir(parents=True, exist_ok=True)
+    working_image.write_bytes(b"working-png")
+    assert service.version_has_images("dreadmarsh", "dreadmarsh-crossing", "working") is True

@@ -25,6 +25,8 @@ from prompt_templates import (
 EPISODE_META_FILENAME = "episode_meta.json"
 RUN_STATUS_FILENAME = "run_status.json"
 WORKING_DIR_NAME = "working"
+IMAGES_DIR_NAME = "images"
+IMAGE_FILE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 VERSION_PATTERN = re.compile(r"v\d{3}")
 
 
@@ -247,6 +249,19 @@ class RepositoryService:
             page_prompt=prompts_dir / PAGE_PROMPT_TEMPLATE_FILENAME,
         )
 
+    def version_has_images(self, campaign: str, episode_slug: str, version: str) -> bool:
+        images_root = self.campaigns_root / campaign / episode_slug / version / IMAGES_DIR_NAME
+        return _dir_has_image_files(images_root)
+
+    def episode_has_images(self, campaign: str, episode_slug: str) -> bool:
+        episode_dir = self.campaigns_root / campaign / episode_slug
+        if not episode_dir.is_dir():
+            return False
+        return any(
+            child.is_dir() and self.version_has_images(campaign, episode_slug, child.name)
+            for child in episode_dir.iterdir()
+        )
+
     def run_status(self, campaign: str, episode_slug: str, version: str) -> dict[str, Any] | None:
         status_path = self.campaigns_root / campaign / episode_slug / version / RUN_STATUS_FILENAME
         if not status_path.exists():
@@ -270,3 +285,12 @@ class RepositoryService:
     @staticmethod
     def _path_if_exists(path: Path) -> Path | None:
         return path if path.exists() else None
+
+
+def _dir_has_image_files(images_root: Path) -> bool:
+    if not images_root.is_dir():
+        return False
+    return any(
+        path.is_file() and path.suffix.lower() in IMAGE_FILE_SUFFIXES
+        for path in images_root.rglob("*")
+    )
