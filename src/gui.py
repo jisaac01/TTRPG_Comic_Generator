@@ -1891,7 +1891,10 @@ def build_output_page(
                     source="regenerate_selected",
                 )
             )
-            _refresh_all(select_file=_preview_key_for_generation(result))
+            _refresh_all(
+                select_file=_preview_key_for_generation(result),
+                keep_version_selection=True,
+            )
             _report_image_generation_result(
                 result,
                 (
@@ -1932,7 +1935,7 @@ def build_output_page(
                 stitched_paths.append(_stitch_panel_images_for_page(page_number, images_dir))
 
             output_status_text.value = f"Stitched {len(stitched_paths)} page image(s)"
-            _refresh_all()
+            _refresh_all(keep_version_selection=True)
         except Exception as exc:
             output_status_text.value = f"Stitching failed: {exc}"
         finally:
@@ -1968,7 +1971,10 @@ def build_output_page(
                     source="generate_all",
                 )
             )
-            _refresh_all(select_file=_preview_key_for_generation(result))
+            _refresh_all(
+                select_file=_preview_key_for_generation(result),
+                keep_version_selection=True,
+            )
             relative = result.images_dir.relative_to(version_dir).as_posix()
             _report_image_generation_result(
                 result,
@@ -2001,7 +2007,10 @@ def build_output_page(
                     source="test_image",
                 )
             )
-            _refresh_all(select_file=_preview_key_for_generation(result))
+            _refresh_all(
+                select_file=_preview_key_for_generation(result),
+                keep_version_selection=True,
+            )
             relative = result.images_dir.relative_to(version_dir).as_posix()
             _report_image_generation_result(
                 result,
@@ -2036,9 +2045,13 @@ def build_output_page(
     save_file_button.on_click = on_save_file
     reload_file_button.on_click = on_reload_file
 
-    def _refresh_all(*, select_file: str | None = None) -> None:
+    def _refresh_all(
+        *,
+        select_file: str | None = None,
+        keep_version_selection: bool = False,
+    ) -> None:
         _refresh_episodes(keep_selection=True)
-        _refresh_versions()
+        _refresh_versions(keep_selection=keep_version_selection)
         _sync_version_meta_controls()
         status_value = _set_run_status()
         _sync_settings_controls()
@@ -2087,10 +2100,7 @@ def build_output_page(
         _set_loading(True)
         page.update()
         try:
-            _sync_version_meta_controls()
-            status_value = _set_run_status()
-            _refresh_file_list(status_value)
-            _load_selected_file()
+            _refresh_all(keep_version_selection=True)
         finally:
             _set_loading(False)
             page.update()

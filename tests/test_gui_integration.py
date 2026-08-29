@@ -1300,6 +1300,75 @@ def test_output_page_shows_version_settings_from_run_status(tmp_path):
     assert state["vignette_checkbox"].value is True
 
 
+def test_output_page_version_change_updates_loaded_and_settings_text(tmp_path):
+    import flet as ft
+
+    campaigns_root = _make_output_versions(tmp_path)
+    episode_dir = campaigns_root / "test_camp" / "episode-1"
+    (episode_dir / "v001" / "run_status.json").write_text(
+        json.dumps(
+            {
+                "status": "ok",
+                "run_config": {
+                    "panel_count": 4,
+                    "total_pages": 2,
+                    "recap_version": "short",
+                    "aspect_ratio": "1:1",
+                    "generation_mode": "panel",
+                    "vignette": True,
+                    "art_style": "bundled:bruise_and_bile_grok_3",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (episode_dir / "v002" / "run_status.json").write_text(
+        json.dumps(
+            {
+                "status": "ok",
+                "run_config": {
+                    "panel_count": 6,
+                    "total_pages": 1,
+                    "recap_version": "standard",
+                    "aspect_ratio": "3:2",
+                    "generation_mode": "page",
+                    "vignette": False,
+                    "art_style": "bundled:dark-fantasy",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    page = _FakePage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+
+    assert state["version_dropdown"].value == "v002"
+    assert state["output_status_text"].value == "Loaded: test_camp / episode-1 / v002"
+    assert "Panels: 6" in state["settings_text"].value
+    assert "Pages: 1" in state["settings_text"].value
+    assert "Recap: standard" in state["settings_text"].value
+    assert "Aspect ratio: 3:2" in state["settings_text"].value
+    assert "Generation: Page by Page" in state["settings_text"].value
+    assert "Vignette: off" in state["settings_text"].value
+    assert "Art style: bundled:dark-fantasy" in state["settings_text"].value
+
+    _select_output_version(state, "v001")
+
+    assert state["version_dropdown"].value == "v001"
+    assert state["output_status_text"].value == "Loaded: test_camp / episode-1 / v001"
+    assert "Panels: 4" in state["settings_text"].value
+    assert "Pages: 2" in state["settings_text"].value
+    assert "Recap: short" in state["settings_text"].value
+    assert "Aspect ratio: 1:1" in state["settings_text"].value
+    assert "Generation: Panel by Panel" in state["settings_text"].value
+    assert "Vignette: on" in state["settings_text"].value
+    assert "Art style: bundled:bruise_and_bile_grok_3" in state["settings_text"].value
+    assert state["generation_mode_dropdown"].value == "panel"
+    assert state["vignette_checkbox"].value is True
+
+
 def test_output_page_run_status_shows_errors_and_warnings(tmp_path):
     import flet as ft
 
@@ -2342,6 +2411,76 @@ def test_output_page_test_image_shows_generated_image(tmp_path, monkeypatch):
     assert state["preview_image"].visible is True
     assert state["preview"].visible is False
     assert state["preview_image"].src == str(image_path)
+
+
+def _output_page_on_v001(tmp_path, monkeypatch):
+    import flet as ft
+
+    campaigns_root = _make_output_versions(tmp_path)
+    v001 = campaigns_root / "test_camp" / "episode-1" / "v001"
+    _fake_image_generator(monkeypatch)
+    page = _TaskPage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+    _select_output_version(state, "v001")
+    assert state["version_dropdown"].value == "v001"
+    return state, v001
+
+
+def test_output_page_generate_images_keeps_selected_version(tmp_path, monkeypatch):
+    state, v001 = _output_page_on_v001(tmp_path, monkeypatch)
+
+    state["generate_images_button"].on_click(None)
+
+    assert state["version_dropdown"].value == "v001"
+    image_path = v001 / "images" / "v001" / "05_page_1.png"
+    assert image_path.exists()
+    assert state["file_list"].value == "images/v001/05_page_1.png"
+    assert state["preview_image"].src == str(image_path)
+
+
+def test_output_page_test_image_keeps_selected_version(tmp_path, monkeypatch):
+    state, v001 = _output_page_on_v001(tmp_path, monkeypatch)
+    _select_output_file(state, "04_page_1_prompt.txt")
+
+    state["test_image_button"].on_click(None)
+
+    assert state["version_dropdown"].value == "v001"
+    image_path = v001 / "images" / "v001" / "05_page_1.png"
+    assert image_path.exists()
+    assert state["file_list"].value == "images/v001/05_page_1.png"
+    assert state["preview_image"].src == str(image_path)
+
+
+def test_output_page_regenerate_keeps_selected_version(tmp_path, monkeypatch):
+    state, v001 = _output_page_on_v001(tmp_path, monkeypatch)
+    _select_output_file(state, "04_page_1_prompt.txt")
+
+    state["generate_selected_image_button"].on_click(None)
+
+    assert state["version_dropdown"].value == "v001"
+    image_path = v001 / "images" / "v001" / "05_page_1.png"
+    assert image_path.exists()
+    assert state["file_list"].value == "images/v001/05_page_1.png"
+    assert state["preview_image"].src == str(image_path)
+
+
+def test_output_page_stitch_keeps_selected_version(tmp_path, monkeypatch):
+    state, v001 = _output_page_on_v001(tmp_path, monkeypatch)
+    _add_version_image(v001, "05_page_1_panel_1.png")
+    _add_version_image(v001, "05_page_1_panel_2.png")
+
+    def _fake_stitch(panel_paths, output_path, aspect_ratio):
+        Path(output_path).write_bytes(b"stitched")
+        return Path(output_path)
+
+    monkeypatch.setattr("gui.stitch_panel_images", _fake_stitch)
+    _select_output_version(state, "v001")
+
+    state["stitch_images_button"].on_click(None)
+
+    assert state["version_dropdown"].value == "v001"
+    assert (v001 / "images" / "v001" / "06_page_1.png").exists()
 
 
 def test_output_page_episode_list_shows_image_icon_for_episodes_with_images(tmp_path):
