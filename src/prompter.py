@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 from art_styles import (
@@ -243,6 +245,19 @@ def _format_page_elements_instruction(title: str, page_number: int, generation_m
     return f"Page elements: Include page number {page_number} at the bottom of the page."
 
 
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _request_token() -> str:
+    return uuid.uuid4().hex[:12]
+
+
+def cache_bust_prefix() -> str:
+    timestamp = _utc_now().isoformat(timespec="microseconds")
+    return f"Do not render this line: {timestamp} {_request_token()}\n\n"
+
+
 def _format_panel_block(script: ScriptCheckpoint) -> str:
     panel_lines: list[str] = []
     for panel in script.panels:
@@ -303,7 +318,7 @@ def generate_page_prompt(
     character_details = _format_character_details(world, script)
     panel_block = _format_panel_block(script)
 
-    prompt_text = render_prompt_template(
+    prompt_text = cache_bust_prefix() + render_prompt_template(
         PAGE_PROMPT_TEMPLATE_FILENAME,
         template_path=page_prompt_template_path,
         title=title,

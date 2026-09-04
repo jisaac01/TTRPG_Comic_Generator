@@ -1,5 +1,7 @@
 import json
+import re
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -8,6 +10,16 @@ sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
 import prompter
 from model_defaults import DEFAULT_MODEL
+
+_CACHE_BUST_RE = re.compile(
+    r"^Do not render this line: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}\+00:00 [0-9a-f]{12}\n\n"
+)
+
+
+def _body_after_cache_bust(prompt_text: str) -> str:
+    match = _CACHE_BUST_RE.match(prompt_text)
+    assert match, f"prompt missing cache-bust prefix: {prompt_text[:160]!r}"
+    return prompt_text[match.end() :]
 
 
 def _write_inputs(tmp_path: Path) -> tuple[Path, Path, Path]:
@@ -123,6 +135,88 @@ def test_generate_page_prompt_writes_checkpoint(tmp_path):
 
     assert output_path.exists()
     assert prompt_text == output_path.read_text(encoding="utf-8")
+    assert _CACHE_BUST_RE.match(prompt_text)
+
+
+def test_generate_page_prompt_starts_with_frozen_cache_bust_timestamp(tmp_path, monkeypatch):
+    entities_path, script_path, template_path = _write_inputs(tmp_path)
+    frozen = datetime(2026, 9, 3, 15, 4, 5, 123456, tzinfo=timezone.utc)
+    monkeypatch.setattr(prompter, "_utc_now", lambda: frozen)
+    monkeypatch.setattr(prompter, "_request_token", lambda: "abc123def456")
+
+    prompt_text = prompter.generate_page_prompt(
+        script_checkpoint_path=script_path,
+        entities_checkpoint_path=entities_path,
+        art_style_template_path=template_path,
+        output_path=tmp_path / "04_page_1_prompt.txt",
+    )
+
+    assert prompt_text.startswith(
+        "Do not render this line: 2026-09-03T15:04:05.123456+00:00 abc123def456\n\n"
+        "Swamp Trouble\n"
+    )
+
+
+def test_generate_page_prompt_uses_distinct_cache_bust_prefixes(tmp_path):
+    entities_path, script_path, template_path = _write_inputs(tmp_path)
+
+    first = prompter.generate_page_prompt(
+        script_checkpoint_path=script_path,
+        entities_checkpoint_path=entities_path,
+        art_style_template_path=template_path,
+        output_path=tmp_path / "04_page_1_prompt.txt",
+    )
+    second = prompter.generate_page_prompt(
+        script_checkpoint_path=script_path,
+        entities_checkpoint_path=entities_path,
+        art_style_template_path=template_path,
+        output_path=tmp_path / "04_page_2_prompt.txt",
+    )
+
+    first_prefix = first.split("\n", 1)[0]
+    second_prefix = second.split("\n", 1)[0]
+    assert first_prefix != second_prefix
+    assert _body_after_cache_bust(first) == _body_after_cache_bust(second)
+
+
+def test_prepare_page_prompt_template_prepends_cache_bust(tmp_path, monkeypatch):
+    from entities import WorldStateCheckpoint
+    from prompt_saver import prepare_page_prompt_template
+    from scriptwriter import ScriptCheckpoint
+
+    entities_path, script_path, template_path = _write_inputs(tmp_path)
+    version_dir = tmp_path / "v001"
+    version_dir.mkdir()
+    page_template = tmp_path / "page_prompt.txt"
+    page_template.write_text(
+        "{title}\n{art_direction}\n{character_details}\n{output_goal}\n"
+        "{page_elements_instruction}\n{panel_count}\n{aspect_ratio}\n{panel_block}",
+        encoding="utf-8",
+    )
+    frozen = datetime(2026, 9, 3, 15, 4, 5, 123456, tzinfo=timezone.utc)
+    monkeypatch.setattr(prompter, "_utc_now", lambda: frozen)
+    monkeypatch.setattr(prompter, "_request_token", lambda: "abc123def456")
+
+    prompt_text = prepare_page_prompt_template(
+        version_dir=version_dir,
+        world=WorldStateCheckpoint.model_validate_json(
+            entities_path.read_text(encoding="utf-8")
+        ),
+        script=ScriptCheckpoint.model_validate_json(
+            script_path.read_text(encoding="utf-8")
+        ),
+        art_template=prompter._load_art_template(template_path),
+        template_path=page_template,
+        output_suffix="page_001",
+    )
+
+    expected = (
+        "Do not render this line: 2026-09-03T15:04:05.123456+00:00 abc123def456\n\n"
+        "Swamp Trouble\n"
+    )
+    assert prompt_text.startswith(expected)
+    final_path = version_dir / "prompts" / "page_prompt_FINAL_page_001.txt"
+    assert final_path.read_text(encoding="utf-8") == prompt_text
 
 
 def test_generate_page_prompt_uses_specialized_character_fields(tmp_path):
@@ -207,7 +301,9 @@ def test_generate_page_prompt_contains_interpolated_fields(tmp_path):
         output_path=tmp_path / "04_page_1_prompt.txt",
     )
 
-    assert prompt_text.startswith("Swamp Trouble\n\nBase Style: Brutalist ink style with heavy shadows.")
+    assert _body_after_cache_bust(prompt_text).startswith(
+        "Swamp Trouble\n\nBase Style: Brutalist ink style with heavy shadows."
+    )
     assert "Characters: Del and Vendetta should stay gaunt, weathered, and instantly recognizable." in prompt_text
     assert "Color Palette: Acidic neon pinks, greens, and oranges." in prompt_text
     assert 'Page elements: Include the title "Swamp Trouble" on the page.' in prompt_text
@@ -391,7 +487,9 @@ def test_generate_page_prompt_uses_page_number_on_later_pages(tmp_path):
         output_path=tmp_path / "04_page_1_prompt.txt",
     )
 
-    assert prompt_text.startswith("Swamp Trouble\n\nBase Style: Brutalist ink style with heavy shadows.")
+    assert _body_after_cache_bust(prompt_text).startswith(
+        "Swamp Trouble\n\nBase Style: Brutalist ink style with heavy shadows."
+    )
     assert "Page elements: Include page number 2 at the bottom of the page." in prompt_text
     assert 'Page elements: Include the title "Swamp Trouble" on the page.' not in prompt_text
 
@@ -486,6 +584,6 @@ def test_generate_page_prompt_uses_custom_page_prompt_template(tmp_path):
         page_prompt_template_path=custom_template,
     )
 
-    assert prompt_text.startswith("Art: ")
+    assert _body_after_cache_bust(prompt_text).startswith("Art: ")
     assert "Panels: 2" in prompt_text
     assert "Panel 1:" in prompt_text

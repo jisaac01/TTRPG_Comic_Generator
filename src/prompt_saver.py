@@ -357,6 +357,7 @@ def prepare_page_prompt_template(
         _format_page_elements_instruction,
         _format_panel_block,
         _resolve_page_number,
+        cache_bust_prefix,
     )
 
     title = script.title or world.title or "Untitled story"
@@ -371,7 +372,7 @@ def prepare_page_prompt_template(
     character_details = _format_character_details(world, script)
     panel_block = _format_panel_block(script)
 
-    prompt_text = _render_prompt_template_checked(
+    prompt_text = cache_bust_prefix() + _render_prompt_template_checked(
         PAGE_PROMPT_TEMPLATE_FILENAME,
         template_path=template_path,
         title=title,
