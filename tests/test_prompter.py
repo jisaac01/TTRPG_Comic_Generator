@@ -219,6 +219,56 @@ def test_prepare_page_prompt_template_prepends_cache_bust(tmp_path, monkeypatch)
     assert final_path.read_text(encoding="utf-8") == prompt_text
 
 
+def test_generate_page_prompt_omits_cache_bust_when_disabled(tmp_path):
+    entities_path, script_path, template_path = _write_inputs(tmp_path)
+
+    prompt_text = prompter.generate_page_prompt(
+        script_checkpoint_path=script_path,
+        entities_checkpoint_path=entities_path,
+        art_style_template_path=template_path,
+        output_path=tmp_path / "04_page_1_prompt.txt",
+        cache_buster=False,
+    )
+
+    assert _CACHE_BUST_RE.match(prompt_text) is None
+    assert prompt_text.startswith("Swamp Trouble\n")
+
+
+def test_prepare_page_prompt_template_omits_cache_bust_when_disabled(tmp_path):
+    from entities import WorldStateCheckpoint
+    from prompt_saver import prepare_page_prompt_template
+    from scriptwriter import ScriptCheckpoint
+
+    entities_path, script_path, template_path = _write_inputs(tmp_path)
+    version_dir = tmp_path / "v001"
+    version_dir.mkdir()
+    page_template = tmp_path / "page_prompt.txt"
+    page_template.write_text(
+        "{title}\n{art_direction}\n{character_details}\n{output_goal}\n"
+        "{page_elements_instruction}\n{panel_count}\n{aspect_ratio}\n{panel_block}",
+        encoding="utf-8",
+    )
+
+    prompt_text = prepare_page_prompt_template(
+        version_dir=version_dir,
+        world=WorldStateCheckpoint.model_validate_json(
+            entities_path.read_text(encoding="utf-8")
+        ),
+        script=ScriptCheckpoint.model_validate_json(
+            script_path.read_text(encoding="utf-8")
+        ),
+        art_template=prompter._load_art_template(template_path),
+        template_path=page_template,
+        output_suffix="page_001",
+        cache_buster=False,
+    )
+
+    assert _CACHE_BUST_RE.match(prompt_text) is None
+    assert prompt_text.startswith("Swamp Trouble\n")
+    final_path = version_dir / "prompts" / "page_prompt_FINAL_page_001.txt"
+    assert final_path.read_text(encoding="utf-8") == prompt_text
+
+
 def test_generate_page_prompt_uses_specialized_character_fields(tmp_path):
     entities_path, script_path, template_path = _write_inputs(tmp_path)
 

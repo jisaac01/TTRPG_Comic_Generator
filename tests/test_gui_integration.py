@@ -1220,6 +1220,7 @@ def test_output_page_build_rerun_config_uses_live_controls(tmp_path):
     state["recap_dropdown"].value = "long"
     state["aspect_ratio_dropdown"].value = "4:3"
     state["vignette_checkbox"].value = True
+    state["cache_buster_checkbox"].value = False
 
     config = state["build_rerun_config"]("test_camp", "episode-1", "architect")
 
@@ -1228,6 +1229,7 @@ def test_output_page_build_rerun_config_uses_live_controls(tmp_path):
     assert config.recap_version == "long"
     assert config.aspect_ratio == "4:3"
     assert config.vignette is True
+    assert config.cache_buster is False
     assert config.stop_after is None
 
 
@@ -1296,8 +1298,11 @@ def test_output_page_shows_version_settings_from_run_status(tmp_path):
     assert "Aspect ratio: 3:2" in state["settings_text"].value
     assert "Generation: Panel by Panel" in state["settings_text"].value
     assert "Vignette: on" in state["settings_text"].value
+    assert "Cache buster: on" in state["settings_text"].value
     assert state["generation_mode_dropdown"].value == "panel"
     assert state["vignette_checkbox"].value is True
+    assert state["cache_buster_checkbox"].value is True
+    assert state["cache_buster_checkbox"].label == "Add cache buster"
 
 
 def test_output_page_version_change_updates_loaded_and_settings_text(tmp_path):
@@ -1316,6 +1321,7 @@ def test_output_page_version_change_updates_loaded_and_settings_text(tmp_path):
                     "aspect_ratio": "1:1",
                     "generation_mode": "panel",
                     "vignette": True,
+                    "cache_buster": False,
                     "art_style": "bundled:bruise_and_bile_grok_3",
                 },
             }
@@ -1333,6 +1339,7 @@ def test_output_page_version_change_updates_loaded_and_settings_text(tmp_path):
                     "aspect_ratio": "3:2",
                     "generation_mode": "page",
                     "vignette": False,
+                    "cache_buster": True,
                     "art_style": "bundled:dark-fantasy",
                 },
             }
@@ -1352,7 +1359,9 @@ def test_output_page_version_change_updates_loaded_and_settings_text(tmp_path):
     assert "Aspect ratio: 3:2" in state["settings_text"].value
     assert "Generation: Page by Page" in state["settings_text"].value
     assert "Vignette: off" in state["settings_text"].value
+    assert "Cache buster: on" in state["settings_text"].value
     assert "Art style: bundled:dark-fantasy" in state["settings_text"].value
+    assert state["cache_buster_checkbox"].value is True
 
     _select_output_version(state, "v001")
 
@@ -1364,9 +1373,11 @@ def test_output_page_version_change_updates_loaded_and_settings_text(tmp_path):
     assert "Aspect ratio: 1:1" in state["settings_text"].value
     assert "Generation: Panel by Panel" in state["settings_text"].value
     assert "Vignette: on" in state["settings_text"].value
+    assert "Cache buster: off" in state["settings_text"].value
     assert "Art style: bundled:bruise_and_bile_grok_3" in state["settings_text"].value
     assert state["generation_mode_dropdown"].value == "panel"
     assert state["vignette_checkbox"].value is True
+    assert state["cache_buster_checkbox"].value is False
 
 
 def test_output_page_run_status_shows_errors_and_warnings(tmp_path):

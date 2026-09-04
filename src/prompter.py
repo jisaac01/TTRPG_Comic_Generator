@@ -303,6 +303,7 @@ def generate_page_prompt(
     output_path: Path = Path("campaigns/<campaign>/<episode>/v001/04_page_1_prompt.txt"),
     page_prompt_template_path: Path | None = None,
     aspect_ratio: str = "3:2",
+    cache_buster: bool = True,
 ) -> str:
     script = ScriptCheckpoint.model_validate_json(
         script_checkpoint_path.read_text(encoding="utf-8")
@@ -318,7 +319,7 @@ def generate_page_prompt(
     character_details = _format_character_details(world, script)
     panel_block = _format_panel_block(script)
 
-    prompt_text = cache_bust_prefix() + render_prompt_template(
+    prompt_text = render_prompt_template(
         PAGE_PROMPT_TEMPLATE_FILENAME,
         template_path=page_prompt_template_path,
         title=title,
@@ -330,6 +331,8 @@ def generate_page_prompt(
         aspect_ratio=format_aspect_ratio_for_prompt(aspect_ratio),
         panel_block=panel_block,
     )
+    if cache_buster:
+        prompt_text = cache_bust_prefix() + prompt_text
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(prompt_text, encoding="utf-8")

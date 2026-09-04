@@ -233,6 +233,7 @@ def build_run_page(
     skip_style_checkbox = _ft.Checkbox(label="Skip style", value=False)
     generate_images_checkbox = _ft.Checkbox(label="Generate images", value=False)
     vignette_checkbox = _ft.Checkbox(label="Vignette (one scene)", value=False)
+    cache_buster_checkbox = _ft.Checkbox(label="Add cache buster", value=True)
     panel_count_field = _ft.TextField(label="Panels", value="6", width=80)
     total_pages_field = _ft.TextField(label="Pages", value="1", width=80)
     generation_mode_dropdown = _ft.Dropdown(
@@ -362,6 +363,7 @@ def build_run_page(
             aspect_ratio=aspect_ratio_dropdown.value or "3:2",
             generation_mode=generation_mode_dropdown.value or "page",
             vignette=bool(vignette_checkbox.value),
+            cache_buster=bool(cache_buster_checkbox.value),
             art_style=art_style_dropdown.value or None,
         )
 
@@ -477,7 +479,16 @@ def build_run_page(
             _ft.Row([campaign_dropdown, new_campaign_field, campaign_add_button], spacing=12),
             campaign_status_text,
             _ft.Row([run_mode_dropdown, url_field, episode_dropdown], spacing=12),
-            _ft.Row([rerun_dropdown, recap_dropdown, skip_style_checkbox, generate_images_checkbox], spacing=12),
+            _ft.Row(
+                [
+                    rerun_dropdown,
+                    recap_dropdown,
+                    skip_style_checkbox,
+                    generate_images_checkbox,
+                    cache_buster_checkbox,
+                ],
+                spacing=12,
+            ),
             _ft.Row(
                 [
                     panel_count_field,
@@ -509,6 +520,7 @@ def build_run_page(
         "skip_style_checkbox": skip_style_checkbox,
         "generate_images_checkbox": generate_images_checkbox,
         "vignette_checkbox": vignette_checkbox,
+        "cache_buster_checkbox": cache_buster_checkbox,
         "panel_count_field": panel_count_field,
         "total_pages_field": total_pages_field,
         "generation_mode_dropdown": generation_mode_dropdown,
@@ -1261,6 +1273,7 @@ def build_output_page(
         width=180,
     )
     vignette_checkbox = _ft.Checkbox(label="Vignette (one scene)", value=False)
+    cache_buster_checkbox = _ft.Checkbox(label="Add cache buster", value=True)
     art_style_dropdown = _ft.Dropdown(
         label="Art style",
         options=[],
@@ -1276,6 +1289,7 @@ def build_output_page(
         "aspect_ratio": "3:2",
         "generation_mode": "page",
         "vignette": False,
+        "cache_buster": True,
         "art_style": None,
     }
     _committed_settings: dict[str, Any] = {}
@@ -1461,6 +1475,7 @@ def build_output_page(
         aspect_ratio_settings_dropdown.value = str(config.get("aspect_ratio", "3:2"))
         generation_mode_dropdown.value = str(config.get("generation_mode", "page"))
         vignette_checkbox.value = bool(config.get("vignette", False))
+        cache_buster_checkbox.value = bool(config.get("cache_buster", True))
         preferred_style = config.get("art_style")
         _refresh_art_style_options(
             preferred=str(preferred_style) if preferred_style else None
@@ -1480,6 +1495,7 @@ def build_output_page(
             "aspect_ratio": aspect_ratio,
             "generation_mode": generation_mode,
             "vignette": bool(vignette_checkbox.value),
+            "cache_buster": bool(cache_buster_checkbox.value),
             "art_style": art_style_dropdown.value or None,
         }
 
@@ -1489,6 +1505,7 @@ def build_output_page(
         panel_count_field.disabled = not setting_field_enabled("panels", stage)
         total_pages_field.disabled = not setting_field_enabled("pages", stage)
         vignette_checkbox.disabled = not setting_field_enabled("vignette", stage)
+        cache_buster_checkbox.disabled = not setting_field_enabled("cache_buster", stage)
         generation_mode_dropdown.disabled = not setting_field_enabled("generation_mode", stage)
         art_style_dropdown.disabled = not setting_field_enabled("art_style", stage)
         aspect_ratio_settings_dropdown.disabled = not setting_field_enabled("aspect_ratio", stage)
@@ -1509,11 +1526,13 @@ def build_output_page(
             "Panel by Panel" if config.get("generation_mode") == "panel" else "Page by Page"
         )
         vignette_label = "on" if config.get("vignette") else "off"
+        cache_buster_label = "on" if config.get("cache_buster", True) else "off"
         style_label = config.get("art_style") or "default"
         settings_text.value = (
             f"Panels: {config['panel_count']}  |  Pages: {config['total_pages']}  |  "
             f"Recap: {config['recap_version']}  |  Aspect ratio: {config['aspect_ratio']}  |  "
-            f"Generation: {mode_label}  |  Vignette: {vignette_label}  |  Art style: {style_label}"
+            f"Generation: {mode_label}  |  Vignette: {vignette_label}  |  "
+            f"Cache buster: {cache_buster_label}  |  Art style: {style_label}"
         )
 
     def _validate_rerun_settings() -> str | None:
@@ -1558,6 +1577,7 @@ def build_output_page(
             aspect_ratio=cast(AspectRatio, settings["aspect_ratio"]),
             generation_mode=cast(Any, settings["generation_mode"]),
             vignette=bool(settings.get("vignette", False)),
+            cache_buster=bool(settings.get("cache_buster", True)),
             art_style=settings.get("art_style"),
         )
 
@@ -2304,6 +2324,7 @@ def build_output_page(
                 aspect_ratio_settings_dropdown,
                 generation_mode_dropdown,
                 vignette_checkbox,
+                cache_buster_checkbox,
                 art_style_dropdown,
             ], spacing=10),
             _ft.Row([quick_rerun_button, quick_rerun_gif, quick_rerun_text], spacing=10),
@@ -2397,6 +2418,7 @@ def build_output_page(
         "aspect_ratio_dropdown": aspect_ratio_settings_dropdown,
         "generation_mode_dropdown": generation_mode_dropdown,
         "vignette_checkbox": vignette_checkbox,
+        "cache_buster_checkbox": cache_buster_checkbox,
         "art_style_dropdown": art_style_dropdown,
         "refresh_art_styles": _refresh_art_style_options,
         "refresh_campaigns": _refresh_campaign_options,

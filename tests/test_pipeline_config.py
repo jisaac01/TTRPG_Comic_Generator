@@ -61,6 +61,12 @@ def test_run_config_defaults_vignette_off() -> None:
     assert config.vignette is False
 
 
+def test_run_config_defaults_cache_buster_on() -> None:
+    config = RunConfig(url="https://example.test/story", campaign="dreadmarsh")
+
+    assert config.cache_buster is True
+
+
 def test_run_config_round_trip_preserves_generation_mode() -> None:
     config = RunConfig(
         url="https://example.test/story",
@@ -94,6 +100,29 @@ def test_run_config_snapshot_includes_vignette() -> None:
         )
     )
     assert snap["vignette"] is True
+
+
+def test_run_config_round_trip_preserves_cache_buster() -> None:
+    config = RunConfig(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        cache_buster=False,
+    )
+
+    restored = RunConfig.from_dict(config.to_dict())
+
+    assert restored.cache_buster is False
+
+
+def test_run_config_snapshot_includes_cache_buster() -> None:
+    snap = run_config_snapshot(
+        RunConfig(
+            url="https://example.test/story",
+            campaign="dreadmarsh",
+            cache_buster=False,
+        )
+    )
+    assert snap["cache_buster"] is False
 
 
 def test_run_config_snapshot_includes_image_generation_model() -> None:
@@ -154,6 +183,41 @@ def test_setting_field_enabled_allows_vignette_at_architect_not_script() -> None
     assert setting_field_enabled("vignette", "script") is False
 
 
+def test_effective_rerun_from_bumps_to_prompt_when_cache_buster_changes() -> None:
+    prev = run_config_snapshot(
+        RunConfig(url="https://example.test/story", campaign="dreadmarsh")
+    )
+    new = dict(prev)
+    new["cache_buster"] = False
+
+    assert effective_rerun_from(None, prev, new) == "prompt"
+    assert effective_rerun_from("prompt", prev, new) == "prompt"
+    assert effective_rerun_from("style", prev, new) == "style"
+    assert effective_rerun_from("architect", prev, new) == "architect"
+
+
+def test_effective_rerun_from_treats_missing_cache_buster_as_true() -> None:
+    """Older run_status snapshots omit cache_buster; that equals the default on state."""
+    from pipeline_config import earliest_stage_for_config_diff
+
+    prev = run_config_snapshot(
+        RunConfig(url="https://example.test/story", campaign="dreadmarsh")
+    )
+    prev.pop("cache_buster", None)
+    new = run_config_snapshot(
+        RunConfig(url="https://example.test/story", campaign="dreadmarsh", cache_buster=True)
+    )
+
+    assert earliest_stage_for_config_diff(prev, new) is None
+    assert effective_rerun_from(None, prev, new) is None
+
+
+def test_setting_field_enabled_allows_cache_buster_at_prompt() -> None:
+    assert setting_field_enabled("cache_buster", "prompt") is True
+    assert setting_field_enabled("cache_buster", "style") is True
+    assert setting_field_enabled("cache_buster", "architect") is True
+
+
 def test_effective_rerun_from_bumps_when_panel_count_changes() -> None:
     prev = run_config_snapshot(
         RunConfig(url="https://example.test/story", campaign="dreadmarsh", panel_count=6)
@@ -197,6 +261,10 @@ def test_should_copy_prompt_artifacts_only_when_config_unchanged() -> None:
     changed = dict(config)
     changed["generation_mode"] = "panel"
     assert should_copy_prompt_artifacts(None, config, changed) is False
+
+    cache_changed = dict(config)
+    cache_changed["cache_buster"] = False
+    assert should_copy_prompt_artifacts(None, config, cache_changed) is False
 
 
 def test_run_config_round_trip_preserves_art_style() -> None:

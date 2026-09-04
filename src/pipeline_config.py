@@ -62,6 +62,8 @@ class RunConfig:
     # When True, story architect focuses on one tight moment (micro-beats), not the full recap.
     # Orthogonal to generation_mode (page vs panel image layout).
     vignette: bool = False
+    # When True, the final page/panel image prompt gets a unique prefix to bust Gemini Chat cache.
+    cache_buster: bool = True
 
     # Optional template/prompt overrides (explicit paths)
     art_style_template: Path | None = None
@@ -129,6 +131,8 @@ class RunConfig:
             errors.append("generation_mode must be either 'page' or 'panel'")
         if not isinstance(self.vignette, bool):
             errors.append("vignette must be a boolean")
+        if not isinstance(self.cache_buster, bool):
+            errors.append("cache_buster must be a boolean")
         if self.art_style_template is not None and not self.art_style_template.exists():
             errors.append(f"art_style_template path does not exist: {self.art_style_template}")
         path_fields = [
@@ -158,6 +162,7 @@ STAGE_ORDER: list[RerunFrom] = [
 # Defaults used when comparing older run_status snapshots that omit newer keys.
 SETTING_COMPARE_DEFAULTS: dict[str, object] = {
     "vignette": False,
+    "cache_buster": True,
 }
 
 SETTING_MIN_STAGE: dict[str, RerunFrom] = {
@@ -169,6 +174,7 @@ SETTING_MIN_STAGE: dict[str, RerunFrom] = {
     "generation_mode": "script",
     "art_style": "style",
     "aspect_ratio": "prompt",
+    "cache_buster": "prompt",
 }
 
 SETTING_FIELD_MIN_STAGE: dict[str, RerunFrom] = {
@@ -179,10 +185,19 @@ SETTING_FIELD_MIN_STAGE: dict[str, RerunFrom] = {
     "generation_mode": "script",
     "art_style": "style",
     "aspect_ratio": "prompt",
+    "cache_buster": "prompt",
 }
 
 PROMPT_AFFECTING_KEYS = frozenset(
-    {"aspect_ratio", "generation_mode", "panel_count", "total_pages", "art_style", "vignette"}
+    {
+        "aspect_ratio",
+        "generation_mode",
+        "panel_count",
+        "total_pages",
+        "art_style",
+        "vignette",
+        "cache_buster",
+    }
 )
 
 RUN_CONFIG_KEYS = (
@@ -192,6 +207,7 @@ RUN_CONFIG_KEYS = (
     "aspect_ratio",
     "generation_mode",
     "vignette",
+    "cache_buster",
     "art_style",
     "skip_style",
     "generate_images",
@@ -210,6 +226,7 @@ def run_config_snapshot(config: RunConfig) -> dict:
         "aspect_ratio": config.aspect_ratio,
         "generation_mode": config.generation_mode,
         "vignette": config.vignette,
+        "cache_buster": config.cache_buster,
         "art_style": config.art_style,
         "skip_style": config.skip_style,
         "generate_images": config.generate_images,

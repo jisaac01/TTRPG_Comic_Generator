@@ -298,6 +298,30 @@ async def test_run_controller_forwards_vignette_config(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_run_controller_forwards_cache_buster_config(tmp_path):
+    captured: dict[str, object] = {}
+
+    class _RecordingPipeline:
+        def __init__(self, **kwargs: object) -> None:
+            captured.update(kwargs)
+
+        async def run(self) -> dict[str, object]:
+            return {"version": "v001", "version_dir": "/tmp/v001", "errors": []}
+
+    controller = RunController(pipeline_factory=_RecordingPipeline)
+    config = RunConfig(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        cache_buster=False,
+    )
+
+    await controller.launch_run(config, lambda _event: None)
+
+    assert captured["cache_buster"] is False
+
+
+@pytest.mark.asyncio
 async def test_run_controller_forwards_image_generation_config(tmp_path):
     captured: dict[str, object] = {}
 

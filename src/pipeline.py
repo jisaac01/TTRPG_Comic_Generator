@@ -668,6 +668,7 @@ class ComicPipeline:
         aspect_ratio: str = "3:2",
         generation_mode: Literal["page", "panel"] = "page",
         vignette: bool = False,
+        cache_buster: bool = True,
         art_style_template: Path | None = None,
         art_style: str | None = None,
         story_architect_system_prompt: Path | None = None,
@@ -696,6 +697,7 @@ class ComicPipeline:
         self.aspect_ratio = aspect_ratio
         self.generation_mode = generation_mode
         self.vignette = vignette
+        self.cache_buster = cache_buster
         self.art_style_template = art_style_template
         self.art_style = art_style
         self.story_architect_system_prompt = story_architect_system_prompt
@@ -724,6 +726,7 @@ class ComicPipeline:
             "aspect_ratio": self.aspect_ratio,
             "generation_mode": self.generation_mode,
             "vignette": self.vignette,
+            "cache_buster": self.cache_buster,
             "art_style": self.art_style,
             "skip_style": self.skip_style,
             "generate_images": self.generate_images,
@@ -1560,6 +1563,7 @@ class ComicPipeline:
                                             aspect_ratio=self.aspect_ratio,
                                             output_suffix=f"page_{page_number:03d}_panel_{panel.index:03d}",
                                             generation_mode="panel",
+                                            cache_buster=self.cache_buster,
                                         )
                                     except Exception as exc:
                                         self._emit(
@@ -1586,6 +1590,7 @@ class ComicPipeline:
                                     aspect_ratio=self.aspect_ratio,
                                     generation_mode="page",
                                     output_suffix=f"page_{page_number:03d}",
+                                    cache_buster=self.cache_buster,
                                 )
                             except Exception as exc:
                                 self._emit(

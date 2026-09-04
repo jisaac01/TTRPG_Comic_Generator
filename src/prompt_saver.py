@@ -345,6 +345,7 @@ def prepare_page_prompt_template(
     aspect_ratio: str = "3:2",
     generation_mode: str = "page",
     output_suffix: str,
+    cache_buster: bool = True,
 ) -> str:
     """Prepare and save page prompt template before generation.
     
@@ -372,7 +373,7 @@ def prepare_page_prompt_template(
     character_details = _format_character_details(world, script)
     panel_block = _format_panel_block(script)
 
-    prompt_text = cache_bust_prefix() + _render_prompt_template_checked(
+    prompt_text = _render_prompt_template_checked(
         PAGE_PROMPT_TEMPLATE_FILENAME,
         template_path=template_path,
         title=title,
@@ -384,6 +385,8 @@ def prepare_page_prompt_template(
         aspect_ratio=format_aspect_ratio_for_prompt(aspect_ratio),
         panel_block=panel_block,
     )
+    if cache_buster:
+        prompt_text = cache_bust_prefix() + prompt_text
 
     final_filename_stem = (
         f"{PAGE_PROMPT_TEMPLATE_FILENAME.replace('.txt', '')}_FINAL_{output_suffix}"

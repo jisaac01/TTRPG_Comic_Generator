@@ -1423,6 +1423,31 @@ async def test_rerun_from_prompt_only_reruns_prompt(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_pipeline_passes_cache_buster_to_page_prompt(tmp_path):
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=2,
+        cache_buster=False,
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
+        patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
+        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT) as mock_prompts,
+    ):
+        result = await pipeline.run()
+
+    _, prompt_kwargs = mock_prompts.call_args
+    assert prompt_kwargs["cache_buster"] is False
+    assert result["run_config"]["cache_buster"] is False
+
+
+@pytest.mark.asyncio
 async def test_stop_after_entities_reruns_entities_only(tmp_path):
     """rerun_from=entities + stop_after=entities: refresh entities, do not continue."""
     _make_episode(tmp_path, "dreadmarsh", "https://example.test/story", "Dreadmarsh Crossing")

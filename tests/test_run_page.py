@@ -206,6 +206,17 @@ def test_run_page_exposes_vignette_checkbox() -> None:
     assert state["vignette_checkbox"].value is False
 
 
+def test_run_page_exposes_cache_buster_checkbox_on_by_default() -> None:
+    page = _FakePage()
+    event_log = ft.ListView()
+    _container, state = build_run_page(_services(), page, event_log, ft)
+
+    assert "cache_buster_checkbox" in state
+    assert state["cache_buster_checkbox"].label == "Add cache buster"
+    assert state["cache_buster_checkbox"].value is True
+    assert state["build_config"]().cache_buster is True
+
+
 def test_run_page_exposes_art_style_selector() -> None:
     page = _FakePage()
     event_log = ft.ListView()
@@ -238,6 +249,7 @@ def test_run_page_build_config_maps_form_fields() -> None:
     state["aspect_ratio_dropdown"].value = "3:2"
     state["generation_mode_dropdown"].value = "panel"
     state["vignette_checkbox"].value = True
+    state["cache_buster_checkbox"].value = False
     state["art_style_dropdown"].value = "bundled:brutalist"
 
     config = state["build_config"]()
@@ -251,6 +263,7 @@ def test_run_page_build_config_maps_form_fields() -> None:
     assert config.aspect_ratio == "3:2"
     assert config.generation_mode == "panel"
     assert config.vignette is True
+    assert config.cache_buster is False
     assert config.art_style == "bundled:brutalist"
     assert config.generate_images is True
     assert config.image_generation_model == "gemini-3.1-flash-image"

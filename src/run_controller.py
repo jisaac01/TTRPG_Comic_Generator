@@ -109,6 +109,7 @@ class RunController:
             skip_style=config.skip_style,
             generation_mode=config.generation_mode,
             vignette=config.vignette,
+            cache_buster=config.cache_buster,
             generate_images=config.generate_images,
             image_generation_model=config.image_generation_model,
             event_callback=emit,
