@@ -106,7 +106,6 @@ class RunController:
             rerun_from=config.rerun_from,
             stop_after=config.stop_after,
             recap_version=config.recap_version,
-            skip_style=config.skip_style,
             generation_mode=config.generation_mode,
             vignette=config.vignette,
             cache_buster=config.cache_buster,

@@ -230,11 +230,10 @@ def build_run_page(
         ],
         width=140,
     )
-    skip_style_checkbox = _ft.Checkbox(label="Skip style", value=False)
     generate_images_checkbox = _ft.Checkbox(label="Generate images", value=False)
     vignette_checkbox = _ft.Checkbox(label="Vignette (one scene)", value=False)
     cache_buster_checkbox = _ft.Checkbox(label="Add cache buster", value=True)
-    unstyled_prompts_checkbox = _ft.Checkbox(label="Output un-styled prompts", value=False)
+    unstyled_prompts_checkbox = _ft.Checkbox(label="Output un-styled prompts", value=True)
     chat_mode_checkbox = _ft.Checkbox(label="Chat mode", value=False)
     pg13_mode_checkbox = _ft.Checkbox(label="PG-13 mode", value=False)
     panel_count_field = _ft.TextField(label="Panels", value="6", width=80)
@@ -358,7 +357,6 @@ def build_run_page(
             campaign=campaign_dropdown.value or "",
             rerun_from=rerun,
             recap_version=recap_dropdown.value or "standard",  # type: ignore[arg-type]
-            skip_style=bool(skip_style_checkbox.value),
             generate_images=bool(generate_images_checkbox.value),
             image_generation_model=services.settings.get_image_generation_model(),
             panel_count=int(panel_count_field.value or 6),
@@ -489,12 +487,6 @@ def build_run_page(
                 [
                     rerun_dropdown,
                     recap_dropdown,
-                    skip_style_checkbox,
-                    generate_images_checkbox,
-                    cache_buster_checkbox,
-                    unstyled_prompts_checkbox,
-                    chat_mode_checkbox,
-                    pg13_mode_checkbox,
                 ],
                 spacing=12,
             ),
@@ -503,9 +495,19 @@ def build_run_page(
                     panel_count_field,
                     total_pages_field,
                     generation_mode_dropdown,
-                    vignette_checkbox,
                     aspect_ratio_dropdown,
                     art_style_dropdown,
+                ],
+                spacing=12,
+            ),
+            _ft.Row(
+                [
+                    generate_images_checkbox,
+                    vignette_checkbox,
+                    cache_buster_checkbox,
+                    unstyled_prompts_checkbox,
+                    chat_mode_checkbox,
+                    pg13_mode_checkbox,
                 ],
                 spacing=12,
             ),
@@ -526,7 +528,6 @@ def build_run_page(
         "episode_dropdown": episode_dropdown,
         "rerun_dropdown": rerun_dropdown,
         "recap_dropdown": recap_dropdown,
-        "skip_style_checkbox": skip_style_checkbox,
         "generate_images_checkbox": generate_images_checkbox,
         "vignette_checkbox": vignette_checkbox,
         "cache_buster_checkbox": cache_buster_checkbox,
@@ -1600,7 +1601,6 @@ def build_output_page(
             rerun_from=cast(Any, stage),
             stop_after=stop_after,
             recap_version=cast(RecapVersion, settings["recap_version"]),
-            skip_style=False,
             generate_images=generate_images,
             image_generation_model=services.settings.get_image_generation_model(),
             panel_count=int(settings["panel_count"]),
@@ -2357,12 +2357,14 @@ def build_output_page(
                 recap_dropdown,
                 aspect_ratio_settings_dropdown,
                 generation_mode_dropdown,
+                art_style_dropdown,
+            ], spacing=10),
+            _ft.Row([
                 vignette_checkbox,
                 cache_buster_checkbox,
                 unstyled_prompts_checkbox,
                 chat_mode_checkbox,
                 pg13_mode_checkbox,
-                art_style_dropdown,
             ], spacing=10),
             _ft.Row([quick_rerun_button, quick_rerun_gif, quick_rerun_text], spacing=10),
             output_status_text,

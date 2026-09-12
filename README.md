@@ -167,9 +167,6 @@ python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --rerun-from
 # Rebuild only the final page prompt from the styled script
 python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --rerun-from prompt
 
-# Skip style integration (Phase 4.5 becomes a no-op); Phase 5 reads from 03_script_page_*.json
-python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --skip-style
-
 # Multi-page comic: 2 pages × 6 panels = 12 scenes in the story bible
 python src/pipeline.py dreadmarsh https://scrybequill.com/share/... --total-pages 2 --panel-count 6
 
@@ -216,7 +213,6 @@ python src/pipeline.py belowdown https://scrybequill.com/share/...
 --page-prompt-template PATH  Override the page prompt template for this run only
 --rerun-from PHASE           scrape | entities | architect | script | style | prompt
 --recap-version VERSION      short | standard | alternate/alt | long
---skip-style                 Skip Phase 4.5 and generate Phase 5 prompt from 03_script_page_*.json
 --vignette                   Focus the story bible on one dramatic moment (micro-beats)
 ```
 
@@ -265,7 +261,7 @@ From the Output tab, **Generate Images**, **Test Image**, and regenerating a sel
 - Phase 3 story architect creates a story bible from beats (text-only scene breakdown). Total scene count = `panel_count × total_pages`. In vignette mode, that count is spent on one moment instead of the full recap.
 - Phase 4 scriptwriter realizes the story bible into per-page script checkpoints with panel prose, dialogue, and continuity state. In panel mode, scripting runs per panel.
 - Phase 4.5 style integrator rewrites only `setting` and `visual_action` on each page checkpoint.
-- Phase 5 prompt generation produces image prompts from the styled script (or unstyled script when `--skip-style` is set).
+- Phase 5 prompt generation produces image prompts from the styled script. When **Output un-styled prompts** is on, it also writes a parallel `041_page_*_unstyled_prompt.txt` set from the unstyled script.
 - Phase 6 image generation (optional) sends prompts to Gemini and saves PNGs.
 - Phase 7 stitching (panel mode only) combines panel PNGs into finished page images.
 
@@ -347,8 +343,7 @@ src/prompts/art_direction/          # bundled art style library (in repo)
 - Only phases invalidated by `--rerun-from` (or changed run settings like generation mode, vignette, or panel count) are re-computed.
 - The effective art direction and prompt template files are copied into every version folder for reproducibility.
 - Episode identity is canonical by URL — if the story title changes on the source site, the same episode folder is reused.
-- When `--skip-style` is set, Phase 4.5 is skipped and Phase 5 consumes `03_script_page_*.json` directly.
-- Run settings (`panel_count`, `total_pages`, `aspect_ratio`, `generation_mode`, `vignette`, `generate_images`, `recap_version`, `skip_style`, `art_style`, `rerun_from`) are persisted per version in `run_status.json` and mirrored to `working/run_status.json`.
+- Run settings (`panel_count`, `total_pages`, `aspect_ratio`, `generation_mode`, `vignette`, `generate_images`, `recap_version`, `unstyled_prompts`, `art_style`, `rerun_from`) are persisted per version in `run_status.json` and mirrored to `working/run_status.json`.
 
 ## Running individual phases
 
@@ -412,12 +407,12 @@ python src/prompter.py \
   --art-style-template src/prompts/art_direction/brutalist.json \
   --output "$EP/04_page_1_panel_1_prompt.txt"
 
-# Skip-style flow (pipeline --skip-style):
+# Unstyled prompt from the pre-style script:
 python src/prompter.py \
   --script-input "$EP/03_script_page_001.json" \
   --entities-input "$EP/02_entities.json" \
   --art-style-template src/prompts/art_direction/brutalist.json \
-  --output "$EP/04_page_1_prompt.txt"
+  --output "$EP/041_page_1_unstyled_prompt.txt"
 ```
 
 **Phase 6 — Image generation** (requires `GEMINI_API_KEY`)

@@ -88,7 +88,6 @@ class RunConfig:
     # When set, run stages through this phase (inclusive) then stop.
     stop_after: RerunFrom | None = None
     recap_version: RecapVersion = "standard"
-    skip_style: bool = False
 
     def to_dict(self) -> dict:
         """Serialize to dictionary, converting Path objects to strings."""
@@ -236,7 +235,6 @@ RUN_CONFIG_KEYS = (
     "chat_mode",
     "pg13_mode",
     "art_style",
-    "skip_style",
     "generate_images",
     "image_generation_model",
     "rerun_from",
@@ -258,7 +256,6 @@ def run_config_snapshot(config: RunConfig) -> dict:
         "chat_mode": config.chat_mode,
         "pg13_mode": config.pg13_mode,
         "art_style": config.art_style,
-        "skip_style": config.skip_style,
         "generate_images": config.generate_images,
         "image_generation_model": config.image_generation_model,
         "rerun_from": config.rerun_from,

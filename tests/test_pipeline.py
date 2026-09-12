@@ -389,7 +389,6 @@ def _default_run_config() -> dict:
         "aspect_ratio": "3:2",
         "generation_mode": "page",
         "vignette": False,
-        "skip_style": False,
         "generate_images": False,
         "rerun_from": None,
     }
@@ -431,6 +430,25 @@ def test_create_version_dir_clones_previous_version(tmp_path):
     assert (version_dir / "03_script_page_001.json").exists()
     assert (version_dir / "03_5_styled_script_page_001.json").exists()
     assert (version_dir / "04_page_1_prompt.txt").exists()
+
+
+def test_create_version_dir_clones_unstyled_prompts_when_preserving(tmp_path):
+    episode_dir = tmp_path / "ep"
+    v001 = episode_dir / "v001"
+    v001.mkdir(parents=True)
+    _write_version_checkpoints(v001)
+    (v001 / "041_page_1_unstyled_prompt.txt").write_text("UNSTYLED", encoding="utf-8")
+    _write_run_config(v001)
+
+    version_dir, name, _ = _create_version_dir(
+        episode_dir,
+        rerun_from=None,
+        new_config=_default_run_config(),
+    )
+
+    assert name == "v002"
+    assert (version_dir / "04_page_1_prompt.txt").exists()
+    assert (version_dir / "041_page_1_unstyled_prompt.txt").read_text(encoding="utf-8") == "UNSTYLED"
 
 
 def test_create_version_dir_rerun_from_prompt_deletes_only_prompt(tmp_path):
@@ -1480,6 +1498,7 @@ async def test_pipeline_passes_feature_toggles_to_script_style_and_prompt(tmp_pa
     _, style_kwargs = mock_style.call_args
     assert style_kwargs["pg13_mode"] is True
     _, prompt_kwargs = mock_prompts.call_args
+    assert mock_prompts.call_count == 2
     assert prompt_kwargs["unstyled_prompts"] is True
     assert prompt_kwargs["chat_mode"] is True
     assert prompt_kwargs["pg13_mode"] is True
@@ -1580,14 +1599,18 @@ async def test_stop_after_style_reruns_style_not_prompt(tmp_path):
     assert not list(version_dir.glob("04_page_*_prompt.txt"))
 
 
+def _prompt_text_for_script(*, script, output_suffix, **_kwargs) -> str:
+    return f"{output_suffix}:{script.panels[0].setting}"
+
+
 @pytest.mark.asyncio
-async def test_skip_style_bypasses_integrator_and_prompts_from_script(tmp_path):
+async def test_unstyled_prompts_writes_041_files_from_unstyled_script(tmp_path):
     pipeline = ComicPipeline(
         url="https://example.test/story",
         campaign="dreadmarsh",
         campaigns_root=tmp_path,
         panel_count=2,
-        skip_style=True,
+        unstyled_prompts=True,
     )
 
     with (
@@ -1595,51 +1618,122 @@ async def test_skip_style_bypasses_integrator_and_prompts_from_script(tmp_path):
         patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
         patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
         patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
-        patch("pipeline.integrate_style") as mock_integrate,
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
+        patch("pipeline.prepare_page_prompt_template", side_effect=_prompt_text_for_script) as mock_prompts,
+    ):
+        result = await pipeline.run()
+
+    version_dir = _version_dir_from_result(result)
+    styled_path = version_dir / "04_page_1_prompt.txt"
+    unstyled_path = version_dir / "041_page_1_unstyled_prompt.txt"
+    assert styled_path.exists()
+    assert unstyled_path.exists()
+    assert "A scribbly swamp edge at wobbly dusk" in styled_path.read_text(encoding="utf-8")
+    assert "Swamp edge at dusk" in unstyled_path.read_text(encoding="utf-8")
+    assert mock_prompts.call_count == 2
+    suffixes = [call.kwargs["output_suffix"] for call in mock_prompts.call_args_list]
+    assert suffixes == ["page_001", "page_001_unstyled"]
+
+
+@pytest.mark.asyncio
+async def test_unstyled_prompts_off_does_not_write_041_files(tmp_path):
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=2,
+        unstyled_prompts=False,
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
+        patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
         patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT) as mock_prompts,
     ):
         result = await pipeline.run()
 
-    mock_integrate.assert_not_called()
+    version_dir = _version_dir_from_result(result)
+    assert (version_dir / "04_page_1_prompt.txt").exists()
+    assert not (version_dir / "041_page_1_unstyled_prompt.txt").exists()
     mock_prompts.assert_called_once()
-    _, prompt_kwargs = mock_prompts.call_args
-    assert prompt_kwargs["output_suffix"] == "page_001"
-    assert result["styled_script"] is not None
-    assert result["styled_script"] == result["script"]
 
 
 @pytest.mark.asyncio
-async def test_rerun_from_style_with_skip_style_reruns_prompt_only(tmp_path):
-    _make_episode(tmp_path, "dreadmarsh", "https://example.test/story", "Dreadmarsh Crossing")
+async def test_unstyled_panel_prompts_use_041_names(tmp_path):
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=2,
+        total_pages=1,
+        generation_mode="panel",
+        unstyled_prompts=True,
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
+        patch(
+            "pipeline.write_script",
+            side_effect=[_single_panel_script_checkpoint(1), _single_panel_script_checkpoint(2)],
+        ),
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
+        patch("pipeline.prepare_page_prompt_template", side_effect=_prompt_text_for_script),
+    ):
+        result = await pipeline.run()
+
+    version_dir = _version_dir_from_result(result)
+    assert (version_dir / "04_page_1_panel_1_prompt.txt").exists()
+    assert (version_dir / "04_page_1_panel_2_prompt.txt").exists()
+    assert (version_dir / "041_page_1_panel_1_unstyled_prompt.txt").exists()
+    assert (version_dir / "041_page_1_panel_2_unstyled_prompt.txt").exists()
+    assert "A scribbly swamp edge at wobbly dusk" in (
+        version_dir / "04_page_1_panel_1_prompt.txt"
+    ).read_text(encoding="utf-8")
+    assert "Swamp edge at dusk" in (
+        version_dir / "041_page_1_panel_1_unstyled_prompt.txt"
+    ).read_text(encoding="utf-8")
+
+
+@pytest.mark.asyncio
+async def test_image_generation_uses_styled_prompts_not_unstyled(tmp_path):
+    fake_generator = MagicMock()
+    fake_generator.generate_image.return_value = b"png-bytes"
+    fake_generator.save_image.side_effect = (
+        lambda image_bytes, output_path: Path(output_path).write_bytes(image_bytes) or Path(output_path)
+    )
 
     pipeline = ComicPipeline(
         url="https://example.test/story",
         campaign="dreadmarsh",
         campaigns_root=tmp_path,
         panel_count=2,
-        rerun_from="style",
-        skip_style=True,
+        total_pages=1,
+        generate_images=True,
+        unstyled_prompts=True,
     )
 
     with (
-        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock) as mock_scrape,
-        patch("pipeline.build_entities_from_raw") as mock_entities,
-        patch("pipeline.create_story_bible") as mock_architect,
-        patch("pipeline.write_script") as mock_script,
-        patch("pipeline.integrate_style") as mock_integrate,
-        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT) as mock_prompts,
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
+        patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT),
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT),
+        patch("pipeline.prepare_page_prompt_template", side_effect=_prompt_text_for_script),
+        patch("pipeline.ImageGenerator", return_value=fake_generator),
     ):
         result = await pipeline.run()
 
-    mock_scrape.assert_not_awaited()
-    mock_entities.assert_not_called()
-    mock_architect.assert_not_called()
-    mock_script.assert_not_called()
-    mock_integrate.assert_not_called()
-    mock_prompts.assert_called_once()
-    _, prompt_kwargs = mock_prompts.call_args
-    assert prompt_kwargs["output_suffix"] == "page_001"
-    assert result["version"] == "v002"
+    version_dir = _version_dir_from_result(result)
+    assert (version_dir / "041_page_1_unstyled_prompt.txt").exists()
+    fake_generator.generate_image.assert_called_once()
+    generated_prompt = fake_generator.generate_image.call_args.args[0]
+    assert generated_prompt.startswith("page_001:")
+    assert "unstyled" not in generated_prompt
 
 
 # ---------------------------------------------------------------------------

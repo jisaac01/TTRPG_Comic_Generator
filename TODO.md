@@ -8,14 +8,15 @@
 - [x] Add a "working copy" that is the version we'll be passing into the next pass
 - [x] star versions as favorites
 - [x] add a description to each run
-- [ ] Add a second pass for continuity and fun
-- [ ] First-run scriptwriter almost always fails held-item continuity (`held_items_before` / `held_items_after` missing or mismatched between panels). Runs land as Partial with red GUI errors even when the rest of the pipeline is fine. Repair the fields, loosen the validator, or stop treating these soft failures as a failed/partial run.
+- [ ] Script held-item continuity fails on first run (`held_items_before` / `held_items_after` missing or mismatched between panels). Validators already catch this in `scriptwriter._validate_item_continuity`; the run still lands as Partial with red GUI errors even when the rest of the pipeline is fine. Intended fix is the repair loop below — do not loosen the validator or hide the failure as the long-term answer.
+- [ ] Continuity **repair loop** (after script, before style): bounded tool-using pass that *fixes* validator failures on the checkpoint. Give the model the error list and tools such as `read_script_page`, `write_panel_fields` (held-items / characters / dialogue as needed), `get_episode_entities`, `validate_continuity`. Loop until validators pass or N steps. Persist a `repair_trace.json` (tool calls + outcomes). This is mechanical: make `03_script_page_*.json` internally consistent so the run is not Partial. Not a rewrite-for-quality pass.
+- [ ] **Second pass for continuity and fun** (critic rewrite, after a valid script): a separate LLM stage that reads the (repaired) script + recap/bible and rewrites for story flow, jokes, introductions, missing beats — the quality notes after the 22-page run. May still use the same validators as a gate, but the job is “make it better,” not “make held_items line up.” Do not collapse this into the repair loop.
 - [ ] camera angle, panel lighting
 - [ ] Allow rerun from specific version
 - [ ] Style template editing UX beyond Prompts-tab multi-style list
 - [ ] Add entities_bible to prompts page for editing
 - [ ] Allow editing version files
-- [ ] Add "professional" pipeline tooling, whatever that means, for the resume
+- [ ] Add "professional" pipeline tooling, whatever that means, for the resume (repair loop above is the concrete item)
 - [ ] Move character descriptions into the style step (so they are styled)
 - [ ] *** Convert the prompt to the markdown style and try it ***
 - [ ] Add a json/markdown mode to output everything in those formats
@@ -32,7 +33,7 @@
 - [ ] why does the campaign level index have episode level stuff? 
 - [x] use Gemini API to discover image models
 - [ ] bug: style setting reloads when changing the stage setting
-- [ ] add skip style option (same as the Run tab) to the Output page, should be allowed to rerun from prompt and have it pick up the naked script
+- [x] Output un-styled prompts (replaces skip style): parallel `041_page_*_unstyled_prompt.txt` from the unstyled script
 - [ ] Clean up user facing errors eg 2026-08-28 12:11:43 [Images] image_generation: page 1: Gemini generateContent failed (503) for gemini-3.1-flash-image: {
   "error": {
     "code": 503,
@@ -40,31 +41,30 @@
     "status": "UNAVAILABLE"
   }
 }
+- [ ] Try adding a section to the script for quotes that aren't interesting
+- [ ] Add missing prompts to prompt edit tab (entities_continuity, entities_bible)
+- [ ] Show the number of characters in the prompt
+- [ ] Add PG-13 option
+- [ ] Prompt with no style option
+- [ ] "Chat mode"
 
----
+Thoughts after full run of 22 page script:
+Layout (possibly unfixable): 
+Fonts different between pages
+numbers in panels sometimes, sometimes not
+gutter and margin spacing
+titles on pages other than #1
+panels left to right vs top to bottom on different pages
 
-## Plan: Implement Panel-by-Panel Generation Mode
+Prompt improvement: 
+I'm wondering if a single style block at the beginning of the chat would work, then each prompt would be 2/3 as long and maybe have better results?
+wondering if the 'cache busting' I did also busted character continuity inside the chat. Solution above would fix that.
+Attempt to limit the number of characters on any page to some number, 3? Maybe this would reduce the amount of stuff the model has to pay attention to?
 
-This plan introduces a new "panel" generation mode to the pipeline. In this mode, image prompts are generated for each panel individually, and the resulting images are then stitched together to form a complete page. This approach will provide more granular control over image generation and lay the groundwork for more flexible page layouts in the future.
+Script stuff:
+script hallucination (maybe fixed by using a better script generation model - currently using Gemini 3.7 Flash - although I think maybe the story beats were 2.5 Flash so I could do it over ppphhhhhh)
+script continuity & flow
+character introductions
 
-### Phase 1: Core Panel Generation Logic
-
-This phase focuses on modifying the pipeline to support the new generation mode, from configuration to prompt generation. DONE. 
-
-### Phase 2: Image Stitching and GUI Integration
-
-This phase covers combining the generated panel images into a single page and exposing the new mode in the user interface. DONE.
-
-### Phase 3: Advanced Layouts and Future Considerations
-
-This phase outlines the steps for supporting more complex and dynamic page layouts, building on the foundation established in the previous phases.
-
-**Steps**
-- [ ] 1. **Enhance the Layout Engine**:
-    *   Evolve the `image_stitcher.py` module into a more sophisticated layout engine.
-    *   Implement logic to support variable panel sizes and positions based on the `panel_scale` and `panel_shape` attributes in the `Panel` objects.
-    *   This will enable layouts where panels can have different dimensions (e.g., a panel taking up 3/4 of a page).
-
-- [ ] 2. **Support for Overlays and Annotations**:
-    *   Extend the layout engine to handle elements that are not strictly panels, such as overlapping panels, text annotations between panels, and page numbers.
-    *   This may require adding new object types to the script checkpoint schema to represent these elements.
+Story stuff: 
+it seems like a lot of stuff is just missing from the story, and that's due to the scrybe summaries being incomplete. I could abandon those and feed in the recordings to get my own transcription/summaries with a lot more detail and completion.

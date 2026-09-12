@@ -117,6 +117,7 @@ SCRIPT_PAGE_GLOB = "03_script_page_*.json"
 SCRIPT_PANEL_GLOB = "03_script_page_*_panel_*.json"
 STYLED_SCRIPT_PAGE_GLOB = "03_5_styled_script_page_*.json"
 PAGE_PROMPT_GLOB = "04_page_*_prompt.txt"
+UNSTYLED_PAGE_PROMPT_GLOB = "041_page_*_unstyled_prompt.txt"
 
 # RerunFrom is imported from pipeline_config above
 
@@ -143,6 +144,97 @@ def _styled_script_page_path(version_dir: Path, page_number: int) -> Path:
 
 def _panel_prompt_path(version_dir: Path, page_number: int, panel_index: int) -> Path:
     return version_dir / f"04_page_{page_number}_panel_{panel_index}_prompt.txt"
+
+
+def _page_prompt_path(version_dir: Path, page_number: int) -> Path:
+    return version_dir / f"04_page_{page_number}_prompt.txt"
+
+
+def _unstyled_page_prompt_path(version_dir: Path, page_number: int) -> Path:
+    return version_dir / f"041_page_{page_number}_unstyled_prompt.txt"
+
+
+def _unstyled_panel_prompt_path(
+    version_dir: Path, page_number: int, panel_index: int
+) -> Path:
+    return version_dir / f"041_page_{page_number}_panel_{panel_index}_unstyled_prompt.txt"
+
+
+def _prompt_output_path(
+    version_dir: Path,
+    *,
+    page_number: int,
+    panel_index: int | None,
+    unstyled: bool,
+) -> Path:
+    if unstyled:
+        if panel_index is None:
+            return _unstyled_page_prompt_path(version_dir, page_number)
+        return _unstyled_panel_prompt_path(version_dir, page_number, panel_index)
+    if panel_index is None:
+        return _page_prompt_path(version_dir, page_number)
+    return _panel_prompt_path(version_dir, page_number, panel_index)
+
+
+def _prompt_output_suffix(
+    page_number: int, panel_index: int | None, unstyled: bool
+) -> str:
+    suffix = f"page_{page_number:03d}"
+    if panel_index is not None:
+        suffix += f"_panel_{panel_index:03d}"
+    if unstyled:
+        suffix += "_unstyled"
+    return suffix
+
+
+def _expected_prompt_paths(
+    version_dir: Path,
+    scripts: list[ScriptCheckpoint],
+    *,
+    generation_mode: str,
+    total_pages: int,
+    unstyled: bool,
+) -> list[Path]:
+    if generation_mode == "panel":
+        return [
+            _prompt_output_path(
+                version_dir,
+                page_number=page_number,
+                panel_index=panel.index,
+                unstyled=unstyled,
+            )
+            for page_number, script in enumerate(scripts, start=1)
+            for panel in script.panels
+        ]
+    return [
+        _prompt_output_path(
+            version_dir,
+            page_number=page_number,
+            panel_index=None,
+            unstyled=unstyled,
+        )
+        for page_number in range(1, total_pages + 1)
+    ]
+
+
+def _single_panel_script(script: ScriptCheckpoint, panel) -> ScriptCheckpoint:
+    return ScriptCheckpoint(
+        url=script.url,
+        title=script.title,
+        author=script.author,
+        model=script.model,
+        panel_count=1,
+        total_pages=1,
+        pages=[
+            Page(
+                page_number=panel.page_number,
+                panel_count=1,
+                panels=[panel],
+            )
+        ],
+        generation_errors=script.generation_errors,
+        scripted_at=script.scripted_at,
+    )
 
 
 def _copy_checkpoint_patterns(prev_dir: Path, version_dir: Path, patterns: list[str]) -> None:
@@ -569,8 +661,9 @@ def _create_version_dir(
         # preserved. version/prompts/ is audit-only and is never cloned forward;
         # each run captures templates from campaign root when stages execute.
         if should_copy_prompt_artifacts(effective_rerun, prev_config, new_config or {}):
-            for prev_prompt_file in working.glob(PAGE_PROMPT_GLOB):
-                shutil.copy2(prev_prompt_file, version_dir / prev_prompt_file.name)
+            for pattern in (PAGE_PROMPT_GLOB, UNSTYLED_PAGE_PROMPT_GLOB):
+                for prev_prompt_file in working.glob(pattern):
+                    shutil.copy2(prev_prompt_file, version_dir / prev_prompt_file.name)
 
     return version_dir, version_name, effective_rerun
 
@@ -687,7 +780,6 @@ class ComicPipeline:
         rerun_from: RerunFrom | None = None,
         stop_after: RerunFrom | None = None,
         recap_version: str = "standard",
-        skip_style: bool = False,
         generate_images: bool = False,
         image_generation_model: str = "gemini-2.5-flash-image",
         event_callback: Callable[[PipelineEventUnion], None] | None = None,
@@ -719,7 +811,6 @@ class ComicPipeline:
         self.rerun_from: RerunFrom | None = rerun_from
         self.stop_after: RerunFrom | None = stop_after
         self.recap_version = normalize_recap_version(recap_version)
-        self.skip_style = skip_style
         self.generate_images = generate_images
         self.image_generation_model = image_generation_model
         self.event_callback = event_callback or (lambda _: None)
@@ -740,7 +831,6 @@ class ComicPipeline:
             "chat_mode": self.chat_mode,
             "pg13_mode": self.pg13_mode,
             "art_style": self.art_style,
-            "skip_style": self.skip_style,
             "generate_images": self.generate_images,
             "image_generation_model": self.image_generation_model,
             "rerun_from": self._effective_rerun_from or self.rerun_from,
@@ -766,6 +856,97 @@ class ComicPipeline:
                 warning=detail,
             )
         )
+
+    def _write_prompts_for_scripts(
+        self,
+        *,
+        version_dir: Path,
+        scripts: list[ScriptCheckpoint],
+        art_template: dict[str, str],
+        template_path: Path,
+        episode_entities: WorldStateCheckpoint,
+        unstyled: bool,
+    ) -> list[tuple[Path, str]]:
+        written: list[tuple[Path, str]] = []
+        for page_number, prompt_script in enumerate(scripts, start=1):
+            if self.generation_mode == "panel":
+                for panel in prompt_script.panels:
+                    try:
+                        prompt_text = prepare_page_prompt_template(
+                            version_dir=version_dir,
+                            world=episode_entities,
+                            script=_single_panel_script(prompt_script, panel),
+                            art_template=art_template,
+                            template_path=template_path,
+                            aspect_ratio=self.aspect_ratio,
+                            output_suffix=_prompt_output_suffix(
+                                page_number, panel.index, unstyled
+                            ),
+                            generation_mode="panel",
+                            cache_buster=self.cache_buster,
+                            unstyled_prompts=self.unstyled_prompts,
+                            chat_mode=self.chat_mode,
+                            pg13_mode=self.pg13_mode,
+                        )
+                    except Exception as exc:
+                        kind = "unstyled panel" if unstyled else "panel"
+                        self._emit(
+                            PhaseWarning(
+                                phase="prompt",
+                                message=(
+                                    f"Failed to save interpolated {kind} "
+                                    f"{page_number}.{panel.index} prompt template"
+                                ),
+                                warning=str(exc),
+                            )
+                        )
+                        continue
+                    output_path = _prompt_output_path(
+                        version_dir,
+                        page_number=page_number,
+                        panel_index=panel.index,
+                        unstyled=unstyled,
+                    )
+                    output_path.write_text(prompt_text, encoding="utf-8")
+                    written.append((output_path, prompt_text))
+                continue
+
+            try:
+                prompt_text = prepare_page_prompt_template(
+                    version_dir=version_dir,
+                    world=episode_entities,
+                    script=prompt_script,
+                    art_template=art_template,
+                    template_path=template_path,
+                    aspect_ratio=self.aspect_ratio,
+                    generation_mode="page",
+                    output_suffix=_prompt_output_suffix(page_number, None, unstyled),
+                    cache_buster=self.cache_buster,
+                    unstyled_prompts=self.unstyled_prompts,
+                    chat_mode=self.chat_mode,
+                    pg13_mode=self.pg13_mode,
+                )
+            except Exception as exc:
+                kind = "unstyled page" if unstyled else "page"
+                self._emit(
+                    PhaseWarning(
+                        phase="prompt",
+                        message=(
+                            f"Failed to save interpolated {kind} {page_number} prompt template"
+                        ),
+                        warning=str(exc),
+                    )
+                )
+                continue
+            output_path = _prompt_output_path(
+                version_dir,
+                page_number=page_number,
+                panel_index=None,
+                unstyled=unstyled,
+            )
+            output_path.write_text(prompt_text, encoding="utf-8")
+            written.append((output_path, prompt_text))
+        return written
 
     def _run_image_generation_stage(
         self, version_dir: Path
@@ -1094,6 +1275,7 @@ class ComicPipeline:
                     _dual_delete_matching(version_dir, working_dir, SCRIPT_PANEL_GLOB)
                     _dual_delete_matching(version_dir, working_dir, STYLED_SCRIPT_PAGE_GLOB)
                     _dual_delete_matching(version_dir, working_dir, "04_page_*.txt")
+                    _dual_delete_matching(version_dir, working_dir, "041_page_*.txt")
                     _dual_rmtree(version_dir / PROMPTS_SUBDIR_NAME, version_dir, working_dir)
                 else:
                     self._emit(
@@ -1408,15 +1590,6 @@ class ComicPipeline:
                         reason="no script",
                     )
                 )
-            elif self.skip_style:
-                self._emit(
-                    PhaseSkipped(
-                        phase="style",
-                        message="Skipped",
-                        reason="--skip-style flag",
-                    )
-                )
-                styled_script_pages = script_pages
             elif all(path.exists() for path in styled_script_page_paths):
                 self._emit(
                     PhaseSkipped(
@@ -1505,7 +1678,7 @@ class ComicPipeline:
         page_prompt: str | None = None
         page_prompts: list[tuple[Path, str]] = []
         expected_prompt_paths: list[Path] = []
-        prompt_script_pages = script_pages if self.skip_style else styled_script_pages
+        prompt_script_pages = styled_script_pages
         if self._should_run_stage("prompt"):
             if not prompt_script_pages:
                 self._emit(
@@ -1517,16 +1690,23 @@ class ComicPipeline:
                 )
             else:
                 template_path = self._capture_art_template_for_version(template_path, version_dir)
-                prompt_script_paths = script_page_paths if self.skip_style else styled_script_page_paths
-                if self.generation_mode == "panel":
-                    for page_number, prompt_script in enumerate(prompt_script_pages, start=1):
-                        for panel in prompt_script.panels:
-                            expected_prompt_paths.append(_panel_prompt_path(version_dir, page_number, panel.index))
-                else:
-                    expected_prompt_paths = [
-                        version_dir / f"04_page_{page_number}_prompt.txt"
-                        for page_number in range(1, self.total_pages + 1)
-                    ]
+                expected_prompt_paths = _expected_prompt_paths(
+                    version_dir,
+                    prompt_script_pages,
+                    generation_mode=self.generation_mode,
+                    total_pages=self.total_pages,
+                    unstyled=False,
+                )
+                if self.unstyled_prompts and script_pages:
+                    expected_prompt_paths.extend(
+                        _expected_prompt_paths(
+                            version_dir,
+                            script_pages,
+                            generation_mode=self.generation_mode,
+                            total_pages=self.total_pages,
+                            unstyled=True,
+                        )
+                    )
 
                 if all(path.exists() for path in expected_prompt_paths):
                     self._emit(
@@ -1547,90 +1727,30 @@ class ComicPipeline:
                     )
                     try:
                         art_template = _load_art_template(template_path)
-                        for page_number, (prompt_script, prompt_script_path) in enumerate(
-                            zip(prompt_script_pages, prompt_script_paths),
-                            start=1,
-                        ):
-                            if self.generation_mode == "panel":
-                                for panel in prompt_script.panels:
-                                    try:
-                                        panel_script = ScriptCheckpoint(
-                                            url=prompt_script.url,
-                                            title=prompt_script.title,
-                                            author=prompt_script.author,
-                                            model=prompt_script.model,
-                                            panel_count=1,
-                                            total_pages=1,
-                                            pages=[
-                                                Page(
-                                                    page_number=panel.page_number,
-                                                    panel_count=1,
-                                                    panels=[panel],
-                                                )
-                                            ],
-                                            generation_errors=prompt_script.generation_errors,
-                                            scripted_at=prompt_script.scripted_at,
-                                        )
-                                        prompt_text = prepare_page_prompt_template(
-                                            version_dir=version_dir,
-                                            world=episode_entities,
-                                            script=panel_script,
-                                            art_template=art_template,
-                                            template_path=prompt_template_paths[PAGE_PROMPT_TEMPLATE_FILENAME],
-                                            aspect_ratio=self.aspect_ratio,
-                                            output_suffix=f"page_{page_number:03d}_panel_{panel.index:03d}",
-                                            generation_mode="panel",
-                                            cache_buster=self.cache_buster,
-                                            unstyled_prompts=self.unstyled_prompts,
-                                            chat_mode=self.chat_mode,
-                                            pg13_mode=self.pg13_mode,
-                                        )
-                                    except Exception as exc:
-                                        self._emit(
-                                            PhaseWarning(
-                                                phase="prompt",
-                                                message=f"Failed to save interpolated panel {page_number}.{panel.index} prompt template",
-                                                warning=str(exc),
-                                            )
-                                        )
-                                        continue
-
-                                    page_output_path = _panel_prompt_path(version_dir, page_number, panel.index)
-                                    page_output_path.write_text(prompt_text, encoding="utf-8")
-                                    page_prompts.append((page_output_path, prompt_text))
-                                continue
-
-                            try:
-                                prompt_text = prepare_page_prompt_template(
+                        page_prompt_template = prompt_template_paths[PAGE_PROMPT_TEMPLATE_FILENAME]
+                        page_prompts.extend(
+                            self._write_prompts_for_scripts(
+                                version_dir=version_dir,
+                                scripts=prompt_script_pages,
+                                art_template=art_template,
+                                template_path=page_prompt_template,
+                                episode_entities=episode_entities,
+                                unstyled=False,
+                            )
+                        )
+                        if self.unstyled_prompts and script_pages:
+                            page_prompts.extend(
+                                self._write_prompts_for_scripts(
                                     version_dir=version_dir,
-                                    world=episode_entities,
-                                    script=prompt_script,
+                                    scripts=script_pages,
                                     art_template=art_template,
-                                    template_path=prompt_template_paths[PAGE_PROMPT_TEMPLATE_FILENAME],
-                                    aspect_ratio=self.aspect_ratio,
-                                    generation_mode="page",
-                                    output_suffix=f"page_{page_number:03d}",
-                                    cache_buster=self.cache_buster,
-                                    unstyled_prompts=self.unstyled_prompts,
-                                    chat_mode=self.chat_mode,
-                                    pg13_mode=self.pg13_mode,
+                                    template_path=page_prompt_template,
+                                    episode_entities=episode_entities,
+                                    unstyled=True,
                                 )
-                            except Exception as exc:
-                                self._emit(
-                                    PhaseWarning(
-                                        phase="prompt",
-                                        message=f"Failed to save interpolated page {page_number} prompt template",
-                                        warning=str(exc),
-                                    )
-                                )
-                                continue
-
-                            page_output_path = version_dir / f"04_page_{page_number}_prompt.txt"
-                            page_output_path.write_text(prompt_text, encoding="utf-8")
-                            page_prompts.append((page_output_path, prompt_text))
-
+                            )
                         if page_prompts:
-                            page_prompt = page_prompts[0][1]  # First page's prompt for backward compat
+                            page_prompt = page_prompts[0][1]
                         self._emit(
                             PhaseCompleted(
                                 phase="prompt",
@@ -1732,7 +1852,7 @@ class ComicPipeline:
             checkpoints_created.append("story_bible")
         if all(path.exists() for path in script_page_paths):
             checkpoints_created.append("script")
-        if all(path.exists() for path in styled_script_page_paths) and not self.skip_style:
+        if all(path.exists() for path in styled_script_page_paths):
             checkpoints_created.append("styled_script")
         if expected_prompt_paths and all(path.exists() for path in expected_prompt_paths):
             checkpoints_created.append("page_prompt")
@@ -1746,7 +1866,6 @@ class ComicPipeline:
             self._should_run_stage("style")
             and styled_script_pages is None
             and script_pages is not None
-            and not self.skip_style
         ):
             failed_phases.append("style")
         if self._should_run_stage("prompt") and page_prompt is None and prompt_script_pages:
@@ -2026,14 +2145,6 @@ async def _run_cli() -> None:
         ),
     )
     parser.add_argument(
-        "--skip-style",
-        action="store_true",
-        help=(
-            "Skip Phase 3.5 style integration and generate the page prompt directly "
-            "from 03_script.json."
-        ),
-    )
-    parser.add_argument(
         "--vignette",
         action="store_true",
         help=(
@@ -2094,7 +2205,6 @@ async def _run_cli() -> None:
         else None,
         rerun_from=rerun_from_arg,
         recap_version=args.recap_version,
-        skip_style=args.skip_style,
         vignette=args.vignette,
         event_callback=_print_event_callback,
     )

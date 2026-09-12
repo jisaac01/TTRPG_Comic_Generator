@@ -223,15 +223,46 @@ def test_run_page_exposes_feature_toggle_checkboxes_off_by_default() -> None:
     _container, state = build_run_page(_services(), page, event_log, ft)
 
     assert state["unstyled_prompts_checkbox"].label == "Output un-styled prompts"
-    assert state["unstyled_prompts_checkbox"].value is False
+    assert state["unstyled_prompts_checkbox"].value is True
     assert state["chat_mode_checkbox"].label == "Chat mode"
     assert state["chat_mode_checkbox"].value is False
     assert state["pg13_mode_checkbox"].label == "PG-13 mode"
     assert state["pg13_mode_checkbox"].value is False
     config = state["build_config"]()
-    assert config.unstyled_prompts is False
+    assert config.unstyled_prompts is True
     assert config.chat_mode is False
     assert config.pg13_mode is False
+    assert "skip_style_checkbox" not in state
+    assert not hasattr(config, "skip_style")
+
+
+def test_run_page_places_toggles_on_row_before_run_button() -> None:
+    page = _FakePage()
+    event_log = ft.ListView()
+    container, state = build_run_page(_services(), page, event_log, ft)
+
+    toggles = [
+        state["generate_images_checkbox"],
+        state["vignette_checkbox"],
+        state["cache_buster_checkbox"],
+        state["unstyled_prompts_checkbox"],
+        state["chat_mode_checkbox"],
+        state["pg13_mode_checkbox"],
+    ]
+    rows = [control for control in container.controls if hasattr(control, "controls")]
+    toggle_row = next(row for row in rows if all(toggle in row.controls for toggle in toggles))
+    settings_row = next(
+        row
+        for row in rows
+        if state["panel_count_field"] in row.controls and state["total_pages_field"] in row.controls
+    )
+    run_row = next(row for row in rows if state["run_button"] in row.controls)
+
+    assert state["rerun_dropdown"] not in toggle_row.controls
+    assert state["panel_count_field"] not in toggle_row.controls
+    assert state["vignette_checkbox"] not in settings_row.controls
+    assert container.controls.index(settings_row) < container.controls.index(toggle_row)
+    assert container.controls.index(toggle_row) < container.controls.index(run_row)
 
 
 def test_run_page_exposes_art_style_selector() -> None:
@@ -259,7 +290,6 @@ def test_run_page_build_config_maps_form_fields() -> None:
     state["episode_dropdown"].value = "ep-1"
     state["rerun_dropdown"].value = "script"
     state["recap_dropdown"].value = "short"
-    state["skip_style_checkbox"].value = True
     state["generate_images_checkbox"].value = True
     state["panel_count_field"].value = "4"
     state["total_pages_field"].value = "2"
@@ -277,7 +307,6 @@ def test_run_page_build_config_maps_form_fields() -> None:
     assert config.campaign == "flail"
     assert config.rerun_from == "script"
     assert config.recap_version == "short"
-    assert config.skip_style is True
     assert config.panel_count == 4
     assert config.total_pages == 2
     assert config.aspect_ratio == "3:2"

@@ -123,6 +123,7 @@ def test_integrate_style_writes_checkpoint_and_preserves_structure(tmp_path):
         system_prompt_text="TEST_SYSTEM_PROMPT",
         user_prompt_text="TEST_USER_PROMPT",
         generator=lambda _script, _art, _model: _styled_payload(),
+        pg13_mode=True,
     )
 
     assert output_path.exists()

@@ -1413,6 +1413,41 @@ def test_output_page_version_change_updates_loaded_and_settings_text(tmp_path):
     assert state["pg13_mode_checkbox"].value is True
 
 
+def test_output_page_places_toggles_on_row_before_rerun_button(tmp_path):
+    import flet as ft
+
+    campaigns_root = _make_output_versions(tmp_path)
+    page = _FakePage()
+    services = _prompt_services(campaigns_root)
+    container, state = build_output_page(services, page, ft)
+
+    toggles = [
+        state["vignette_checkbox"],
+        state["cache_buster_checkbox"],
+        state["unstyled_prompts_checkbox"],
+        state["chat_mode_checkbox"],
+        state["pg13_mode_checkbox"],
+    ]
+    rows = [control for control in container.controls if hasattr(control, "controls")]
+    toggle_row = next(row for row in rows if all(toggle in row.controls for toggle in toggles))
+    settings_row = next(
+        row
+        for row in rows
+        if state["panel_count_field"] in row.controls and state["total_pages_field"] in row.controls
+    )
+    rerun_row = next(row for row in rows if state["quick_rerun_button"] in row.controls)
+    stage_row = next(
+        row for row in rows if state["rerun_only_stage_checkbox"] in row.controls
+    )
+
+    assert state["rerun_only_stage_checkbox"] not in toggle_row.controls
+    assert state["quick_rerun_stage_dropdown"] in stage_row.controls
+    assert state["panel_count_field"] not in toggle_row.controls
+    assert state["vignette_checkbox"] not in settings_row.controls
+    assert container.controls.index(settings_row) < container.controls.index(toggle_row)
+    assert container.controls.index(toggle_row) < container.controls.index(rerun_row)
+
+
 def test_output_page_run_status_shows_errors_and_warnings(tmp_path):
     import flet as ft
 
@@ -1573,6 +1608,53 @@ def test_output_page_generate_images_writes_into_selected_version(tmp_path, monk
     assert "images/v001/05_page_1.png" in labels
     version_names = {path.name for path in episode_dir.iterdir() if path.is_dir()}
     assert version_names == {"v001", "v002"}
+
+
+def test_output_page_generate_images_and_test_image_ignore_unstyled_prompts(tmp_path, monkeypatch):
+    import flet as ft
+
+    campaigns_root = _make_output_versions(tmp_path)
+    version_dir = campaigns_root / "test_camp" / "episode-1" / "v002"
+    (version_dir / "041_page_1_unstyled_prompt.txt").write_text("UNSTYLED PROMPT", encoding="utf-8")
+
+    class _TaskPage(_FakePage):
+        def run_task(self, task: object) -> None:
+            asyncio.run(task())
+
+    prompts_seen: list[str] = []
+
+    class _FakeGenerator:
+        def generate_image(self, prompt: str) -> bytes:
+            prompts_seen.append(prompt)
+            return f"img:{prompt}".encode()
+
+        def save_image(self, image_bytes: bytes, output_path):
+            path = Path(output_path)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(image_bytes)
+            return path
+
+    monkeypatch.setattr("gui.ImageGenerator", lambda model: _FakeGenerator())
+
+    page = _TaskPage()
+    services = _prompt_services(campaigns_root)
+    _view, state = build_output_page(services, page, ft)
+
+    labels = [control.label for control in state["file_list"].content.controls]
+    assert "041_page_1_unstyled_prompt.txt" in labels
+
+    state["generate_images_button"].on_click(None)
+    assert "UNSTYLED PROMPT" not in prompts_seen
+    assert "new prompt" in prompts_seen
+
+    prompts_seen.clear()
+    state["file_list"].value = "041_page_1_unstyled_prompt.txt"
+    state["file_list"].on_change(
+        type("Event", (), {"control": type("Control", (), {"value": "041_page_1_unstyled_prompt.txt"})()})()
+    )
+    state["test_image_button"].on_click(None)
+    assert "UNSTYLED PROMPT" not in prompts_seen
+    assert prompts_seen == ["new prompt"]
 
 
 def test_output_page_generate_images_attaches_campaign_character_refs(tmp_path, monkeypatch):
