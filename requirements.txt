@@ -1,4 +1,7 @@
 flet
+fastapi
+uvicorn
+httpx
 playwright
 pydantic
 instructor

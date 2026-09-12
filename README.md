@@ -47,15 +47,22 @@ If you are using Ollama, make sure Ollama is running locally and the selected mo
 
 ## GUI
 
-The Flet GUI is the recommended way to run the pipeline and generate images.
+The Flet GUI is the current desktop UI. A localhost web app is in progress (`python src/web_main.py` → http://127.0.0.1:8765). Port 8765 is used so it does not collide with other local apps on 8080/8050.
+
+```bash
+python src/web_main.py
+```
+
+JSON API under `/api` (health and campaigns in the first slice). Bind is localhost only.
+
+Flet remains available during the port and still has the three workspaces plus a Settings dialog:
 
 ```bash
 python src/main.py
 ```
 
-The app has three workspaces plus a Settings dialog:
 
-- **Run** — create campaigns and launch pipeline runs. Use **Story URL** for a new scrape, or **Existing Episode** to re-run from a chosen start stage. Configure recap variant, panel/page counts, page vs panel generation, vignette, aspect ratio, art style, skip-style, and optional image generation.
+- **Run** — create campaigns and launch pipeline runs. Use **Story URL** for a new scrape, or **Existing Episode** to re-run from a chosen start stage. Configure recap variant, panel/page counts, page vs panel generation, vignette, aspect ratio, art style, unstyled prompts, and optional image generation.
 - **Prompts** — edit campaign-level prompt templates and art-direction JSON. Bundled styles stay in the repo library; **Save** writes a campaign override that then appears on Run/Output as `name (campaign)`.
 - **Output** — browse campaign / episode / version (including the editable `working/` workspace). Preview checkpoints and prompts, regenerate a selected image or all images, stitch panel images, and re-run from a stage (optionally that stage only). Episode settings on this tab apply to the next rerun.
 - **Settings** (toolbar) — Gemini API key, default text model, and image generation model.

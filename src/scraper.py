@@ -6,6 +6,7 @@ import importlib.util
 import json
 import os
 import re
+import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -824,6 +825,44 @@ def configure_playwright_runtime() -> Path | None:
     if browser_root is not None:
         os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(browser_root)
     return browser_root
+
+
+def playwright_preflight_warnings() -> list[str]:
+    """Return user-facing warnings when Playwright is missing or broken."""
+    warnings: list[str] = []
+    browser_root = configure_playwright_runtime()
+
+    try:
+        import playwright.async_api  # noqa: F401
+    except Exception:
+        return [
+            "Playwright is not installed. Install dependencies before building the app."
+        ]
+
+    executable = playwright_browser_executable(browser_root)
+    if executable is None or not executable.exists():
+        return [
+            "Playwright Chromium browser was not found in `src/playwright-browsers` or the standard Playwright browser cache. Install with `python -m playwright install chromium`, or rebuild with `PLAYWRIGHT_BROWSERS_PATH=src/playwright-browsers` in the build environment."
+        ]
+
+    try:
+        subprocess.run(
+            [str(executable), "--version"],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=10,
+        )
+    except Exception as exc:
+        detail = str(exc).lower()
+        if "dll load failed" in detail or "vcruntime" in detail or "msvcp" in detail:
+            warnings.append(
+                "Playwright runtime dependency missing. On Windows install Microsoft Visual C++ Redistributable (x64)."
+            )
+        else:
+            warnings.append(f"Playwright preflight check failed: {exc}")
+
+    return warnings
 
 
 def _ensure_async_playwright_loaded() -> None:

@@ -1,6 +1,6 @@
 # Strategy: web port first, then guided flow, then per-file versioning
 
-Status: recommendation only. Do not start implementation until we explicitly pick this up.
+Status: accepted. Localhost web-port implementation plan: [PLAN_web_port.md](PLAN_web_port.md).
 
 This is an engineering-management recommendation, not an implementation plan. Do not start building until we agree on sequence and scope.
 

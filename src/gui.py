@@ -66,7 +66,7 @@ from repository_service import (
     RepositoryService,
 )
 from run_controller import RunController
-from scraper import configure_playwright_runtime, normalize_recap_version, playwright_browser_executable
+from scraper import normalize_recap_version, playwright_preflight_warnings
 from settings_service import SettingsService
 
 try:
@@ -140,45 +140,6 @@ def _model_dropdown_options(
     if selected and selected not in values:
         values.append(selected)
     return [ft.dropdown.Option(model, option_label(model, live)) for model in values]
-
-
-def _playwright_preflight_warnings() -> list[str]:
-    warnings: list[str] = []
-    browser_root = configure_playwright_runtime()
-
-    try:
-        import playwright.async_api  # noqa: F401
-    except Exception:
-        return [
-            "Playwright is not installed. Install dependencies before building the app."
-        ]
-
-    executable = playwright_browser_executable(browser_root)
-    if executable is None or not executable.exists():
-        return [
-            "Playwright Chromium browser was not found in `src/playwright-browsers` or the standard Playwright browser cache. Install with `python -m playwright install chromium`, or rebuild with `PLAYWRIGHT_BROWSERS_PATH=src/playwright-browsers` in the build environment."
-        ]
-
-    try:
-        subprocess.run(
-            [str(executable), "--version"],
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=10,
-        )
-    except Exception as exc:
-        detail = str(exc).lower()
-        if "dll load failed" in detail or "vcruntime" in detail or "msvcp" in detail:
-            warnings.append(
-                "Playwright runtime dependency missing. On Windows install Microsoft Visual C++ Redistributable (x64)."
-            )
-        else:
-            warnings.append(
-                f"Playwright preflight check failed: {exc}"
-            )
-
-    return warnings
 
 
 def build_run_page(
@@ -2557,7 +2518,7 @@ def build_main_layout(page: Any, services: AppServices) -> dict[str, Any]:
 
     page.update()
 
-    preflight_warnings = _playwright_preflight_warnings()
+    preflight_warnings = playwright_preflight_warnings()
     preflight_text = ft.Text(
         "\n".join(preflight_warnings),
         color=ft.Colors.AMBER_900,
