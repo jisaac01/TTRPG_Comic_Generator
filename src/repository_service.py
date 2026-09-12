@@ -242,6 +242,12 @@ class RepositoryService:
 
         return entries
 
+    def version_directory(self, campaign: str, episode_slug: str, version: str) -> Path:
+        path = self._version_dir(campaign, episode_slug, version)
+        if not path.is_dir():
+            raise FileNotFoundError(f"version {version!r} was not found")
+        return path
+
     def resolve_version_file(
         self, campaign: str, episode_slug: str, version: str, key: str
     ) -> Path:

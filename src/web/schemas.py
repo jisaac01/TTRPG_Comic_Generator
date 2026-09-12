@@ -155,3 +155,16 @@ class RunSnapshotResponse(BaseModel):
     failed_phases: list[str] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
     events: list[dict] = Field(default_factory=list)
+
+
+class ImagePromptRequest(BaseModel):
+    prompt: str | None = None
+
+
+class ImageJobResponse(BaseModel):
+    source: str
+    images_dir: str
+    files: list[str]
+    stitched: list[str] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
+    character_ref_slugs: list[str] = Field(default_factory=list)

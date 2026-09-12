@@ -14,6 +14,7 @@ from run_controller import RunController
 from scraper import playwright_preflight_warnings
 from settings_service import SettingsService
 from web.api.campaigns import router as campaigns_router
+from web.api.images import router as images_router
 from web.api.prompts import router as prompts_router
 from web.api.runs import router as runs_router
 from web.api.settings import router as settings_router
@@ -91,4 +92,5 @@ def create_app(
     app.include_router(versions_router)
     app.include_router(settings_router)
     app.include_router(runs_router)
+    app.include_router(images_router)
     return app
