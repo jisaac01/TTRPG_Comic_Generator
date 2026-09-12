@@ -15,8 +15,10 @@ from scraper import playwright_preflight_warnings
 from settings_service import SettingsService
 from web.api.campaigns import router as campaigns_router
 from web.api.prompts import router as prompts_router
+from web.api.runs import router as runs_router
 from web.api.settings import router as settings_router
 from web.api.versions import router as versions_router
+from web.run_store import RunStore
 from web.schemas import HealthResponse
 
 WEB_HOST = "127.0.0.1"
@@ -72,7 +74,9 @@ def create_app(
     )
     app = FastAPI(title="TTRPG Comic Generator")
     app.state.services = resolved_services
+    app.state.campaigns_root = resolved_services.repository.campaigns_root
     app.state.catalog_path = resolved_services.settings.config_path.with_name("models.json")
+    app.state.runs = RunStore()
 
     @app.get("/", response_class=HTMLResponse)
     def landing() -> str:
@@ -86,4 +90,5 @@ def create_app(
     app.include_router(prompts_router)
     app.include_router(versions_router)
     app.include_router(settings_router)
+    app.include_router(runs_router)
     return app

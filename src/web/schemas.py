@@ -126,3 +126,32 @@ class SettingsUpdate(BaseModel):
     gemini_api_key: str | None = None
     default_model: str | None = None
     image_generation_model: str | None = None
+
+
+class RunLaunchRequest(BaseModel):
+    url: str
+    campaign: str
+    generate_images: bool = False
+    panel_count: int = 6
+    total_pages: int = 1
+    aspect_ratio: str = "3:2"
+    generation_mode: str = "page"
+    vignette: bool = False
+    cache_buster: bool = True
+    unstyled_prompts: bool = False
+    chat_mode: bool = False
+    pg13_mode: bool = False
+    art_style: str | None = None
+    rerun_from: str | None = None
+    stop_after: str | None = None
+    recap_version: str = "standard"
+
+
+class RunSnapshotResponse(BaseModel):
+    id: str | None = None
+    status: str
+    phase: str | None = None
+    version: str | None = None
+    failed_phases: list[str] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
+    events: list[dict] = Field(default_factory=list)
