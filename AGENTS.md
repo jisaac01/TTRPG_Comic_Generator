@@ -18,20 +18,28 @@ See [README.md](README.md) for setup, checkpoint layout, and user-facing documen
 
 This project is primarily a **test suite** from which the application is derived. The tests define required outputs and behaviors; implementation exists to satisfy them. It should be possible to rebuild the application from the test suite alone.
 
+### Starting work (required)
+
+Before starting a **new plan, phase, or slice**, run `git status` (and `git diff` if anything is dirty). If there is uncommitted work that is not part of the new task, **stop**. Tell the user what is uncommitted and wait for them to commit, stash, or explicitly include it. Do not mix a new phase into an uncommitted previous phase.
+
 ### Test-driven development (required)
 
 1. **Write tests first.** Add or update failing tests that describe the desired behavior before changing production code.
-2. **Focus on outputs and behaviors**, not implementation details. Assert on files written, JSON schemas, prompt text, pipeline events, GUI state, and end-to-end flows.
-3. **Prefer functional tests over mock-heavy unit tests.** Use realistic fixtures, temp campaign directories, and checkpoint files. Accept more setup when it exercises real behavior.
-4. **Mock only true external boundaries**: LLM API calls, Playwright scraping, Gemini image generation, keyring, and filesystem paths that must be isolated. Do not mock internal plumbing between project modules.
-5. **Avoid negative/absence tests** (e.g. "no code path does X", "file must not contain Y"). Test what the system *does*, not what it avoids.
-6. **Run tests before finishing work**: `.venv/bin/python -m pytest -q` (full suite) or a focused selector for the area you changed.
+2. **Arrange / Act / Assert.** Prefer that shape. `Arrange Act Assert Act Assert` (and similar) is fine when it cuts duplication and reads better than two nearly identical tests.
+3. **Focus on outputs and behaviors**, not implementation details. Assert on files written, JSON schemas, prompt text, pipeline events, GUI state, HTTP bodies, and end-to-end flows. Do not assert mock call counts alone.
+4. **Prefer functional tests over mock-heavy unit tests.** Use realistic fixtures, temp campaign directories, and checkpoint files. Accept more setup when it exercises real behavior. Do not be lazy about setup.
+5. **Do not mock internal methods** when a real object plus a temp directory will do. Exceptions: determinism, tests that would otherwise be very slow, or setup/cleanup that is truly excessive.
+6. **Always mock external APIs** that hit other systems (LLM, Gemini image, Playwright scrape, live model catalog, keyring). Block real credentials at the highest level (`tests/conftest.py`) so future tests inherit the guard. Do not rely on real API keys in tests.
+7. **If an internal boundary is mocked** for simplicity, add integration tests that exercise several major paths through the real boundary.
+8. **Do not test negatives** (that a feature is absent), configuration trivia, or incidentals such as page color. Test what the system *does*, not what it avoids.
+9. **Run tests before finishing work**: `.venv/bin/python -m pytest -q` (full suite) or a focused selector for the area you changed.
 
 ### Code style (required)
 
 - **No backwards compatibility.** Implement the current schema and behavior only. Remove legacy paths, deprecated filenames, and compatibility shims rather than preserving them.
 - **No fallbacks.** If required input is missing or invalid, fail clearly. Do not silently substitute defaults to paper over bad state.
 - **No hacky workarounds.** Fix the root cause directly.
+- **Do not work around sandbox restrictions.** If pip, network, filesystem, or a tool is blocked by the sandbox (`PermissionError`, cert/truststore failures, denied installs), stop and tell the user. Let them install packages or grant access. Do not retry with `--trusted-host`, disabled SSL, offline wheels, or other bypasses.
 - **Keep it simple.** Prefer the smallest change that satisfies the tests. Avoid overengineering, extra abstraction layers, and speculative features.
 - **Be concise** in code and comments. Match existing naming, types, and module layout.
 
@@ -120,10 +128,13 @@ Scene count for the story architect = `panel_count × total_pages`.
 
 ## Testing conventions
 
-- `tests/conftest.py` isolates credentials and `.env` leakage; do not rely on real API keys in tests.
+These repeat and specialize the TDD rules above for this repo's layout.
+
+- `tests/conftest.py` is the highest-level credential guard (clears `GEMINI_API_KEY`, stubs keyring). Keep it that way; do not add tests that need a real key.
 - `tests/test_pipeline.py` is the main integration surface — study its fixtures before changing pipeline behavior.
 - Pipeline tests patch external calls (`scrape_scrybequill`, LLM clients, `ImageGenerator`) at the boundary, then assert on written checkpoints and events.
 - GUI tests (`test_gui_integration.py`, `test_run_page.py`) exercise layout and config wiring with lightweight fakes, not full Flet rendering.
+- Web tests (`test_web_api.py` and later) are HTTP-level: `TestClient` + temp `campaigns_root`. Do not mock `RepositoryService` internals.
 - When adding a feature: add a failing test → implement → run focused tests → run full suite.
 
 Focused test example:
@@ -139,10 +150,15 @@ Focused test example:
 - Write tests that only assert mock call counts without checking outputs.
 - Expand scope beyond the task (drive-by refactors, unrelated docs, extra config knobs).
 - Commit `.env`, API keys, or generated campaign data.
+- Open GitHub PRs or merge; the owner reviews and merges.
+- Start a new plan/phase on top of someone else's uncommitted work without checking `git status` first.
+- Bypass the execution sandbox to install packages or reach the network.
 
 ## Useful references
 
 - [README.md](README.md) — setup, CLI examples, checkpoint table
 - [jargon.md](jargon.md) — comic terminology used in prompts and scripts
 - [TODO.md](TODO.md) — active implementation plans
+- [PLAN_web_and_user_flow.md](PLAN_web_and_user_flow.md) — web port then guided flow then versioning
+- [PLAN_web_port.md](PLAN_web_port.md) — localhost FastAPI port (in progress)
 - [.github/skills/run-pytest/SKILL.md](.github/skills/run-pytest/SKILL.md) — full-suite test command
