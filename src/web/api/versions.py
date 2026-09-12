@@ -14,10 +14,12 @@ from repository_service import (
     VersionInfo,
 )
 from web.schemas import (
+    TextContentRequest,
     VersionFileContentResponse,
     VersionFileItem,
     VersionFileListResponse,
     VersionListResponse,
+    VersionMetaUpdate,
     VersionResponse,
     VersionStatusResponse,
 )
@@ -171,6 +173,60 @@ def list_version_files(
             for entry in entries
         ]
     )
+
+
+@router.patch(
+    "/api/campaigns/{campaign}/episodes/{episode}/versions/{version}",
+    response_model=VersionResponse,
+)
+def patch_version(
+    campaign: str,
+    episode: str,
+    version: str,
+    body: VersionMetaUpdate,
+    request: Request,
+) -> VersionResponse:
+    repository = request.app.state.services.repository
+    try:
+        info = repository.update_version_meta(
+            campaign,
+            episode,
+            version,
+            starred=body.starred,
+            description=body.description,
+        )
+    except (ValueError, FileNotFoundError) as exc:
+        raise _http_error(exc) from exc
+    return _historical_version(info, campaign, episode, request)
+
+
+@router.put(
+    "/api/campaigns/{campaign}/episodes/{episode}/versions/{version}/files/{key:path}",
+    response_model=VersionFileContentResponse,
+)
+def save_version_file(
+    campaign: str,
+    episode: str,
+    version: str,
+    key: str,
+    body: TextContentRequest,
+    request: Request,
+) -> VersionFileContentResponse:
+    if version != WORKING_DIR_NAME:
+        raise HTTPException(status_code=400, detail="only working files can be edited")
+    repository = request.app.state.services.repository
+    try:
+        path = repository.resolve_version_file(campaign, episode, version, key)
+    except ValueError as exc:
+        raise _http_error(exc) from exc
+    if path.suffix.lower() in IMAGE_FILE_SUFFIXES:
+        raise HTTPException(status_code=400, detail="image files cannot be edited as text")
+    text = body.content
+    if text and not text.endswith("\n"):
+        text += "\n"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return VersionFileContentResponse(key=key, content=text)
 
 
 @router.get(

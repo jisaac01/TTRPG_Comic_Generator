@@ -100,3 +100,29 @@ class VersionFileListResponse(BaseModel):
 class VersionFileContentResponse(BaseModel):
     key: str
     content: str
+
+
+class TextContentRequest(BaseModel):
+    content: str
+
+
+class VersionMetaUpdate(BaseModel):
+    starred: bool | None = None
+    description: str | None = None
+
+
+class SettingsResponse(BaseModel):
+    gemini_api_key_configured: bool
+    gemini_api_key_masked: str
+    default_model: str
+    image_generation_model: str
+    text_models: list[str]
+    image_models: list[str]
+    warnings: list[str] = Field(default_factory=list)
+    fetch_error: str | None = None
+
+
+class SettingsUpdate(BaseModel):
+    gemini_api_key: str | None = None
+    default_model: str | None = None
+    image_generation_model: str | None = None

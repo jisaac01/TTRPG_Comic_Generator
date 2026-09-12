@@ -9,6 +9,7 @@ sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
 import keyring
 import llm_client
+import model_catalog
 import settings_service
 
 
@@ -27,5 +28,17 @@ def isolate_test_environment(monkeypatch):
 
     monkeypatch.setattr(settings_service.keyring, "get_password", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(settings_service.keyring, "set_password", lambda *_args, **_kwargs: None)
+
+    _real_fetch_gemini_models = model_catalog.fetch_gemini_models
+
+    def _guard_gemini_model_list(api_key, *, urlopen=None, **kwargs):
+        if urlopen is None:
+            raise RuntimeError(
+                "Gemini models.list is blocked in tests; mock "
+                "model_catalog.fetch_gemini_models or pass urlopen="
+            )
+        return _real_fetch_gemini_models(api_key, urlopen=urlopen, **kwargs)
+
+    monkeypatch.setattr(model_catalog, "fetch_gemini_models", _guard_gemini_model_list)
 
     llm_client._ENV_LOADED = False

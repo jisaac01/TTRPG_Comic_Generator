@@ -7,7 +7,9 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
 from art_styles import default_art_direction_template_path
+from model_defaults import DEFAULT_IMAGE_GENERATION_MODEL, DEFAULT_MODEL
 from prompt_templates import PAGE_PROMPT_TEMPLATE_FILENAME, DEFAULT_PROMPTS_DIR
+from prompter import ART_DIRECTION_TEMPLATE_FIELDS
 from web.app import create_app
 
 _TINY_PNG = (
@@ -349,4 +351,206 @@ def test_file_key_traversal_is_rejected(tmp_path: Path) -> None:
     )
 
     assert response.status_code == 400
+
+
+def test_save_and_reset_campaign_prompt(tmp_path: Path) -> None:
+    campaigns_root = tmp_path / "campaigns"
+    campaign = campaigns_root / "dreadmarsh"
+    campaign.mkdir(parents=True)
+    (campaign / "page_prompt.txt").write_text("custom prompt\n", encoding="utf-8")
+    default = (DEFAULT_PROMPTS_DIR / PAGE_PROMPT_TEMPLATE_FILENAME).read_text(
+        encoding="utf-8"
+    )
+    client = _client(tmp_path)
+
+    saved = client.put(
+        "/api/campaigns/dreadmarsh/prompts/page_prompt",
+        json={"content": "edited prompt\n"},
+    )
+    assert saved.status_code == 200
+    assert saved.json()["key"] == "page_prompt"
+    assert saved.json()["content"] == "edited prompt\n"
+    assert (campaign / "page_prompt.txt").read_text(encoding="utf-8") == "edited prompt\n"
+
+    reset = client.post("/api/campaigns/dreadmarsh/prompts/page_prompt/reset")
+    assert reset.status_code == 200
+    assert reset.json()["content"] == default
+    assert (campaign / "page_prompt.txt").read_text(encoding="utf-8") == "edited prompt\n"
+
+    loaded = client.get("/api/campaigns/dreadmarsh/prompts/page_prompt")
+    assert loaded.json()["content"] == "edited prompt\n"
+
+
+def test_save_bundled_art_style_writes_campaign_override(tmp_path: Path) -> None:
+    (tmp_path / "campaigns" / "dreadmarsh").mkdir(parents=True)
+    payload = {name: f"override {name}" for name, _ in ART_DIRECTION_TEMPLATE_FIELDS}
+    client = _client(tmp_path)
+
+    saved = client.put(
+        "/api/campaigns/dreadmarsh/prompts/bundled:brutalist",
+        json={"content": json.dumps(payload, indent=2)},
+    )
+
+    assert saved.status_code == 200
+    assert saved.json()["key"] == "campaign:brutalist"
+    saved_path = (
+        tmp_path / "campaigns" / "dreadmarsh" / "art_direction" / "brutalist.json"
+    )
+    assert json.loads(saved_path.read_text(encoding="utf-8")) == payload
+    bundled = client.get("/api/campaigns/dreadmarsh/prompts/bundled:brutalist")
+    assert bundled.status_code == 200
+    assert bundled.json()["content"] == default_art_direction_template_path().read_text(
+        encoding="utf-8"
+    )
+
+
+def test_save_invalid_art_style_is_rejected(tmp_path: Path) -> None:
+    (tmp_path / "campaigns" / "dreadmarsh").mkdir(parents=True)
+    client = _client(tmp_path)
+
+    response = client.put(
+        "/api/campaigns/dreadmarsh/prompts/campaign:swamp-ink",
+        json={"content": "{}"},
+    )
+
+    assert response.status_code == 400
+    assert "at least one" in response.json()["detail"].lower()
+
+
+def test_save_working_file_and_reject_historical_write(tmp_path: Path) -> None:
+    _seed_episode(tmp_path / "campaigns")
+    client = _client(tmp_path)
+
+    saved = client.put(
+        "/api/campaigns/dreadmarsh/episodes/crossing/versions/working/files/creative_direction.txt",
+        json={"content": "focus on the witch"},
+    )
+    assert saved.status_code == 200
+    assert saved.json()["content"] == "focus on the witch\n"
+    working_path = (
+        tmp_path
+        / "campaigns"
+        / "dreadmarsh"
+        / "crossing"
+        / "working"
+        / "creative_direction.txt"
+    )
+    assert working_path.read_text(encoding="utf-8") == "focus on the witch\n"
+
+    historical = client.put(
+        "/api/campaigns/dreadmarsh/episodes/crossing/versions/v001/files/01_raw_text.json",
+        json={"content": '{"title":"nope"}'},
+    )
+    assert historical.status_code == 400
+    raw = (
+        tmp_path
+        / "campaigns"
+        / "dreadmarsh"
+        / "crossing"
+        / "v001"
+        / "01_raw_text.json"
+    )
+    assert raw.read_text(encoding="utf-8") == '{"title":"Crossing"}'
+
+
+def test_star_and_note_historical_version(tmp_path: Path) -> None:
+    _seed_episode(tmp_path / "campaigns")
+    client = _client(tmp_path)
+
+    updated = client.patch(
+        "/api/campaigns/dreadmarsh/episodes/crossing/versions/v001",
+        json={"starred": False, "description": "  keep the fog  "},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["starred"] is False
+    assert updated.json()["description"] == "keep the fog"
+    assert updated.json()["version"] == "v001"
+
+    listed = client.get("/api/campaigns/dreadmarsh/episodes/crossing/versions")
+    historical = next(item for item in listed.json()["versions"] if item["version"] == "v001")
+    assert historical["starred"] is False
+    assert historical["description"] == "keep the fog"
+
+    working = client.patch(
+        "/api/campaigns/dreadmarsh/episodes/crossing/versions/working",
+        json={"starred": True},
+    )
+    assert working.status_code == 400
+
+
+def test_settings_round_trip_masks_api_key(tmp_path: Path, monkeypatch) -> None:
+    import os
+
+    import settings_service
+
+    stored: dict[tuple[str, str], str] = {}
+    monkeypatch.setattr(
+        settings_service.keyring,
+        "get_password",
+        lambda service, user: stored.get((service, user)),
+    )
+    monkeypatch.setattr(
+        settings_service.keyring,
+        "set_password",
+        lambda service, user, password: stored.__setitem__((service, user), password),
+    )
+    client = _client(tmp_path)
+
+    before = client.get("/api/settings")
+    assert before.status_code == 200
+    assert before.json()["gemini_api_key_configured"] is False
+    assert before.json()["default_model"] == DEFAULT_MODEL
+    assert before.json()["image_generation_model"] == DEFAULT_IMAGE_GENERATION_MODEL
+    assert DEFAULT_MODEL in before.json()["text_models"]
+
+    saved = client.put(
+        "/api/settings",
+        json={
+            "gemini_api_key": "secret-key",
+            "default_model": "gemini-3.1-pro",
+            "image_generation_model": "gemini-3.1-flash-image",
+        },
+    )
+    assert saved.status_code == 200
+    assert saved.json()["gemini_api_key_configured"] is True
+    assert saved.json()["gemini_api_key_masked"].endswith("-key")
+    assert saved.json()["default_model"] == "gemini-3.1-pro"
+    assert os.environ["GEMINI_API_KEY"] == "secret-key"
+
+    loaded = client.get("/api/settings")
+    assert loaded.json()["default_model"] == "gemini-3.1-pro"
+    assert loaded.json()["image_generation_model"] == "gemini-3.1-flash-image"
+    assert loaded.json()["gemini_api_key_configured"] is True
+
+
+def test_refresh_models_uses_mocked_gemini_list(tmp_path: Path, monkeypatch) -> None:
+    import model_catalog
+    import settings_service
+
+    stored: dict[tuple[str, str], str] = {}
+    monkeypatch.setattr(
+        settings_service.keyring,
+        "get_password",
+        lambda service, user: stored.get((service, user)),
+    )
+    monkeypatch.setattr(
+        settings_service.keyring,
+        "set_password",
+        lambda service, user, password: stored.__setitem__((service, user), password),
+    )
+    monkeypatch.setattr(
+        model_catalog,
+        "fetch_gemini_models",
+        lambda api_key, **_kwargs: (["gemini-test-text"], ["gemini-test-image"]),
+    )
+    client = _client(tmp_path)
+    client.put("/api/settings", json={"gemini_api_key": "secret-key"})
+
+    refreshed = client.post("/api/settings/refresh-models")
+
+    assert refreshed.status_code == 200
+    assert "gemini-test-text" in refreshed.json()["text_models"]
+    assert "gemini-test-image" in refreshed.json()["image_models"]
+    catalog = json.loads((tmp_path / "models.json").read_text(encoding="utf-8"))
+    assert "gemini-test-text" in catalog["text_models"]
 
