@@ -324,3 +324,92 @@ def test_version_and_episode_has_images_detects_generated_pngs(tmp_path):
     working_image.parent.mkdir(parents=True, exist_ok=True)
     working_image.write_bytes(b"working-png")
     assert service.version_has_images("dreadmarsh", "dreadmarsh-crossing", "working") is True
+
+
+def test_list_version_files_orders_preferred_then_extras_then_images(tmp_path):
+    campaigns_root = tmp_path / "campaigns"
+    episode_dir = campaigns_root / "dreadmarsh" / "dreadmarsh-crossing"
+    version_dir = episode_dir / "v001"
+    _write_version(version_dir)
+    (version_dir / "z_notes.txt").write_text("note", encoding="utf-8")
+    image_path = version_dir / "images" / "run1" / "05_page_1.png"
+    image_path.parent.mkdir(parents=True)
+    image_path.write_bytes(b"png-bytes")
+    (version_dir / "prompts" / "page_prompt.txt").write_text("audit", encoding="utf-8")
+
+    service = RepositoryService(campaigns_root)
+    entries = service.list_version_files("dreadmarsh", "dreadmarsh-crossing", "v001")
+    keys = [entry.key for entry in entries]
+
+    assert keys == [
+        "01_raw_text.json",
+        "02_entities.json",
+        "02_5_story_bible.txt",
+        "03_script.json",
+        "03_5_styled_script.json",
+        "04_page_1_prompt.txt",
+        "run_status.json",
+        "art_direction_template.json",
+        "z_notes.txt",
+        "images/run1/05_page_1.png",
+    ]
+    by_key = {entry.key: entry for entry in entries}
+    assert by_key["01_raw_text.json"].kind == "text"
+    assert by_key["01_raw_text.json"].exists is True
+    assert by_key["images/run1/05_page_1.png"].kind == "image"
+
+
+def test_list_version_files_includes_missing_creative_direction_for_working(tmp_path):
+    campaigns_root = tmp_path / "campaigns"
+    working = campaigns_root / "dreadmarsh" / "dreadmarsh-crossing" / "working"
+    working.mkdir(parents=True)
+    (working / "01_raw_text.json").write_text("{}", encoding="utf-8")
+
+    service = RepositoryService(campaigns_root)
+    entries = service.list_version_files("dreadmarsh", "dreadmarsh-crossing", "working")
+
+    assert entries[0].key == "creative_direction.txt"
+    assert entries[0].exists is False
+    assert entries[1].key == "01_raw_text.json"
+    assert entries[1].exists is True
+
+
+def test_resolve_version_file_returns_path_under_version(tmp_path):
+    campaigns_root = tmp_path / "campaigns"
+    version_dir = campaigns_root / "dreadmarsh" / "dreadmarsh-crossing" / "v001"
+    _write_version(version_dir)
+    service = RepositoryService(campaigns_root)
+
+    path = service.resolve_version_file(
+        "dreadmarsh", "dreadmarsh-crossing", "v001", "01_raw_text.json"
+    )
+    nested = service.resolve_version_file(
+        "dreadmarsh",
+        "dreadmarsh-crossing",
+        "v001",
+        "images/run1/05_page_1.png",
+    )
+
+    assert path == (version_dir / "01_raw_text.json").resolve()
+    assert nested == (version_dir / "images" / "run1" / "05_page_1.png").resolve()
+
+
+def test_resolve_version_file_rejects_traversal_and_invalid_version(tmp_path):
+    campaigns_root = tmp_path / "campaigns"
+    version_dir = campaigns_root / "dreadmarsh" / "dreadmarsh-crossing" / "v001"
+    _write_version(version_dir)
+    service = RepositoryService(campaigns_root)
+
+    with pytest.raises(ValueError, match="file key"):
+        service.resolve_version_file(
+            "dreadmarsh", "dreadmarsh-crossing", "v001", "../episode_meta.json"
+        )
+    with pytest.raises(ValueError, match="file key"):
+        service.resolve_version_file(
+            "dreadmarsh", "dreadmarsh-crossing", "v001", "/tmp/x.json"
+        )
+    with pytest.raises(ValueError, match="version"):
+        service.resolve_version_file(
+            "dreadmarsh", "dreadmarsh-crossing", "scratch", "01_raw_text.json"
+        )
+

@@ -28,6 +28,17 @@ WORKING_DIR_NAME = "working"
 IMAGES_DIR_NAME = "images"
 IMAGE_FILE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 VERSION_PATTERN = re.compile(r"v\d{3}")
+PREFERRED_VERSION_FILES = (
+    "creative_direction.txt",
+    "01_raw_text.json",
+    "02_entities.json",
+    "02_5_story_bible.txt",
+    "03_script.json",
+    "03_5_styled_script.json",
+    "04_page_1_prompt.txt",
+    "run_status.json",
+    "art_direction_template.json",
+)
 
 
 @dataclass(frozen=True)
@@ -68,6 +79,13 @@ class VersionFiles:
     page_prompt: Path | None
     art_direction_template: Path | None
     prompts_dir: Path | None
+
+
+@dataclass(frozen=True)
+class VersionFileEntry:
+    key: str
+    kind: str
+    exists: bool
 
 
 @dataclass(frozen=True)
@@ -188,6 +206,55 @@ class RepositoryService:
         status_path.write_text(json.dumps(status, indent=2) + "\n", encoding="utf-8")
         return self._version_info(status_path.parent, status)
 
+    def list_version_files(
+        self, campaign: str, episode_slug: str, version: str
+    ) -> list[VersionFileEntry]:
+        """Return version files as relative keys, matching Output-tab order."""
+        version_dir = self._version_dir(campaign, episode_slug, version)
+        entries: list[VersionFileEntry] = []
+        seen: set[str] = set()
+
+        for name in PREFERRED_VERSION_FILES:
+            path = version_dir / name
+            exists = path.is_file()
+            if exists or (
+                name == "creative_direction.txt" and version == WORKING_DIR_NAME
+            ):
+                entries.append(_file_entry(name, exists=exists))
+                seen.add(name)
+
+        if version_dir.is_dir():
+            extras = sorted(
+                path
+                for path in version_dir.iterdir()
+                if path.is_file() and path.name not in seen
+            )
+            for path in extras:
+                entries.append(_file_entry(path.name, exists=True))
+                seen.add(path.name)
+
+            images_root = version_dir / IMAGES_DIR_NAME
+            if images_root.is_dir():
+                for folder in sorted(p for p in images_root.iterdir() if p.is_dir()):
+                    for path in sorted(p for p in folder.iterdir() if p.is_file()):
+                        key = path.relative_to(version_dir).as_posix()
+                        entries.append(_file_entry(key, exists=True))
+
+        return entries
+
+    def resolve_version_file(
+        self, campaign: str, episode_slug: str, version: str, key: str
+    ) -> Path:
+        """Resolve a relative file key under a version dir. Path may not exist."""
+        version_dir = self._version_dir(campaign, episode_slug, version)
+        relative = safe_relative_key(key)
+        path = (version_dir / relative).resolve()
+        try:
+            path.relative_to(version_dir.resolve())
+        except ValueError as exc:
+            raise ValueError(f"invalid file key {key!r}") from exc
+        return path
+
     def get_version_files(self, campaign: str, episode_slug: str, version: str) -> VersionFiles:
         # version may be a historical vNNN or the special WORKING_DIR_NAME label.
         version_dir = self.campaigns_root / campaign / episode_slug / version
@@ -282,9 +349,39 @@ class RepositoryService:
             description=str(status_data.get("description") or ""),
         )
 
+    def _version_dir(self, campaign: str, episode_slug: str, version: str) -> Path:
+        _require_segment(campaign, "campaign")
+        _require_segment(episode_slug, "episode")
+        if version != WORKING_DIR_NAME and not VERSION_PATTERN.fullmatch(version):
+            raise ValueError(f"invalid version {version!r}")
+        return self.campaigns_root / campaign / episode_slug / version
+
     @staticmethod
     def _path_if_exists(path: Path) -> Path | None:
         return path if path.exists() else None
+
+
+def _require_segment(value: str, label: str) -> None:
+    if not value or value in {".", ".."} or "/" in value or "\\" in value:
+        raise ValueError(f"invalid {label} {value!r}")
+
+
+def safe_relative_key(key: str) -> Path:
+    if not key or key.startswith(("/", "\\")) or "\\" in key:
+        raise ValueError(f"invalid file key {key!r}")
+    relative = Path(key)
+    if relative.is_absolute() or ".." in relative.parts or relative.parts[0] == "..":
+        raise ValueError(f"invalid file key {key!r}")
+    return relative
+
+
+def _file_kind(key: str) -> str:
+    suffix = Path(key).suffix.lower()
+    return "image" if suffix in IMAGE_FILE_SUFFIXES else "text"
+
+
+def _file_entry(key: str, *, exists: bool) -> VersionFileEntry:
+    return VersionFileEntry(key=key, kind=_file_kind(key), exists=exists)
 
 
 def _dir_has_image_files(images_root: Path) -> bool:

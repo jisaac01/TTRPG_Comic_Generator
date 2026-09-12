@@ -14,6 +14,8 @@ from run_controller import RunController
 from scraper import playwright_preflight_warnings
 from settings_service import SettingsService
 from web.api.campaigns import router as campaigns_router
+from web.api.prompts import router as prompts_router
+from web.api.versions import router as versions_router
 from web.schemas import HealthResponse
 
 WEB_HOST = "127.0.0.1"
@@ -79,4 +81,6 @@ def create_app(
         return HealthResponse(status="ok", warnings=playwright_preflight_warnings())
 
     app.include_router(campaigns_router)
+    app.include_router(prompts_router)
+    app.include_router(versions_router)
     return app
