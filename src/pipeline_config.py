@@ -64,6 +64,12 @@ class RunConfig:
     vignette: bool = False
     # When True, the final page/panel image prompt gets a unique prefix to bust Gemini Chat cache.
     cache_buster: bool = True
+    # When True, also write a parallel final prompt from the unstyled script.
+    unstyled_prompts: bool = False
+    # When True, style header only on the first page/panel; later pages skip cache buster.
+    chat_mode: bool = False
+    # When True, tone down violence in script, style, and final prompt stages.
+    pg13_mode: bool = False
 
     # Optional template/prompt overrides (explicit paths)
     art_style_template: Path | None = None
@@ -133,6 +139,12 @@ class RunConfig:
             errors.append("vignette must be a boolean")
         if not isinstance(self.cache_buster, bool):
             errors.append("cache_buster must be a boolean")
+        if not isinstance(self.unstyled_prompts, bool):
+            errors.append("unstyled_prompts must be a boolean")
+        if not isinstance(self.chat_mode, bool):
+            errors.append("chat_mode must be a boolean")
+        if not isinstance(self.pg13_mode, bool):
+            errors.append("pg13_mode must be a boolean")
         if self.art_style_template is not None and not self.art_style_template.exists():
             errors.append(f"art_style_template path does not exist: {self.art_style_template}")
         path_fields = [
@@ -163,6 +175,9 @@ STAGE_ORDER: list[RerunFrom] = [
 SETTING_COMPARE_DEFAULTS: dict[str, object] = {
     "vignette": False,
     "cache_buster": True,
+    "unstyled_prompts": False,
+    "chat_mode": False,
+    "pg13_mode": False,
 }
 
 SETTING_MIN_STAGE: dict[str, RerunFrom] = {
@@ -175,6 +190,9 @@ SETTING_MIN_STAGE: dict[str, RerunFrom] = {
     "art_style": "style",
     "aspect_ratio": "prompt",
     "cache_buster": "prompt",
+    "unstyled_prompts": "prompt",
+    "chat_mode": "prompt",
+    "pg13_mode": "script",
 }
 
 SETTING_FIELD_MIN_STAGE: dict[str, RerunFrom] = {
@@ -186,6 +204,9 @@ SETTING_FIELD_MIN_STAGE: dict[str, RerunFrom] = {
     "art_style": "style",
     "aspect_ratio": "prompt",
     "cache_buster": "prompt",
+    "unstyled_prompts": "prompt",
+    "chat_mode": "prompt",
+    "pg13_mode": "script",
 }
 
 PROMPT_AFFECTING_KEYS = frozenset(
@@ -197,6 +218,9 @@ PROMPT_AFFECTING_KEYS = frozenset(
         "art_style",
         "vignette",
         "cache_buster",
+        "unstyled_prompts",
+        "chat_mode",
+        "pg13_mode",
     }
 )
 
@@ -208,6 +232,9 @@ RUN_CONFIG_KEYS = (
     "generation_mode",
     "vignette",
     "cache_buster",
+    "unstyled_prompts",
+    "chat_mode",
+    "pg13_mode",
     "art_style",
     "skip_style",
     "generate_images",
@@ -227,6 +254,9 @@ def run_config_snapshot(config: RunConfig) -> dict:
         "generation_mode": config.generation_mode,
         "vignette": config.vignette,
         "cache_buster": config.cache_buster,
+        "unstyled_prompts": config.unstyled_prompts,
+        "chat_mode": config.chat_mode,
+        "pg13_mode": config.pg13_mode,
         "art_style": config.art_style,
         "skip_style": config.skip_style,
         "generate_images": config.generate_images,

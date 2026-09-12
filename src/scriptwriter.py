@@ -565,6 +565,7 @@ def write_script(
     model: str = DEFAULT_MODEL,
     total_pages: int = 1,
     generator: ScriptGenerator | None = None,
+    pg13_mode: bool = False,
 ) -> ScriptCheckpoint:
     
     raw = RawTextCheckpoint.model_validate_json(raw_checkpoint_path.read_text(encoding="utf-8"))

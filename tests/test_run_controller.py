@@ -322,6 +322,71 @@ async def test_run_controller_forwards_cache_buster_config(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_run_controller_forwards_feature_toggles(tmp_path):
+    captured: dict[str, object] = {}
+
+    class _RecordingPipeline:
+        def __init__(self, **kwargs: object) -> None:
+            captured.update(kwargs)
+
+        async def run(self) -> dict[str, object]:
+            return {"version": "v001", "version_dir": "/tmp/v001", "errors": []}
+
+    controller = RunController(pipeline_factory=_RecordingPipeline)
+    config = RunConfig(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        unstyled_prompts=True,
+        chat_mode=True,
+        pg13_mode=True,
+    )
+
+    await controller.launch_run(config, lambda _event: None)
+
+    assert captured["unstyled_prompts"] is True
+    assert captured["chat_mode"] is True
+    assert captured["pg13_mode"] is True
+
+
+@pytest.mark.asyncio
+async def test_run_controller_persists_feature_toggles_in_run_status(tmp_path):
+    version_dir = tmp_path / "dreadmarsh" / "ep-1" / "v001"
+    version_dir.mkdir(parents=True)
+
+    class _ToggleRunPipeline:
+        def __init__(self, **_: object) -> None:
+            return
+
+        async def run(self) -> dict[str, object]:
+            return {
+                "version": "v001",
+                "version_dir": str(version_dir),
+                "errors": [],
+            }
+
+    controller = RunController(pipeline_factory=_ToggleRunPipeline)
+    config = RunConfig(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        cache_buster=False,
+        unstyled_prompts=True,
+        chat_mode=True,
+        pg13_mode=True,
+    )
+
+    result = await controller.launch_run(config, lambda _event: None)
+
+    status = json.loads((Path(result.version_dir) / "run_status.json").read_text(encoding="utf-8"))
+    run_config = status["run_config"]
+    assert run_config["cache_buster"] is False
+    assert run_config["unstyled_prompts"] is True
+    assert run_config["chat_mode"] is True
+    assert run_config["pg13_mode"] is True
+
+
+@pytest.mark.asyncio
 async def test_run_controller_forwards_image_generation_config(tmp_path):
     captured: dict[str, object] = {}
 

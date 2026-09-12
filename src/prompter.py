@@ -304,6 +304,9 @@ def generate_page_prompt(
     page_prompt_template_path: Path | None = None,
     aspect_ratio: str = "3:2",
     cache_buster: bool = True,
+    unstyled_prompts: bool = False,
+    chat_mode: bool = False,
+    pg13_mode: bool = False,
 ) -> str:
     script = ScriptCheckpoint.model_validate_json(
         script_checkpoint_path.read_text(encoding="utf-8")

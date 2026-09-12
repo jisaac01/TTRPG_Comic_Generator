@@ -166,6 +166,7 @@ def integrate_style(
     user_prompt_text: str,
     model: str = DEFAULT_MODEL,
     generator: StyleGenerator | None = None,
+    pg13_mode: bool = False,
 ) -> ScriptCheckpoint:
     script = ScriptCheckpoint.model_validate_json(
         script_checkpoint_path.read_text(encoding="utf-8")

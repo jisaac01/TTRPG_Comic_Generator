@@ -1448,6 +1448,47 @@ async def test_pipeline_passes_cache_buster_to_page_prompt(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_pipeline_passes_feature_toggles_to_script_style_and_prompt(tmp_path):
+    pipeline = ComicPipeline(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        campaigns_root=tmp_path,
+        panel_count=2,
+        unstyled_prompts=True,
+        chat_mode=True,
+        pg13_mode=True,
+    )
+
+    with (
+        patch("pipeline.scrape_scrybequill", new_callable=AsyncMock, return_value=_RAW_CHECKPOINT),
+        patch("pipeline.build_entities_from_raw", return_value=_WORLD_CHECKPOINT),
+        patch("pipeline.create_story_bible", return_value=_STORY_BIBLE_CHECKPOINT),
+        patch("pipeline.prepare_scriptwriter_prompts", return_value=("sys", "user")) as mock_script_prompts,
+        patch("pipeline.write_script", return_value=_SCRIPT_CHECKPOINT) as mock_script,
+        patch("pipeline.prepare_style_integrator_prompts", return_value=("sys", "user")) as mock_style_prompts,
+        patch("pipeline.integrate_style", return_value=_STYLED_SCRIPT_CHECKPOINT) as mock_style,
+        patch("pipeline.prepare_page_prompt_template", return_value=_PAGE_PROMPT) as mock_prompts,
+    ):
+        result = await pipeline.run()
+
+    _, script_prompt_kwargs = mock_script_prompts.call_args
+    assert script_prompt_kwargs["pg13_mode"] is True
+    _, script_kwargs = mock_script.call_args
+    assert script_kwargs["pg13_mode"] is True
+    _, style_prompt_kwargs = mock_style_prompts.call_args
+    assert style_prompt_kwargs["pg13_mode"] is True
+    _, style_kwargs = mock_style.call_args
+    assert style_kwargs["pg13_mode"] is True
+    _, prompt_kwargs = mock_prompts.call_args
+    assert prompt_kwargs["unstyled_prompts"] is True
+    assert prompt_kwargs["chat_mode"] is True
+    assert prompt_kwargs["pg13_mode"] is True
+    assert result["run_config"]["unstyled_prompts"] is True
+    assert result["run_config"]["chat_mode"] is True
+    assert result["run_config"]["pg13_mode"] is True
+
+
+@pytest.mark.asyncio
 async def test_stop_after_entities_reruns_entities_only(tmp_path):
     """rerun_from=entities + stop_after=entities: refresh entities, do not continue."""
     _make_episode(tmp_path, "dreadmarsh", "https://example.test/story", "Dreadmarsh Crossing")

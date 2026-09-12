@@ -175,6 +175,7 @@ def test_write_script_writes_checkpoint_and_normalizes_panel_indices(tmp_path):
         user_prompt_text="TEST_USER_PROMPT",
         model=DEFAULT_MODEL,
         generator=fake_generator,
+        pg13_mode=True,
     )
 
     assert output_path.exists()

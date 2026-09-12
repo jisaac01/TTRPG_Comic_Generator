@@ -217,6 +217,23 @@ def test_run_page_exposes_cache_buster_checkbox_on_by_default() -> None:
     assert state["build_config"]().cache_buster is True
 
 
+def test_run_page_exposes_feature_toggle_checkboxes_off_by_default() -> None:
+    page = _FakePage()
+    event_log = ft.ListView()
+    _container, state = build_run_page(_services(), page, event_log, ft)
+
+    assert state["unstyled_prompts_checkbox"].label == "Output un-styled prompts"
+    assert state["unstyled_prompts_checkbox"].value is False
+    assert state["chat_mode_checkbox"].label == "Chat mode"
+    assert state["chat_mode_checkbox"].value is False
+    assert state["pg13_mode_checkbox"].label == "PG-13 mode"
+    assert state["pg13_mode_checkbox"].value is False
+    config = state["build_config"]()
+    assert config.unstyled_prompts is False
+    assert config.chat_mode is False
+    assert config.pg13_mode is False
+
+
 def test_run_page_exposes_art_style_selector() -> None:
     page = _FakePage()
     event_log = ft.ListView()
@@ -250,6 +267,9 @@ def test_run_page_build_config_maps_form_fields() -> None:
     state["generation_mode_dropdown"].value = "panel"
     state["vignette_checkbox"].value = True
     state["cache_buster_checkbox"].value = False
+    state["unstyled_prompts_checkbox"].value = True
+    state["chat_mode_checkbox"].value = True
+    state["pg13_mode_checkbox"].value = True
     state["art_style_dropdown"].value = "bundled:brutalist"
 
     config = state["build_config"]()
@@ -264,6 +284,9 @@ def test_run_page_build_config_maps_form_fields() -> None:
     assert config.generation_mode == "panel"
     assert config.vignette is True
     assert config.cache_buster is False
+    assert config.unstyled_prompts is True
+    assert config.chat_mode is True
+    assert config.pg13_mode is True
     assert config.art_style == "bundled:brutalist"
     assert config.generate_images is True
     assert config.image_generation_model == "gemini-3.1-flash-image"

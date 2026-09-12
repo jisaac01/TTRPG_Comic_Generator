@@ -105,7 +105,7 @@ Only phases invalidated by `--rerun-from` or changed run settings are recomputed
 
 **Vignette** (`RunConfig.vignette: bool`, default `False`) is orthogonal to generation mode. When on, the story architect uses vignette templates (`story_architect_vignette_*.txt`) to pick one tight dramatic moment and expand it into the full scene count as micro-beats, instead of covering the whole recap. Page vs panel still controls prompt/image layout. Toggling vignette invalidates from `architect`.
 
-**Run settings** persisted in `run_status.json` under each version and mirrored to `working/`: `panel_count`, `total_pages`, `aspect_ratio`, `generation_mode`, `vignette`, `generate_images`, `recap_version`, `skip_style`, `rerun_from`. Config invalidation for the next run reads `working/run_status.json`.
+**Run settings** persisted in `run_status.json` under each version and mirrored to `working/`: `panel_count`, `total_pages`, `aspect_ratio`, `generation_mode`, `vignette`, `generate_images`, `recap_version`, `unstyled_prompts`, `rerun_from`. Config invalidation for the next run reads `working/run_status.json`.
 
 Scene count for the story architect = `panel_count × total_pages`.
 

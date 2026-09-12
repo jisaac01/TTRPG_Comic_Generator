@@ -593,6 +593,7 @@ def _generate_script_pages_panel_mode(
     total_pages: int,
     script_model: str,
     prompt_template_paths: dict[str, Path],
+    pg13_mode: bool = False,
 ) -> list[ScriptCheckpoint]:
     story_bible = load_story_bible(story_bible_path)
     units = build_story_bible_panel_units(story_bible, total_pages)
@@ -621,6 +622,7 @@ def _generate_script_pages_panel_mode(
             user_prompt_path=prompt_template_paths[SCRIPTWRITER_USER_PROMPT_FILENAME],
             page_number=unit.page_number,
             output_suffix=f"page_{unit.page_number:03d}_panel_{unit.panel_index:03d}",
+            pg13_mode=pg13_mode,
         )
         panel_scripts[key] = write_script(
             raw_checkpoint_path=raw_path,
@@ -631,6 +633,7 @@ def _generate_script_pages_panel_mode(
             total_pages=1,
             system_prompt_text=script_system_prompt,
             user_prompt_text=script_user_prompt,
+            pg13_mode=pg13_mode,
         )
 
     merged_pages: list[ScriptCheckpoint] = []
@@ -669,6 +672,9 @@ class ComicPipeline:
         generation_mode: Literal["page", "panel"] = "page",
         vignette: bool = False,
         cache_buster: bool = True,
+        unstyled_prompts: bool = False,
+        chat_mode: bool = False,
+        pg13_mode: bool = False,
         art_style_template: Path | None = None,
         art_style: str | None = None,
         story_architect_system_prompt: Path | None = None,
@@ -698,6 +704,9 @@ class ComicPipeline:
         self.generation_mode = generation_mode
         self.vignette = vignette
         self.cache_buster = cache_buster
+        self.unstyled_prompts = unstyled_prompts
+        self.chat_mode = chat_mode
+        self.pg13_mode = pg13_mode
         self.art_style_template = art_style_template
         self.art_style = art_style
         self.story_architect_system_prompt = story_architect_system_prompt
@@ -727,6 +736,9 @@ class ComicPipeline:
             "generation_mode": self.generation_mode,
             "vignette": self.vignette,
             "cache_buster": self.cache_buster,
+            "unstyled_prompts": self.unstyled_prompts,
+            "chat_mode": self.chat_mode,
+            "pg13_mode": self.pg13_mode,
             "art_style": self.art_style,
             "skip_style": self.skip_style,
             "generate_images": self.generate_images,
@@ -1310,6 +1322,7 @@ class ComicPipeline:
                             total_pages=self.total_pages,
                             script_model=self.script_model,
                             prompt_template_paths=prompt_template_paths,
+                            pg13_mode=self.pg13_mode,
                         )
                     else:
                         story_bible_pages = write_story_bible_pages(
@@ -1330,6 +1343,7 @@ class ComicPipeline:
                                 user_prompt_path=prompt_template_paths[SCRIPTWRITER_USER_PROMPT_FILENAME],
                                 page_number=page_number,
                                 output_suffix=f"page_{page_number:03d}",
+                                pg13_mode=self.pg13_mode,
                             )
                             generated_pages.append(
                                 write_script(
@@ -1341,6 +1355,7 @@ class ComicPipeline:
                                     total_pages=1,
                                     system_prompt_text=script_system_prompt,
                                     user_prompt_text=script_user_prompt,
+                                    pg13_mode=self.pg13_mode,
                                 )
                             )
                         script_pages = apply_cross_page_continuity_errors(
@@ -1434,6 +1449,7 @@ class ComicPipeline:
                             system_prompt_path=prompt_template_paths[STYLE_INTEGRATOR_SYSTEM_PROMPT_FILENAME],
                             user_prompt_path=prompt_template_paths[STYLE_INTEGRATOR_USER_PROMPT_FILENAME],
                             output_suffix=f"page_{page_number:03d}",
+                            pg13_mode=self.pg13_mode,
                         )
 
                         try:
@@ -1445,6 +1461,7 @@ class ComicPipeline:
                                     model=self.style_model,
                                     system_prompt_text=style_system_prompt,
                                     user_prompt_text=style_user_prompt,
+                                    pg13_mode=self.pg13_mode,
                                 )
                             )
                         except StyleIntegrationPartialFailure as exc:
@@ -1564,6 +1581,9 @@ class ComicPipeline:
                                             output_suffix=f"page_{page_number:03d}_panel_{panel.index:03d}",
                                             generation_mode="panel",
                                             cache_buster=self.cache_buster,
+                                            unstyled_prompts=self.unstyled_prompts,
+                                            chat_mode=self.chat_mode,
+                                            pg13_mode=self.pg13_mode,
                                         )
                                     except Exception as exc:
                                         self._emit(
@@ -1591,6 +1611,9 @@ class ComicPipeline:
                                     generation_mode="page",
                                     output_suffix=f"page_{page_number:03d}",
                                     cache_buster=self.cache_buster,
+                                    unstyled_prompts=self.unstyled_prompts,
+                                    chat_mode=self.chat_mode,
+                                    pg13_mode=self.pg13_mode,
                                 )
                             except Exception as exc:
                                 self._emit(

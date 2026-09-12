@@ -232,6 +232,7 @@ def prepare_scriptwriter_prompts(
     *,
     page_number: int,
     output_suffix: str,
+    pg13_mode: bool = False,
 ) -> tuple[str, str]:
     """Prepare and save scriptwriter prompts before model call.
     
@@ -297,6 +298,7 @@ def prepare_style_integrator_prompts(
     user_prompt_path: Path | None = None,
     *,
     output_suffix: str,
+    pg13_mode: bool = False,
 ) -> tuple[str, str]:
     """Prepare and save style integrator prompts before model call.
     
@@ -346,6 +348,9 @@ def prepare_page_prompt_template(
     generation_mode: str = "page",
     output_suffix: str,
     cache_buster: bool = True,
+    unstyled_prompts: bool = False,
+    chat_mode: bool = False,
+    pg13_mode: bool = False,
 ) -> str:
     """Prepare and save page prompt template before generation.
     

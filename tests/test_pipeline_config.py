@@ -67,6 +67,14 @@ def test_run_config_defaults_cache_buster_on() -> None:
     assert config.cache_buster is True
 
 
+def test_run_config_defaults_feature_toggles_off() -> None:
+    config = RunConfig(url="https://example.test/story", campaign="dreadmarsh")
+
+    assert config.unstyled_prompts is False
+    assert config.chat_mode is False
+    assert config.pg13_mode is False
+
+
 def test_run_config_round_trip_preserves_generation_mode() -> None:
     config = RunConfig(
         url="https://example.test/story",
@@ -123,6 +131,37 @@ def test_run_config_snapshot_includes_cache_buster() -> None:
         )
     )
     assert snap["cache_buster"] is False
+
+
+def test_run_config_round_trip_preserves_feature_toggles() -> None:
+    config = RunConfig(
+        url="https://example.test/story",
+        campaign="dreadmarsh",
+        unstyled_prompts=True,
+        chat_mode=True,
+        pg13_mode=True,
+    )
+
+    restored = RunConfig.from_dict(config.to_dict())
+
+    assert restored.unstyled_prompts is True
+    assert restored.chat_mode is True
+    assert restored.pg13_mode is True
+
+
+def test_run_config_snapshot_includes_feature_toggles() -> None:
+    snap = run_config_snapshot(
+        RunConfig(
+            url="https://example.test/story",
+            campaign="dreadmarsh",
+            unstyled_prompts=True,
+            chat_mode=True,
+            pg13_mode=True,
+        )
+    )
+    assert snap["unstyled_prompts"] is True
+    assert snap["chat_mode"] is True
+    assert snap["pg13_mode"] is True
 
 
 def test_run_config_snapshot_includes_image_generation_model() -> None:
@@ -218,6 +257,53 @@ def test_setting_field_enabled_allows_cache_buster_at_prompt() -> None:
     assert setting_field_enabled("cache_buster", "architect") is True
 
 
+def test_effective_rerun_from_feature_toggles() -> None:
+    prev = run_config_snapshot(
+        RunConfig(url="https://example.test/story", campaign="dreadmarsh")
+    )
+
+    unstyled = dict(prev)
+    unstyled["unstyled_prompts"] = True
+    assert effective_rerun_from(None, prev, unstyled) == "prompt"
+    assert effective_rerun_from("style", prev, unstyled) == "style"
+
+    chat = dict(prev)
+    chat["chat_mode"] = True
+    assert effective_rerun_from(None, prev, chat) == "prompt"
+
+    pg13 = dict(prev)
+    pg13["pg13_mode"] = True
+    assert effective_rerun_from(None, prev, pg13) == "script"
+    assert effective_rerun_from("prompt", prev, pg13) == "script"
+    assert effective_rerun_from("architect", prev, pg13) == "architect"
+
+
+def test_effective_rerun_from_treats_missing_feature_toggles_as_false() -> None:
+    from pipeline_config import earliest_stage_for_config_diff
+
+    prev = run_config_snapshot(
+        RunConfig(url="https://example.test/story", campaign="dreadmarsh")
+    )
+    prev.pop("unstyled_prompts", None)
+    prev.pop("chat_mode", None)
+    prev.pop("pg13_mode", None)
+    new = run_config_snapshot(
+        RunConfig(url="https://example.test/story", campaign="dreadmarsh")
+    )
+
+    assert earliest_stage_for_config_diff(prev, new) is None
+    assert effective_rerun_from(None, prev, new) is None
+
+
+def test_setting_field_enabled_for_feature_toggles() -> None:
+    assert setting_field_enabled("unstyled_prompts", "prompt") is True
+    assert setting_field_enabled("chat_mode", "prompt") is True
+    assert setting_field_enabled("pg13_mode", "script") is True
+    assert setting_field_enabled("pg13_mode", "architect") is True
+    assert setting_field_enabled("pg13_mode", "style") is False
+    assert setting_field_enabled("pg13_mode", "prompt") is False
+
+
 def test_effective_rerun_from_bumps_when_panel_count_changes() -> None:
     prev = run_config_snapshot(
         RunConfig(url="https://example.test/story", campaign="dreadmarsh", panel_count=6)
@@ -265,6 +351,18 @@ def test_should_copy_prompt_artifacts_only_when_config_unchanged() -> None:
     cache_changed = dict(config)
     cache_changed["cache_buster"] = False
     assert should_copy_prompt_artifacts(None, config, cache_changed) is False
+
+    unstyled = dict(config)
+    unstyled["unstyled_prompts"] = True
+    assert should_copy_prompt_artifacts(None, config, unstyled) is False
+
+    chat = dict(config)
+    chat["chat_mode"] = True
+    assert should_copy_prompt_artifacts(None, config, chat) is False
+
+    pg13 = dict(config)
+    pg13["pg13_mode"] = True
+    assert should_copy_prompt_artifacts(None, config, pg13) is False
 
 
 def test_run_config_round_trip_preserves_art_style() -> None:
