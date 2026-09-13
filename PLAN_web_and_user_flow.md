@@ -1,12 +1,14 @@
 # Strategy: web port first, then guided flow, then per-file versioning
 
-Status: accepted. Localhost web-port implementation plan: [PLAN_web_port.md](PLAN_web_port.md).
+Status: **Phase 1 (web port) complete.** See [PLAN_web_port.md](PLAN_web_port.md).
 
-This is an engineering-management recommendation, not an implementation plan. Do not start building until we agree on sequence and scope.
+**Next:** Phase 3 — guided first-run on the web app. Do not delete Flet until that flow is proven. Do not start artifact versioning until the wizard has named the requirements.
+
+This is the living sequence for the larger arc (web → flow → versioning). Hosted multi-tenant stays a later destination, not the next build.
 
 ## Recommendation in one paragraph
 
-Convert to a **local web app first**, as a **faithful port** of the current Flet product. Do **not** invent the new user flow or rewrite versioning in the same pass. After the web app is the daily driver, iterate the guided first-run in the browser (that is the unknown-unknown). Only then change versioning — and version **artifacts inside a run snapshot**, not files as independent histories with no grouping. One-shotting the web *port* is realistic. One-shotting web + new flow + new versioning is not.
+Convert to a **local web app first**, as a **faithful port** of the current Flet product. Do **not** invent the new user flow or rewrite versioning in the same pass. After the web port exists, iterate the guided first-run in the browser (that is the unknown-unknown). Keep Flet until that flow is proven. Only then change versioning — and version **artifacts inside a run snapshot**, not files as independent histories with no grouping. One-shotting the web *port* is realistic. One-shotting web + new flow + new versioning is not. The port is done; the next build is the wizard, not deleting Flet and not rewriting storage.
 
 Assumption: "web app" means a **single-user localhost replacement for Flet** (browser UI, same app-data campaigns, same Playwright, same keyring). A hosted multi-user product is a different project and cannot be one-shot.
 
@@ -82,7 +84,7 @@ What "one-shot" should mean in practice:
 
 - One focused slice: FastAPI (or similar) wrapping the existing services + a thin frontend that reproduces Run / Prompts / Output / Settings.
 - No new run modes, no new checkpoint schema, no new versioning.
-- Keep Flet until the web app is the daily driver, then delete Flet and its tests.
+- Keep Flet until the guided first-run is proven on the web app, then delete Flet and its tests. Do not treat Flet deletion as the next task.
 - New tests: HTTP-level (launch run → events → version appears; save working file; list campaigns). Do not mock the pipeline internals.
 
 What will *not* one-shot cleanly if you also "get the flow right":
@@ -116,7 +118,7 @@ The browser *is* the right canvas. That is an argument for **moving the existing
 
 It is **not** an argument for building the dream UI from scratch on day one. You will guess wrong. A working port gives you:
 
-- A real daily driver (so Flet can die).
+- A real daily driver (and a canvas for the wizard). Flet can die later, after the new flow is proven.
 - A place to A/B the wizard without rewriting storage.
 - Proof the service API is complete (you will find the gaps: image bytes, file save, live events).
 
@@ -198,16 +200,16 @@ Images already have a private rotation scheme (`_v1`, `_v2`). Fold that into the
 
 ## Suggested sequence and rough size
 
-| Phase | What | One-shot? | Why this order |
-|---|---|---|---|
-| **0. Decide scope** | Localhost web vs hosted. This memo assumes localhost. | — | Hosted changes everything. |
-| **1. Web port** | Same three workspaces on FastAPI + thin UI. Flet stays until parity. | **Yes** | Moves you onto the canvas you will iterate in. Pipeline frozen. |
-| **2. Delete Flet** | Drop `gui.py`, Flet tests, `flet` dep. Web is the GUI. | Yes | Stops maintaining two UIs. |
-| **3. Guided first-run** | Wizard on `stop_after` + `working/` + direction fields. Batch-run remains. | **No — iterate** | Product discovery. Will produce versioning requirements. |
-| **4. Per-stage / per-page direction** | Replace or extend `creative_direction.txt` so script/style/prompt can take notes. | Small, TDD | Needed by the wizard; does not require new storage. |
-| **5. Artifact versioning** | Manifest + content-addressed objects. Rewrite version tests. | No — careful TDD | Only after the wizard has named cherry-pick / lineage needs. |
+| Phase | What | Status | One-shot? | Why this order |
+|---|---|---|---|---|
+| **0. Decide scope** | Localhost web vs hosted. This memo assumes localhost. | **Done** (localhost first; hosted later) | — | Hosted changes everything. |
+| **1. Web port** | Same three workspaces on FastAPI + thin UI. | **Done** — [PLAN_web_port.md](PLAN_web_port.md) | **Yes** | Moves you onto the canvas you will iterate in. Pipeline frozen. |
+| **2. Delete Flet** | Drop `gui.py`, Flet tests, `flet` dep. Web is the GUI. | **On hold** until the guided flow is proven | Yes | Dual UI is acceptable while the wizard is still an experiment. Deleting Flet now would force the unproven flow to be the only UI. |
+| **3. Guided first-run** | Wizard on `stop_after` + `working/` + direction fields. Batch-run remains. | **Next** | **No — iterate** | Product discovery. Will produce versioning requirements. |
+| **4. Per-stage / per-page direction** | Replace or extend `creative_direction.txt` so script/style/prompt can take notes. | After / with the wizard | Small, TDD | Needed by the wizard; does not require new storage. |
+| **5. Artifact versioning** | Manifest + content-addressed objects. Rewrite version tests. | Later | No — careful TDD | Only after the wizard has named cherry-pick / lineage needs. |
 
-Phase 1 is the only thing I would green-light as a single implementation push.
+Phase 1 was the one-shot implementation push. It is finished. The next implementation push is Phase 3, not Phase 2.
 
 ### What I would explicitly not do
 
@@ -229,16 +231,20 @@ Phase 1 is the only thing I would green-light as a single implementation push.
 
 ---
 
-## Open decision (only one that changes this memo)
+## Open decision (resolved for this arc)
 
 **Is the web app a localhost single-user replacement for Flet, or a hosted product?**
 
-If localhost: proceed as above. Phase 1 is one-shot-able.
+**Resolved:** localhost first (`127.0.0.1:8765`). Hosted multi-tenant remains a later destination. Do not start auth, queues, or object storage as the next step.
 
-If hosted: do not one-shot anything. First extract a real job worker and a storage interface; the current filesystem + keyring + in-process Playwright design is a desktop tool. That is months, not a port.
+If hosted is picked up later: do not one-shot it. First extract a real job worker and a storage interface; the current filesystem + keyring + in-process Playwright design is a desktop tool.
 
 ---
 
 ## If we implement next
 
-Start only Phase 1: a parity web port. Write HTTP tests against `RunController` / `RepositoryService` / `SettingsService`. Leave `ComicPipeline` and versioning tests untouched. Do not add wizard UI or per-file versions in that PR.
+**Guided first-run on the web app** (Phase 3). Do not delete Flet. Do not rewrite versioning.
+
+Start with a first-run *mode* that is a stage wizard on existing primitives (`stop_after`, `working/` edits, `creative_direction.txt`, batch-run still available). Keep a "just run the rest" button at every step. Learn what direction and review actually need, then write those down as requirements for Phase 4 (direction fields) and Phase 5 (artifact versioning).
+
+A separate implementation plan should be written before coding the wizard — same as [PLAN_web_port.md](PLAN_web_port.md) for the port.

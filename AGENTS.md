@@ -160,6 +160,6 @@ Focused test example:
 - [README.md](README.md) — setup, CLI examples, checkpoint table
 - [jargon.md](jargon.md) — comic terminology used in prompts and scripts
 - [TODO.md](TODO.md) — active implementation plans
-- [PLAN_web_and_user_flow.md](PLAN_web_and_user_flow.md) — web port then guided flow then versioning
-- [PLAN_web_port.md](PLAN_web_port.md) — localhost FastAPI port (in progress)
+- [PLAN_web_and_user_flow.md](PLAN_web_and_user_flow.md) — web port (done) → guided first-run (next) → versioning; Flet deletion on hold
+- [PLAN_web_port.md](PLAN_web_port.md) — localhost FastAPI port (complete)
 - [.github/skills/run-pytest/SKILL.md](.github/skills/run-pytest/SKILL.md) — full-suite test command

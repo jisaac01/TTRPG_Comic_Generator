@@ -1,5 +1,7 @@
 # Implementation plan: localhost web port of the Flet GUI
 
+Status: **complete**. Slices 1–6 landed. Launch: `python src/web_main.py` → http://127.0.0.1:8765. Flet (`python src/main.py`) stays until the guided flow is proven.
+
 Parent strategy: [PLAN_web_and_user_flow.md](PLAN_web_and_user_flow.md). This plan is **Phase 1 only** — a faithful port of the current Flet app for single-user localhost use.
 
 **Do not** add the guided first-run wizard, rewrite versioning, add auth/tenants, or deploy hosted. Those come later. Hosted multi-tenant is a stated destination; this port should leave cheap seams, not stub tenants.
@@ -22,7 +24,7 @@ Replace the Flet presentation with a local web app that can do everything the cu
 
 Pipeline tests stay the spec. `ComicPipeline` and versioning are frozen.
 
-Success: you can run campaigns from a browser on `http://127.0.0.1:8765` as the daily driver, with Flet still launchable until a follow-up deletes it.
+Success: you can run campaigns from a browser on `http://127.0.0.1:8765` as the daily driver. Flet stays launchable; deleting it is on hold until the guided first-run is proven.
 
 ---
 
@@ -75,9 +77,9 @@ Drop Flet's "Open folder in Finder". Show the logical version label; optional co
 
 `gui.py` currently lists version files, decides editability, and talks to `ImageGenerator` directly. The web layer should not copy that. Add service methods + tests, then call them from the API. Do not rewire Flet unless it is trivial; duplication for one release is acceptable.
 
-### 7. Keep Flet until the web app is the daily driver
+### 7. Keep Flet until the guided flow is proven
 
-`python src/main.py` continues to work. New entry: `python src/web_main.py`. Delete Flet in a **follow-up** after real use — not as part of the first merge.
+`python src/main.py` continues to work. Web entry: `python src/web_main.py`. Do not delete Flet as soon as the port exists; wait until the new user flow is proven on the web app.
 
 ---
 
@@ -194,7 +196,7 @@ Same three workspaces. Behavior, not pixels. Drop Finder open and macOS-specific
 
 Each slice is tests → code → green. Keep Flet working throughout. Do not open GitHub PRs from this work.
 
-### Slice 1 — App factory + health + campaigns
+### Slice 1 — App factory + health + campaigns — done
 
 - FastAPI factory, `create_services(campaigns_root=…)`
 - `GET /api/health`, `GET/POST /api/campaigns`
@@ -202,20 +204,23 @@ Each slice is tests → code → green. Keep Flet working throughout. Do not ope
 - README: how to launch
 - No three-tab UI yet; a one-line landing page is enough
 
-### Slice 2 — Read APIs for Output + Prompts
+### Slice 2 — Read APIs for Output + Prompts — done
 
-### Slice 3 — Mutations (prompt save, working file save, star/note, settings)
+### Slice 3 — Mutations (prompt save, working file save, star/note, settings) — done
 
-### Slice 4 — Runs + SSE
+### Slice 4 — Runs + SSE — done
 
-### Slice 5 — Image jobs
+### Slice 5 — Image jobs — done
 
-### Slice 6 — Static UI parity
+### Slice 6 — Static UI parity — done
 
 ### Follow-up (not this plan)
 
-- Daily-driver use, then delete Flet
-- Then guided first-run (strategy Phase 3)
+Tracked in [PLAN_web_and_user_flow.md](PLAN_web_and_user_flow.md):
+
+- Use the web app as the daily driver
+- **Next:** guided first-run on the web UI
+- Keep Flet until that flow is proven (do not delete it as a cleanup chore)
 
 ---
 
@@ -229,4 +234,4 @@ Do not now: users, queues, object storage, Playwright worker pools, `tenant_id` 
 
 ## If we implement next
 
-Start Slice 1 only: failing tests for health + list/create campaign against a temp `campaigns_root`, then the FastAPI factory and `web_main.py`. Do not build the three-tab UI until read APIs exist.
+This plan is done. Next work is strategy Phase 3: guided first-run on the web app. See [PLAN_web_and_user_flow.md](PLAN_web_and_user_flow.md).

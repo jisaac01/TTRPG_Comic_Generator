@@ -1,3 +1,15 @@
+## Web app, user flow, versioning
+
+Arc: [PLAN_web_and_user_flow.md](PLAN_web_and_user_flow.md). Port details: [PLAN_web_port.md](PLAN_web_port.md) (complete).
+
+- [x] **1. Web port** — localhost FastAPI + static UI at `python src/web_main.py` (http://127.0.0.1:8765). Faithful Flet parity; pipeline/versioning frozen.
+- [ ] **Next: guided first-run** — stage wizard on the web app (`stop_after` + `working/` review + direction). Batch-run stays. Write an implementation plan before coding.
+- [ ] Per-stage / per-page direction (extend `creative_direction.txt`; wire script/style/prompt). Likely falls out of the wizard.
+- [ ] Artifact versioning (content-addressed objects + run manifests). Only after the wizard has named cherry-pick / lineage needs.
+- [ ] Delete Flet (`gui.py`, Flet tests, `flet` dep) — **on hold** until the guided flow is proven. Dual UI is fine until then.
+
+---
+
 ## Pipeline & Core
 
 - [x] figure out why the entities bible is created in the architect step and not in the entities step
