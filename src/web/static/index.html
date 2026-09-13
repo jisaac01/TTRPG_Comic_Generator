@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TTRPG Comic Generator</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="top">
+    <h1>TTRPG Comic Generator</h1>
+    <nav class="tabs">
+      <button type="button" data-workspace="run" class="active">Run</button>
+      <button type="button" data-workspace="prompts">Prompts</button>
+      <button type="button" data-workspace="output">Output</button>
+    </nav>
+    <button type="button" id="open-settings">Settings</button>
+  </header>
+  <div id="banner" class="banner" hidden></div>
+
+  <main>
+    <section id="ws-run" class="workspace" data-workspace="run">
+      <h2>Run</h2>
+      <div class="row">
+        <label>Campaign
+          <select id="run-campaign"></select>
+        </label>
+        <input id="run-new-campaign" type="text" placeholder="New campaign">
+        <button type="button" id="run-add-campaign">Add Campaign</button>
+      </div>
+      <div class="row">
+        <label>Run mode
+          <select id="run-mode">
+            <option value="story_url">Story URL</option>
+            <option value="existing_episode">Existing Episode</option>
+          </select>
+        </label>
+        <label id="run-url-wrap" class="grow">Story URL
+          <input id="run-url" type="url" placeholder="https://scrybequill.com/share/...">
+        </label>
+        <label id="run-episode-wrap" hidden>Episode
+          <select id="run-episode"></select>
+        </label>
+      </div>
+      <div class="row">
+        <label>Start stage
+          <select id="run-stage" disabled>
+            <option value="scrape">Scrape</option>
+            <option value="entities">Entities</option>
+            <option value="architect">Architect</option>
+            <option value="script">Script</option>
+            <option value="style">Style</option>
+            <option value="prompt">Prompt</option>
+          </select>
+        </label>
+        <label>Recap
+          <select id="run-recap">
+            <option value="standard">standard</option>
+            <option value="short">short</option>
+            <option value="alternate">alternate</option>
+            <option value="long">long</option>
+          </select>
+        </label>
+        <label>Panels <input id="run-panels" type="number" min="1" value="6"></label>
+        <label>Pages <input id="run-pages" type="number" min="1" value="1"></label>
+        <label>Generation mode
+          <select id="run-gen-mode">
+            <option value="page">Page by Page</option>
+            <option value="panel">Panel by Panel</option>
+          </select>
+        </label>
+        <label>Aspect ratio
+          <select id="run-aspect">
+            <option value="1:1">1:1 — Square</option>
+            <option value="4:3">4:3 — Vertical</option>
+            <option value="3:2" selected>3:2 — Horizontal</option>
+          </select>
+        </label>
+        <label>Art style
+          <select id="run-art-style"></select>
+        </label>
+      </div>
+      <div class="row wrap">
+        <label><input id="run-generate-images" type="checkbox"> Generate images</label>
+        <label><input id="run-vignette" type="checkbox"> Vignette (one scene)</label>
+        <label><input id="run-cache-buster" type="checkbox" checked> Add cache buster</label>
+        <label><input id="run-unstyled" type="checkbox" checked> Output un-styled prompts</label>
+        <label><input id="run-chat" type="checkbox"> Chat mode</label>
+        <label><input id="run-pg13" type="checkbox"> PG-13 mode</label>
+      </div>
+      <div class="row">
+        <button type="button" id="run-submit">Run</button>
+        <button type="button" id="run-cancel" hidden>Cancel</button>
+        <span id="run-phase" class="muted"></span>
+      </div>
+      <p id="run-status" class="status"></p>
+      <p id="run-error" class="error"></p>
+    </section>
+
+    <section id="ws-prompts" class="workspace" data-workspace="prompts" hidden>
+      <h2>Prompts</h2>
+      <div class="row">
+        <label>Campaign
+          <select id="prompt-campaign"></select>
+        </label>
+        <button type="button" id="prompt-save">Save</button>
+        <button type="button" id="prompt-reset">Reset to Default</button>
+      </div>
+      <div class="split">
+        <ul id="prompt-files" class="file-list"></ul>
+        <textarea id="prompt-editor" spellcheck="false"></textarea>
+      </div>
+      <p id="prompt-status" class="status"></p>
+    </section>
+
+    <section id="ws-output" class="workspace" data-workspace="output" hidden>
+      <h2>Output</h2>
+      <div class="row">
+        <label>Campaign
+          <select id="out-campaign"></select>
+        </label>
+        <label>Episode
+          <select id="out-episode"></select>
+        </label>
+        <label>Version
+          <select id="out-version"></select>
+        </label>
+        <button type="button" id="out-star" hidden>Star</button>
+        <label id="out-note-wrap" hidden>Note
+          <input id="out-note" type="text" placeholder="What sets this version apart">
+        </label>
+      </div>
+      <div class="row wrap">
+        <label>Rerun from
+          <select id="out-stage">
+            <option value="scrape">Scrape</option>
+            <option value="entities">Entities</option>
+            <option value="architect" selected>Architect</option>
+            <option value="script">Script</option>
+            <option value="style">Style</option>
+            <option value="prompt">Prompt</option>
+          </select>
+        </label>
+        <label><input id="out-only-stage" type="checkbox"> Rerun only this stage</label>
+        <button type="button" id="out-rerun">Rerun</button>
+        <button type="button" id="out-generate">Generate Images</button>
+        <button type="button" id="out-test">Test Image</button>
+        <button type="button" id="out-stitch">Stitch</button>
+        <button type="button" id="out-generate-selected" hidden>Generate selected</button>
+      </div>
+      <div class="row wrap">
+        <label>Recap
+          <select id="out-recap">
+            <option value="standard">standard</option>
+            <option value="short">short</option>
+            <option value="alternate">alternate</option>
+            <option value="long">long</option>
+          </select>
+        </label>
+        <label>Panels <input id="out-panels" type="number" min="1" value="6"></label>
+        <label>Pages <input id="out-pages" type="number" min="1" value="1"></label>
+        <label>Generation mode
+          <select id="out-gen-mode">
+            <option value="page">Page by Page</option>
+            <option value="panel">Panel by Panel</option>
+          </select>
+        </label>
+        <label>Aspect ratio
+          <select id="out-aspect">
+            <option value="1:1">1:1 — Square</option>
+            <option value="4:3">4:3 — Vertical</option>
+            <option value="3:2" selected>3:2 — Horizontal</option>
+          </select>
+        </label>
+        <label>Art style
+          <select id="out-art-style"></select>
+        </label>
+        <label><input id="out-vignette" type="checkbox"> Vignette</label>
+        <label><input id="out-cache-buster" type="checkbox" checked> Cache buster</label>
+        <label><input id="out-unstyled" type="checkbox"> Un-styled prompts</label>
+        <label><input id="out-chat" type="checkbox"> Chat mode</label>
+        <label><input id="out-pg13" type="checkbox"> PG-13</label>
+      </div>
+      <p id="out-run-status" class="muted"></p>
+      <div class="split">
+        <ul id="out-files" class="file-list"></ul>
+        <div class="preview-pane">
+          <div class="row">
+            <button type="button" id="out-save" disabled>Save</button>
+            <button type="button" id="out-reload" disabled>Reload</button>
+          </div>
+          <textarea id="out-editor" spellcheck="false"></textarea>
+          <img id="out-image" alt="Generated image" hidden>
+        </div>
+      </div>
+      <p id="out-status" class="status"></p>
+    </section>
+  </main>
+
+  <footer class="log-wrap">
+    <button type="button" id="log-toggle">Show Event Log</button>
+    <ul id="event-log" hidden></ul>
+  </footer>
+
+  <dialog id="settings-dialog">
+    <form method="dialog" id="settings-form">
+      <h2>Settings</h2>
+      <label>Gemini API key
+        <input id="set-key" type="password" autocomplete="off" placeholder="">
+      </label>
+      <p id="set-key-hint" class="muted"></p>
+      <label>Default model
+        <select id="set-text-model"></select>
+      </label>
+      <label>Image generation model
+        <select id="set-image-model"></select>
+      </label>
+      <p id="set-warnings" class="error"></p>
+      <div class="row">
+        <button type="button" id="set-refresh">Refresh models</button>
+        <button type="submit" id="set-save" value="save">Save</button>
+        <button type="submit" value="close">Close</button>
+      </div>
+      <p id="set-status" class="status"></p>
+    </form>
+  </dialog>
+
+  <script src="/static/app.js" defer></script>
+</body>
+</html>

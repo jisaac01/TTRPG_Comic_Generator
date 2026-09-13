@@ -6,7 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from app_paths import default_campaigns_root
 from repository_service import RepositoryService
@@ -24,20 +25,7 @@ from web.schemas import HealthResponse
 
 WEB_HOST = "127.0.0.1"
 WEB_PORT = 8765
-
-_LANDING_HTML = """<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>TTRPG Comic Generator</title>
-</head>
-<body>
-  <h1>TTRPG Comic Generator</h1>
-  <p>Localhost API is running. JSON endpoints live under <code>/api</code>.</p>
-  <p><a href="/api/health">/api/health</a></p>
-</body>
-</html>
-"""
+STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
 @dataclass
@@ -79,9 +67,9 @@ def create_app(
     app.state.catalog_path = resolved_services.settings.config_path.with_name("models.json")
     app.state.runs = RunStore()
 
-    @app.get("/", response_class=HTMLResponse)
-    def landing() -> str:
-        return _LANDING_HTML
+    @app.get("/")
+    def landing() -> FileResponse:
+        return FileResponse(STATIC_DIR / "index.html")
 
     @app.get("/api/health", response_model=HealthResponse)
     def health() -> HealthResponse:
@@ -93,4 +81,5 @@ def create_app(
     app.include_router(settings_router)
     app.include_router(runs_router)
     app.include_router(images_router)
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     return app

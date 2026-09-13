@@ -47,15 +47,15 @@ If you are using Ollama, make sure Ollama is running locally and the selected mo
 
 ## GUI
 
-The Flet GUI is the current desktop UI. A localhost web app is in progress (`python src/web_main.py` → http://127.0.0.1:8765). Port 8765 is used so it does not collide with other local apps on 8080/8050.
+The recommended UI is the localhost web app:
 
 ```bash
 python src/web_main.py
 ```
 
-JSON API under `/api` (health and campaigns in the first slice). Bind is localhost only.
+Opens on http://127.0.0.1:8765 (not 8080/8050). Bind is localhost only. JSON API under `/api`.
 
-Flet remains available during the port and still has the three workspaces plus a Settings dialog:
+Flet remains available during the port:
 
 ```bash
 python src/main.py

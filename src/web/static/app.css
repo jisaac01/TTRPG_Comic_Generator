@@ -1,0 +1,105 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color: #1a1a1a;
+  background: #f4f4f1;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+.top {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  background: #fff;
+  border-bottom: 1px solid #ccc;
+}
+.top h1 { font-size: 1.1rem; margin: 0; flex: 1; }
+.tabs { display: flex; gap: 0.25rem; }
+.tabs button.active { font-weight: 700; }
+.banner {
+  padding: 0.5rem 1rem;
+  background: #fff3cd;
+  border-bottom: 1px solid #e0c36a;
+  white-space: pre-wrap;
+}
+main { flex: 1; padding: 1rem; }
+.workspace h2 { margin-top: 0; }
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: end;
+  margin-bottom: 0.75rem;
+}
+.row.wrap { align-items: center; }
+.grow { flex: 1; min-width: 16rem; }
+label { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.85rem; }
+label:has(input[type="checkbox"]) { flex-direction: row; align-items: center; }
+input, select, textarea, button {
+  font: inherit;
+  padding: 0.35rem 0.5rem;
+}
+.split {
+  display: grid;
+  grid-template-columns: 16rem 1fr;
+  gap: 0.75rem;
+  min-height: 24rem;
+}
+.file-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  border: 1px solid #ccc;
+  background: #fff;
+  max-height: 32rem;
+}
+.file-list button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.file-list button.active { background: #e8eef7; font-weight: 600; }
+.preview-pane { display: flex; flex-direction: column; min-height: 24rem; }
+textarea {
+  flex: 1;
+  min-height: 20rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8rem;
+  width: 100%;
+}
+#out-image {
+  max-width: 100%;
+  max-height: 28rem;
+  object-fit: contain;
+  background: #ddd;
+}
+.muted { color: #555; font-size: 0.85rem; }
+.error { color: #a40000; white-space: pre-wrap; }
+.status { font-size: 0.9rem; }
+.log-wrap {
+  border-top: 1px solid #ccc;
+  background: #fff;
+  padding: 0.5rem 1rem;
+}
+#event-log {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  max-height: 10rem;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+}
+dialog { width: min(36rem, 92vw); }
+dialog form { display: flex; flex-direction: column; gap: 0.75rem; }
+dialog h2 { margin: 0; }
+[hidden] { display: none !important; }

@@ -8,7 +8,8 @@ TTRPG Comic Generator turns ScrybeQuill session recaps into structured comic scr
 
 Primary entry points:
 
-- **GUI**: `python src/main.py` (Flet app; recommended for runs and image generation)
+- **Web UI**: `python src/web_main.py` (localhost http://127.0.0.1:8765; recommended)
+- **GUI**: `python src/main.py` (Flet app; still available during the port)
 - **CLI**: `python src/pipeline.py <campaign> <url>`
 - **Tests**: `pytest` — the authoritative specification of behavior
 

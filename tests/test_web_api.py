@@ -48,6 +48,21 @@ def test_landing_page_identifies_the_app(tmp_path: Path) -> None:
 
     assert response.status_code == 200
     assert "TTRPG Comic Generator" in response.text
+    assert 'data-workspace="run"' in response.text
+    assert 'data-workspace="prompts"' in response.text
+    assert 'data-workspace="output"' in response.text
+
+
+def test_static_ui_assets_are_served(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+
+    script = client.get("/static/app.js")
+    styles = client.get("/static/app.css")
+
+    assert script.status_code == 200
+    assert "javascript" in script.headers["content-type"]
+    assert styles.status_code == 200
+    assert "css" in styles.headers["content-type"]
 
 
 def test_list_campaigns_empty_when_root_missing(tmp_path: Path) -> None:
